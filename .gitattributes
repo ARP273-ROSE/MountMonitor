@@ -1,0 +1,16 @@
+# Handle line endings
+* text=auto
+
+# Windows batch files need CRLF
+*.bat text eol=crlf
+
+# Shell scripts need LF
+*.sh text eol=lf
+
+# Binary files
+*.jar binary
+*.dll binary
+*.chm binary
+*.png binary
+*.ico binary
+*.pdf binary
