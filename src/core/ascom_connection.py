@@ -432,6 +432,26 @@ class ASCOMConnection(MountConnection):
             return result.strip().rstrip("#") == "1"
         return None
 
+    def get_refraction_mode(self) -> Optional[str]:
+        """Get refraction correction mode via raw command (10Micron specific)."""
+        result = self.send_raw_command(":GREF#")
+        if result is None:
+            return None
+        val = result.strip().rstrip("#")
+        mode_map = {
+            '0': 'not_updating',
+            '1': 'not_updating_tracking',
+            '2': 'continuously_updating',
+        }
+        return mode_map.get(val)
+
+    def is_dual_tracking_enabled(self) -> Optional[bool]:
+        """Check dual tracking via raw command (10Micron specific)."""
+        result = self.send_raw_command(":Gdat#")
+        if result is None:
+            return None
+        return result.strip().rstrip("#") == "1"
+
     def get_tracking_rate(self) -> Optional[str]:
         """Get current tracking rate from ASCOM TrackingRate property.
 

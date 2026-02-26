@@ -42,7 +42,7 @@ DEFAULTS = {
 
     # Mount checks
     "check_refraction_enabled": True,
-    "check_refraction_value": "enabled",
+    "check_refraction_value": "continuously_updating",
     "check_tracking_rate": True,
     "check_tracking_rate_value": "sidereal",
     "check_gps_sync": False,

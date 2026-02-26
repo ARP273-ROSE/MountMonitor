@@ -19,7 +19,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QTimer, pyqtSlot
 from PyQt6.QtGui import QAction, QFont, QIcon, QKeySequence
 
-from .graph_widgets import TrackingGraph, TimeGraph, SeismicGraph
+from .graph_widgets import TrackingGraph, TimeGraph, SeismicGraph, AxialGraph
 from .fft_window import FFTWindow
 from .status_panel import StatusPanel
 from .preferences_dialog import PreferencesDialog
@@ -205,6 +205,15 @@ class MainWindow(QMainWindow):
         help_action.triggered.connect(self._show_help)
         help_menu.addAction(help_action)
 
+        online_help_action = QAction(T("menu_online_help"), self)
+        online_help_action.setToolTip(
+            "EN: Open online documentation\nFR: Ouvrir la documentation en ligne"
+        )
+        online_help_action.triggered.connect(self._show_online_help)
+        help_menu.addAction(online_help_action)
+
+        help_menu.addSeparator()
+
         about_action = QAction(T("menu_about"), self)
         about_action.triggered.connect(self._show_about)
         help_menu.addAction(about_action)
@@ -261,10 +270,15 @@ class MainWindow(QMainWindow):
         )
         self._time_graph = TimeGraph()
         self._seismic_graph = SeismicGraph()
+        self._axial_graph = AxialGraph()
 
         graph_splitter.addWidget(self._ra_graph)
         graph_splitter.addWidget(self._dec_graph)
         graph_splitter.addWidget(self._time_graph)
+
+        # Show axial graph if enabled
+        if self._settings.get("axial_mode") != "off":
+            graph_splitter.addWidget(self._axial_graph)
 
         # Show seismic graph only if enabled
         if self._settings.get("seismometer_enabled") or self._sim_mode in ("all", "seismometer"):
@@ -291,22 +305,25 @@ class MainWindow(QMainWindow):
         self._statusbar.addPermanentWidget(self._statusbar_label)
 
     def _update_title(self):
-        """Update window title with connection info."""
-        title = f"MountMonitor v{self._version}"
+        """Update window title with connection info and date."""
+        date_str = datetime.now().strftime("%d/%m/%Y")
+        title = f"MountMonitor (v{self._version}) "
         if self._connected and self._processor:
             freq = self._processor.actual_frequency
             if self._sim_mode != "none":
-                title += f" | {freq:.1f}Hz simulation mode"
+                title += f"{freq:.1f}Hz simulation mode"
             else:
                 protocol = self._settings.get("mount_protocol")
                 if protocol == "lx200":
                     ip = self._settings.get("mount_ip")
                     port = self._settings.get("mount_port")
-                    title += f" | {freq:.1f}Hz on TCP/IP {ip}:{port}"
+                    title += f"{freq:.1f}Hz on TCP/IP {ip}:{port}"
                 elif protocol == "ascom":
-                    title += f" | {freq:.1f}Hz via ASCOM"
+                    driver = self._settings.get("ascom_driver") or "ASCOM"
+                    title += f"{freq:.1f}Hz via {driver}"
                 else:
-                    title += f" | {freq:.1f}Hz {protocol}"
+                    title += f"{freq:.1f}Hz {protocol}"
+        title += f" ({date_str})"
         self.setWindowTitle(title)
 
     # ── Connection management ────────────────────────────────────
@@ -612,13 +629,21 @@ class MainWindow(QMainWindow):
 
     def _refresh_graphs(self):
         """Refresh all graphs with current buffer data. Called by timer."""
+        # Graph correction: shift STDEV timestamps back by half running range
+        correct = self._settings.get("correct_graphs_for_range")
+        half_range = self._settings.get("running_range_seconds") / 2.0 if correct else 0.0
+
         # RA graph
         ra_t, ra_v = self._processor.ra_buffer.get_arrays()
         ra_stdev = self._processor.ra_buffer.get_stdev_array()
         if len(ra_t) > 0:
+            stdev_for_graph = ra_stdev if len(ra_stdev) == len(ra_t) else None
+            # Apply correction: shift STDEV curve backward
+            stdev_t = ra_t - half_range if (stdev_for_graph is not None and half_range > 0) else None
             self._ra_graph.update_data(
                 ra_t, ra_v,
-                stdev_values=ra_stdev if len(ra_stdev) == len(ra_t) else None,
+                stdev_values=stdev_for_graph,
+                stdev_timestamps=stdev_t,
                 min_val=self._processor.ra_buffer.min_value,
                 max_val=self._processor.ra_buffer.max_value,
                 max_stdev=self._processor.ra_buffer.max_stdev,
@@ -629,9 +654,12 @@ class MainWindow(QMainWindow):
         dec_t, dec_v = self._processor.dec_buffer.get_arrays()
         dec_stdev = self._processor.dec_buffer.get_stdev_array()
         if len(dec_t) > 0:
+            stdev_for_graph = dec_stdev if len(dec_stdev) == len(dec_t) else None
+            stdev_t = dec_t - half_range if (stdev_for_graph is not None and half_range > 0) else None
             self._dec_graph.update_data(
                 dec_t, dec_v,
-                stdev_values=dec_stdev if len(dec_stdev) == len(dec_t) else None,
+                stdev_values=stdev_for_graph,
+                stdev_timestamps=stdev_t,
                 min_val=self._processor.dec_buffer.min_value,
                 max_val=self._processor.dec_buffer.max_value,
                 max_stdev=self._processor.dec_buffer.max_stdev,
@@ -651,6 +679,24 @@ class MainWindow(QMainWindow):
                 ntp_t=ntp_t if len(ntp_t) > 0 else None,
                 ntp_v=ntp_v if len(ntp_v) > 0 else None,
             )
+
+        # Axial graph
+        if self._settings.get("axial_mode") != "off":
+            ra_raw_t, ra_raw_v = self._processor.ra_speed_raw_buffer.get_arrays()
+            dec_raw_t, dec_raw_v = self._processor.dec_speed_raw_buffer.get_arrays()
+            ra_avg_t, ra_avg_v = self._processor.ra_speed_avg_buffer.get_arrays()
+            dec_avg_t, dec_avg_v = self._processor.dec_speed_avg_buffer.get_arrays()
+            if len(ra_raw_t) > 0 or len(dec_raw_t) > 0:
+                self._axial_graph.update_data(
+                    ra_raw_t=ra_raw_t if len(ra_raw_t) > 0 else None,
+                    ra_raw_v=ra_raw_v if len(ra_raw_v) > 0 else None,
+                    dec_raw_t=dec_raw_t if len(dec_raw_t) > 0 else None,
+                    dec_raw_v=dec_raw_v if len(dec_raw_v) > 0 else None,
+                    ra_avg_t=ra_avg_t if len(ra_avg_t) > 0 else None,
+                    ra_avg_v=ra_avg_v if len(ra_avg_v) > 0 else None,
+                    dec_avg_t=dec_avg_t if len(dec_avg_t) > 0 else None,
+                    dec_avg_v=dec_avg_v if len(dec_avg_v) > 0 else None,
+                )
 
         # Seismic graph
         sei_t, sei_v = self._processor.seismic_buffer.get_arrays()
@@ -783,6 +829,7 @@ class MainWindow(QMainWindow):
         self._dec_graph.reset()
         self._time_graph.reset()
         self._seismic_graph.reset()
+        self._axial_graph.reset()
         self._status_panel.add_message(T("reset_buffers"))
 
     def _reset_both(self):
@@ -838,6 +885,8 @@ class MainWindow(QMainWindow):
         self._dec_graph.export_to_image("DEC_graphs")
         self._time_graph.export_to_image("Time_graphs")
         self._seismic_graph.export_to_image("Seismic_graphs")
+        if self._settings.get("axial_mode") != "off":
+            self._axial_graph.export_to_image("Axial_graphs")
         if self._fft_window and self._fft_window.isVisible():
             self._fft_window.export_to_image("FFT_graphs")
         self._status_panel.add_message("Graphs exported / Graphes exportés")
@@ -856,18 +905,26 @@ class MainWindow(QMainWindow):
         warnings = []
         ok_checks = []
 
-        # Check refraction
+        # Check refraction mode (3-way: not_updating, not_updating_tracking, continuously_updating)
         if self._settings.get("check_refraction_enabled"):
             expected = self._settings.get("check_refraction_value")
-            refraction = self._connection.is_refraction_enabled()
-            if refraction is not None:
-                actual = "enabled" if refraction else "disabled"
-                if actual == expected:
-                    ok_checks.append(f"Refraction: {actual} \u2713")
+            mode = self._connection.get_refraction_mode()
+            if mode is not None:
+                if mode == expected:
+                    mode_display = mode.replace('_', ' ')
+                    ok_checks.append(f"Refraction: {mode_display} \u2713")
                 else:
+                    mode_display = mode.replace('_', ' ')
+                    expected_display = expected.replace('_', ' ')
                     warnings.append(
-                        f"Refraction is {actual}, expected {expected}"
+                        f"Refraction is '{mode_display}', expected '{expected_display}'"
                     )
+            else:
+                # Fallback to simple enabled/disabled check
+                refraction = self._connection.is_refraction_enabled()
+                if refraction is not None:
+                    actual = "enabled" if refraction else "disabled"
+                    ok_checks.append(f"Refraction: {actual} (simple check)")
 
         # Check tracking rate
         if self._settings.get("check_tracking_rate"):
@@ -893,6 +950,19 @@ class MainWindow(QMainWindow):
                 else:
                     warnings.append(
                         f"GPS is {actual}, expected {expected_val}"
+                    )
+
+        # Check dual tracking
+        if self._settings.get("check_dual_tracking"):
+            expected_val = self._settings.get("check_dual_tracking_value")
+            dual = self._connection.is_dual_tracking_enabled()
+            if dual is not None:
+                actual = "enabled" if dual else "disabled"
+                if actual == expected_val:
+                    ok_checks.append(f"Dual tracking: {actual} \u2713")
+                else:
+                    warnings.append(
+                        f"Dual tracking is {actual}, expected {expected_val}"
                     )
 
         # Display results
@@ -1054,6 +1124,11 @@ class MainWindow(QMainWindow):
                 f"<p>Python/PyQt6/pyqtgraph</p>"
             )
         QMessageBox.about(self, T("menu_about"), text)
+
+    def _show_online_help(self):
+        """Open online help / documentation in browser."""
+        import webbrowser
+        webbrowser.open("https://github.com/ARP273-ROSE/MountMonitor")
 
     def _report_bug(self):
         """Open bug report dialog."""
