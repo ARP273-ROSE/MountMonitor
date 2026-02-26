@@ -1,0 +1,250 @@
+"""Mount polling engine.
+
+Runs in a QThread, periodically queries the mount for RA, DEC, time,
+status, and axial data. Emits signals for the GUI to consume.
+"""
+
+import time
+import logging
+from datetime import datetime
+from typing import Optional
+
+from PyQt6.QtCore import QThread, pyqtSignal, QMutex
+
+from .mount_connection import MountConnection
+from .data_processor import DataProcessor
+from ..models.mount_data import MountSample, TimeSample, MountStatus, PierSide
+from ..utils.coordinates import parse_ra, parse_dec
+
+logger = logging.getLogger(__name__)
+
+
+class MountPoller(QThread):
+    """Background thread that polls the mount at a configurable frequency.
+
+    Signals:
+        sample_ready: Emitted when a new mount sample is processed
+        time_sample_ready: Emitted when new time data is available
+        status_changed: Emitted when mount status changes
+        connection_lost: Emitted when connection is lost
+        connection_restored: Emitted when connection is restored
+        error: Emitted on error with message string
+        mount_info_ready: Emitted once at startup with session info
+    """
+
+    sample_ready = pyqtSignal(object)       # MountSample
+    time_sample_ready = pyqtSignal(object)  # TimeSample
+    status_changed = pyqtSignal(object)     # MountStatus
+    connection_lost = pyqtSignal()
+    connection_restored = pyqtSignal()
+    error = pyqtSignal(str)
+    mount_info_ready = pyqtSignal(dict)     # Session info dict
+    log_message = pyqtSignal(str)           # Log message for status panel
+
+    def __init__(self, connection: MountConnection, processor: DataProcessor,
+                 frequency_hz: float = 2.0, parent=None):
+        super().__init__(parent)
+        self._connection = connection
+        self._processor = processor
+        self._frequency_hz = max(0.1, frequency_hz)
+        self._running = False
+        self._paused = False
+        self._mutex = QMutex()
+
+        self._last_status = MountStatus.UNKNOWN
+        self._last_mount_time: Optional[str] = None
+        self._delay_after_slew = 0.0
+        self._slew_delay_active = False
+        self._slew_delay_start = 0.0
+        self._log_tracking_only = False
+        self._axial_enabled = False
+
+    def set_frequency(self, hz: float):
+        """Set polling frequency in Hz."""
+        self._frequency_hz = max(0.1, min(hz, 20.0))
+
+    def set_delay_after_slew(self, seconds: float):
+        """Set delay to wait after slewing before resuming logging."""
+        self._delay_after_slew = seconds
+
+    def set_log_tracking_only(self, tracking_only: bool):
+        """Set whether to only log when tracking."""
+        self._log_tracking_only = tracking_only
+
+    def set_axial_enabled(self, enabled: bool):
+        """Enable/disable axial position queries."""
+        self._axial_enabled = enabled
+
+    def run(self):
+        """Main polling loop."""
+        self._running = True
+        logger.info(f"Poller started at {self._frequency_hz} Hz")
+
+        # Initial mount info retrieval
+        self._retrieve_mount_info()
+
+        interval = 1.0 / self._frequency_hz
+        last_stdev_compute = 0.0
+
+        while self._running:
+            loop_start = time.perf_counter()
+
+            if self._paused:
+                time.sleep(0.1)
+                continue
+
+            if not self._connection.connected:
+                self.connection_lost.emit()
+                # Try to reconnect
+                if hasattr(self._connection, 'reconnect'):
+                    if self._connection.reconnect():
+                        self.connection_restored.emit()
+                        self.log_message.emit("Connection restored")
+                    else:
+                        time.sleep(2.0)
+                        continue
+                else:
+                    time.sleep(2.0)
+                    continue
+
+            try:
+                # Poll sequence: status, time, RA, DEC (+ optional axial)
+                sample = self._poll_sequence()
+
+                if sample is not None:
+                    # Check for slew delay
+                    if self._slew_delay_active:
+                        elapsed = time.time() - self._slew_delay_start
+                        if elapsed < self._delay_after_slew:
+                            continue
+                        else:
+                            self._slew_delay_active = False
+
+                    # Skip if only logging tracking and mount isn't tracking
+                    if self._log_tracking_only and sample.status != MountStatus.TRACKING:
+                        continue
+
+                    # Process sample
+                    processed = self._processor.process_mount_sample(sample)
+                    self.sample_ready.emit(processed)
+
+                    # Compute STDEVs periodically (every 10 samples)
+                    if self._processor.sample_count % 10 == 0:
+                        now = time.perf_counter()
+                        if now - last_stdev_compute > 1.0:
+                            self._processor.compute_stdevs()
+                            last_stdev_compute = now
+
+            except Exception as e:
+                logger.error(f"Polling error: {e}")
+                self.error.emit(str(e))
+
+            # Precise timing
+            elapsed = time.perf_counter() - loop_start
+            sleep_time = interval - elapsed
+            if sleep_time > 0:
+                time.sleep(sleep_time)
+
+        logger.info("Poller stopped")
+
+    def _poll_sequence(self) -> Optional[MountSample]:
+        """Execute one full polling sequence."""
+        now = datetime.now()
+        pc_time = time.time()
+
+        # Get status
+        status = self._connection.get_status()
+        if status != self._last_status:
+            self._last_status = status
+            self.status_changed.emit(status)
+            if status == MountStatus.SLEWING:
+                self._slew_delay_active = True
+                self._slew_delay_start = time.time()
+                self.log_message.emit("Mount is slewing...")
+
+        # Get mount time
+        mount_time_str = self._connection.get_mount_time()
+
+        # Compute time difference
+        if mount_time_str and self._last_mount_time:
+            time_sample = TimeSample(
+                timestamp=now,
+                mount_time_str=mount_time_str or "",
+            )
+            self.time_sample_ready.emit(time_sample)
+
+        self._last_mount_time = mount_time_str
+
+        # Get RA
+        ra_str = self._connection.get_ra()
+        if ra_str is None:
+            return None
+        ra_hours = parse_ra(ra_str)
+        if ra_hours is None:
+            logger.warning(f"Failed to parse RA: {ra_str}")
+            return None
+
+        # Get DEC
+        dec_str = self._connection.get_dec()
+        if dec_str is None:
+            return None
+        dec_degrees = parse_dec(dec_str)
+        if dec_degrees is None:
+            logger.warning(f"Failed to parse DEC: {dec_str}")
+            return None
+
+        # Build sample
+        sample = MountSample(
+            timestamp=now,
+            mount_time_str=mount_time_str or "",
+            ra_hours=ra_hours,
+            dec_degrees=dec_degrees,
+            ra_raw_str=ra_str,
+            dec_raw_str=dec_str,
+            status=status,
+        )
+
+        # Optional axial data
+        if self._axial_enabled:
+            sample.ra_axis_position = self._connection.get_ra_axis_position()
+            sample.dec_axis_position = self._connection.get_dec_axis_position()
+
+        return sample
+
+    def _retrieve_mount_info(self):
+        """Retrieve initial mount information at startup."""
+        if not self._connection.connected:
+            return
+
+        try:
+            info = {
+                'firmware': self._connection.get_firmware_version(),
+                'product': self._connection.get_product_name(),
+                'mount_id': self._connection.get_mount_id(),
+                'pier_side': self._connection.get_pier_side(),
+                'azimuth': self._connection.get_azimuth(),
+                'altitude': self._connection.get_altitude(),
+                'latitude': self._connection.get_latitude(),
+                'longitude': self._connection.get_longitude(),
+                'elevation': self._connection.get_elevation(),
+            }
+            self.mount_info_ready.emit(info)
+            self.log_message.emit(
+                f"Mount: {info['product']} | Firmware: {info['firmware']} | "
+                f"Pier: {info['pier_side'].value}"
+            )
+        except Exception as e:
+            logger.error(f"Failed to retrieve mount info: {e}")
+
+    def stop(self):
+        """Stop the polling loop."""
+        self._running = False
+        self.wait(5000)
+
+    def pause(self):
+        """Pause polling."""
+        self._paused = True
+
+    def resume(self):
+        """Resume polling."""
+        self._paused = False
