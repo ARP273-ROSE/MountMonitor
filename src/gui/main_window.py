@@ -27,6 +27,7 @@ from .theme import Colors
 from ..config.settings import Settings
 from ..core.mount_connection import MountConnection
 from ..core.lx200_protocol import LX200Connection
+from ..core.ascom_connection import ASCOMConnection
 from ..core.data_processor import DataProcessor
 from ..core.poller import MountPoller
 from ..core.ntp_client import NTPClient
@@ -72,6 +73,8 @@ class MainWindow(QMainWindow):
         self._fft_window: Optional[FFTWindow] = None
         self._connected = False
         self._logging_active = False
+        self._mount_info = {}
+        self._prev_mount_status = MountStatus.UNKNOWN
 
         # Apply language setting
         lang = self._settings.get("language")
@@ -180,6 +183,7 @@ class MainWindow(QMainWindow):
             (T("reset_buffers"), self._reset_buffers),
             (T("reset_both"), self._reset_both),
             (T("reset_new_files"), self._new_log_files),
+            ("Dump Graphs / Exporter graphes", self._dump_graphs),
         ]:
             action = QAction(label, self)
             action.triggered.connect(slot)
@@ -329,6 +333,15 @@ class MainWindow(QMainWindow):
                 host=self._settings.get("mount_ip"),
                 port=self._settings.get("mount_port"),
             )
+        elif protocol == "ascom":
+            driver_id = self._settings.get("ascom_driver")
+            if not driver_id:
+                self._status_panel.add_message(
+                    "EN: No ASCOM driver configured / FR: Aucun driver ASCOM configuré",
+                    Colors.STATUS_ERROR,
+                )
+                return
+            self._connection = ASCOMConnection(driver_id=driver_id)
         else:
             self._status_panel.add_message(
                 f"Protocol {protocol} not yet implemented", Colors.STATUS_ERROR
@@ -356,6 +369,13 @@ class MainWindow(QMainWindow):
         )
         self._processor.set_running_range(self._settings.get("running_range_seconds"))
         self._processor.set_reference_mode(self._settings.get("reference_mode"))
+
+        # Configure status panel tolerances
+        self._status_panel.set_tolerances(
+            self._settings.get("tolerance_ra_arcsec"),
+            self._settings.get("tolerance_dec_arcsec"),
+            as_ha_seconds=self._settings.get("tolerance_as_ha_seconds"),
+        )
 
         # Start poller
         self._poller = MountPoller(
@@ -474,10 +494,55 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot(object)
     def _on_status_changed(self, status: MountStatus):
-        """Handle mount status changes."""
+        """Handle mount status changes.
+
+        Handles automatic actions on slew/park transitions:
+        - Reset buffers/minmax per reset_mode
+        - Close/reopen files per close_files_mode
+        - Re-run mount checks after slew ends (tracking resumes)
+        """
+        prev_status = getattr(self, '_prev_mount_status', MountStatus.UNKNOWN)
+        self._prev_mount_status = status
         self._status_panel.update_status(status)
         if self._logging_active:
             self._file_logger.log_event(f"Mount status: {status.name}")
+
+        # Detect transition from slewing to tracking
+        was_slewing = prev_status == MountStatus.SLEWING
+        now_tracking = status == MountStatus.TRACKING
+
+        # Auto-reset on slewing
+        if status == MountStatus.SLEWING:
+            if self._settings.get("reset_mode") == "slewing":
+                self._reset_both()
+
+            if self._settings.get("dump_mode") == "slewing":
+                self._dump_graphs()
+
+            if self._settings.get("close_files_mode") == "slewing":
+                self._new_log_files()
+
+        # Auto-dump/close on parking
+        if status == MountStatus.PARKED:
+            if self._settings.get("dump_mode") in ("slewing", "parking"):
+                self._dump_graphs()
+
+            if self._settings.get("close_files_mode") in ("slewing", "parking"):
+                self._stop_logging()
+
+        # After slew ends and tracking resumes → run checks + get target coords
+        if was_slewing and now_tracking:
+            QTimer.singleShot(1000, self._run_mount_checks)
+            # Retrieve target coordinates for reference mode
+            if self._settings.get("reference_mode") == "target" and self._connection:
+                target_ra = self._connection.get_target_ra()
+                target_dec = self._connection.get_target_dec()
+                if target_ra and target_dec:
+                    from ..utils.coordinates import parse_ra, parse_dec
+                    ra_h = parse_ra(target_ra)
+                    dec_d = parse_dec(target_dec)
+                    if ra_h is not None and dec_d is not None:
+                        self._processor.set_target_coordinates(ra_h, dec_d)
 
     @pyqtSlot()
     def _on_connection_lost(self):
@@ -495,8 +560,49 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot(dict)
     def _on_mount_info(self, info: dict):
-        """Handle initial mount info."""
+        """Handle initial mount info and display in status panel."""
         logger.info(f"Mount info: {info}")
+        self._mount_info = info
+
+        # Display mount info in status panel
+        product = info.get('product', 'Unknown')
+        firmware = info.get('firmware', 'Unknown')
+        mount_id = info.get('mount_id', '')
+        pier_side = info.get('pier_side')
+        azimuth = info.get('azimuth')
+        altitude = info.get('altitude')
+        latitude = info.get('latitude')
+        longitude = info.get('longitude')
+        elevation = info.get('elevation')
+
+        self._status_panel.add_message(
+            f"Mount: {product}", Colors.STATUS_OK
+        )
+        self._status_panel.add_message(
+            f"Firmware: {firmware}"
+        )
+        if mount_id:
+            self._status_panel.add_message(f"ID: {mount_id}")
+        if pier_side and hasattr(pier_side, 'value'):
+            self._status_panel.add_message(f"Pier: {pier_side.value}")
+        if azimuth is not None and altitude is not None:
+            self._status_panel.add_message(
+                f"Az: {azimuth:.1f}\u00b0  Alt: {altitude:.1f}\u00b0"
+            )
+        if latitude and longitude:
+            elev_str = f"  Elev: {elevation:.0f}m" if elevation is not None else ""
+            self._status_panel.add_message(
+                f"Site: {latitude} {longitude}{elev_str}"
+            )
+
+        # Log to file
+        if self._logging_active:
+            self._file_logger.log_event(f"Mount: {product} | FW: {firmware} | ID: {mount_id}")
+            if azimuth is not None:
+                self._file_logger.log_event(f"Az: {azimuth:.1f} Alt: {altitude:.1f}")
+
+        # Run mount checks
+        self._run_mount_checks()
 
     def _on_seismic_data(self, timestamp: float, values: list[float]):
         """Handle seismometer data callback."""
@@ -716,6 +822,106 @@ class MainWindow(QMainWindow):
 
         self._ra_graph.set_tolerance(self._settings.get("tolerance_ra_arcsec"))
         self._dec_graph.set_tolerance(self._settings.get("tolerance_dec_arcsec"))
+
+        # Update status panel tolerance display
+        self._status_panel.set_tolerances(
+            self._settings.get("tolerance_ra_arcsec"),
+            self._settings.get("tolerance_dec_arcsec"),
+            as_ha_seconds=self._settings.get("tolerance_as_ha_seconds"),
+        )
+
+    # ── Graph dump ─────────────────────────────────────────────
+
+    def _dump_graphs(self):
+        """Export all graph images to their respective directories."""
+        self._ra_graph.export_to_image("RA_graphs")
+        self._dec_graph.export_to_image("DEC_graphs")
+        self._time_graph.export_to_image("Time_graphs")
+        self._seismic_graph.export_to_image("Seismic_graphs")
+        if self._fft_window and self._fft_window.isVisible():
+            self._fft_window.export_to_image("FFT_graphs")
+        self._status_panel.add_message("Graphs exported / Graphes exportés")
+
+    # ── Mount checks ────────────────────────────────────────────
+
+    def _run_mount_checks(self):
+        """Run mount setting checks based on preferences.
+
+        Checks refraction, tracking rate, GPS sync as configured in
+        the Miscellaneous tab. Shows warnings and logs results.
+        """
+        if not self._connection or not self._connected:
+            return
+
+        warnings = []
+        ok_checks = []
+
+        # Check refraction
+        if self._settings.get("check_refraction_enabled"):
+            expected = self._settings.get("check_refraction_value")
+            refraction = self._connection.is_refraction_enabled()
+            if refraction is not None:
+                actual = "enabled" if refraction else "disabled"
+                if actual == expected:
+                    ok_checks.append(f"Refraction: {actual} \u2713")
+                else:
+                    warnings.append(
+                        f"Refraction is {actual}, expected {expected}"
+                    )
+
+        # Check tracking rate
+        if self._settings.get("check_tracking_rate"):
+            expected_val = self._settings.get("check_tracking_rate_value")
+            rate = self._connection.get_tracking_rate()
+            if rate is not None:
+                rate_lower = str(rate).lower().strip()
+                if expected_val.lower() in rate_lower or rate_lower.startswith("60"):
+                    ok_checks.append(f"Tracking rate: {rate} \u2713")
+                else:
+                    warnings.append(
+                        f"Tracking rate is {rate}, expected {expected_val}"
+                    )
+
+        # Check GPS sync
+        if self._settings.get("check_gps_sync"):
+            expected_val = self._settings.get("check_gps_sync_value")
+            gps = self._connection.is_gps_synced()
+            if gps is not None:
+                actual = "synchronising" if gps else "not synchronising"
+                if actual == expected_val:
+                    ok_checks.append(f"GPS: {actual} \u2713")
+                else:
+                    warnings.append(
+                        f"GPS is {actual}, expected {expected_val}"
+                    )
+
+        # Display results
+        for msg in ok_checks:
+            self._status_panel.add_message(msg, Colors.STATUS_OK)
+            if self._logging_active:
+                self._file_logger.log_event(f"Check OK: {msg}")
+
+        if warnings:
+            for msg in warnings:
+                self._status_panel.add_message(
+                    f"\u26a0 {msg}", Colors.STATUS_WARNING
+                )
+                if self._logging_active:
+                    self._file_logger.log_event(f"Check WARNING: {msg}")
+
+            # Show popup alert
+            lang = get_language()
+            if lang == "fr":
+                title = "Alerte monture"
+                text = "Vérification de la monture :\n\n" + "\n".join(
+                    f"\u26a0 {w}" for w in warnings
+                )
+            else:
+                title = "Mount Alert"
+                text = "Mount settings check:\n\n" + "\n".join(
+                    f"\u26a0 {w}" for w in warnings
+                )
+            QMessageBox.warning(self, title, text)
 
     # ── Help ─────────────────────────────────────────────────────
 
