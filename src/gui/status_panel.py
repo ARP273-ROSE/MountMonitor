@@ -22,6 +22,10 @@ class StatusPanel(QWidget):
     def __init__(self, max_lines: int = 50, parent=None):
         super().__init__(parent)
         self._max_lines = max_lines
+        self._tolerance_ra_arcsec = 1.5
+        self._tolerance_dec_arcsec = 1.5
+        self._tolerance_as_ha_seconds = False
+        self._declination_deg = 0.0
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
@@ -103,16 +107,37 @@ class StatusPanel(QWidget):
         self._log_text.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
         layout.addWidget(self._log_text)
 
+    def set_tolerances(self, ra_arcsec: float, dec_arcsec: float,
+                       as_ha_seconds: bool = False, declination_deg: float = 0.0):
+        """Configure tolerance thresholds and display mode."""
+        self._tolerance_ra_arcsec = ra_arcsec
+        self._tolerance_dec_arcsec = dec_arcsec
+        self._tolerance_as_ha_seconds = as_ha_seconds
+        self._declination_deg = declination_deg
+
     def update_mount_sample(self, sample: MountSample):
         """Update display with new mount data."""
         self._ra_value.setText(sample.ra_raw_str or format_ra(sample.ra_hours))
         self._dec_value.setText(sample.dec_raw_str or format_dec(sample.dec_degrees))
-        self._ra_dev.setText(f"Δ {sample.ra_deviation_arcsec:+.2f}\"")
-        self._dec_dev.setText(f"Δ {sample.dec_deviation_arcsec:+.2f}\"")
+        self._declination_deg = sample.dec_degrees
+
+        # RA deviation display
+        ra_dev = sample.ra_deviation_arcsec
+        if self._tolerance_as_ha_seconds:
+            import math
+            cos_dec = math.cos(math.radians(abs(self._declination_deg)))
+            if cos_dec > 0.001:
+                ra_time_s = ra_dev / 15.0 / cos_dec
+                self._ra_dev.setText(f"\u0394 {ra_time_s:+.3f}s")
+            else:
+                self._ra_dev.setText(f"\u0394 {ra_dev:+.2f}\"")
+        else:
+            self._ra_dev.setText(f"\u0394 {ra_dev:+.2f}\"")
+        self._dec_dev.setText(f"\u0394 {sample.dec_deviation_arcsec:+.2f}\"")
 
         # Color deviation text based on tolerance
-        ra_color = Colors.ACCENT_RED.name() if abs(sample.ra_deviation_arcsec) > 1.5 else Colors.TEXT_PRIMARY.name()
-        dec_color = Colors.ACCENT_RED.name() if abs(sample.dec_deviation_arcsec) > 1.5 else Colors.TEXT_PRIMARY.name()
+        ra_color = Colors.ACCENT_RED.name() if abs(ra_dev) > self._tolerance_ra_arcsec else Colors.TEXT_PRIMARY.name()
+        dec_color = Colors.ACCENT_RED.name() if abs(sample.dec_deviation_arcsec) > self._tolerance_dec_arcsec else Colors.TEXT_PRIMARY.name()
         self._ra_dev.setStyleSheet(f"color: {ra_color};")
         self._dec_dev.setStyleSheet(f"color: {dec_color};")
 

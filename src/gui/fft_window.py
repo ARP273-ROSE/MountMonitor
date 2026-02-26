@@ -4,8 +4,15 @@ Displays frequency and period domain analysis of RA, DEC,
 and seismometer data using pyqtgraph.
 """
 
+import logging
+from pathlib import Path
+from datetime import datetime
+
 import numpy as np
 import pyqtgraph as pg
+import pyqtgraph.exporters
+
+logger = logging.getLogger(__name__)
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QSplitter
 )
@@ -145,6 +152,21 @@ class FFTWindow(QWidget):
             x_range = vb.viewRange()[0]
             shift = (x_range[1] - x_range[0]) * 0.2
             vb.translateBy((shift, 0))
+
+    def export_to_image(self, directory: str):
+        """Export FFT graphs as PNG."""
+        dir_path = Path(directory)
+        dir_path.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        for plot, name in [(self._freq_plot, "FFT_Freq"), (self._period_plot, "FFT_Period")]:
+            filename = dir_path / f"{name}_{timestamp}.png"
+            try:
+                exporter = pg.exporters.ImageExporter(plot.plotItem)
+                exporter.parameters()['width'] = 1600
+                exporter.export(str(filename))
+                logger.info(f"FFT exported: {filename}")
+            except Exception as e:
+                logger.warning(f"Failed to export FFT: {e}")
 
     def reset(self):
         """Clear all FFT data."""

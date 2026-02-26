@@ -266,6 +266,13 @@ class LX200Connection(MountConnection):
                 pass
         return None
 
+    def is_gps_synced(self) -> Optional[bool]:
+        """Check if GPS clock is synchronized via :gps# (10Micron)."""
+        result = self._send_command(':gps#')
+        if result is None:
+            return None
+        return result.strip() == '1'
+
     def set_high_precision(self) -> bool:
         """Set high precision output mode: :U#
 
