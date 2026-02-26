@@ -2,7 +2,7 @@
 
 Creates and manages 4 log file types:
   .log  - Events, settings changes, tolerance alerts
-  .dat  - RA/DEC data (TAB-separated)
+  .dat  - RA/DEC data (TAB-separated, 27-column Java-compatible format)
   .dti  - Time data (TAB-separated)
   .sei  - Seismometer data (TAB-separated)
 
@@ -40,6 +40,7 @@ class FileLogger:
 
     Uses atomic writes via temp files for data files.
     Log file is flushed after each write for immediate visibility.
+    The .dat file outputs 27 TAB-separated columns matching the Java original.
     """
 
     def __init__(self, base_dir: Optional[Path] = None):
@@ -56,6 +57,21 @@ class FileLogger:
         self._version = _read_version()
         self._active = False
 
+        # Running min/max tracking for .dat 27-column format
+        self._sample_count: int = 0
+        self._min_ra_hours: Optional[float] = None
+        self._max_ra_hours: Optional[float] = None
+        self._max_ra_stdev: float = 0.0
+        self._min_dec_degrees: Optional[float] = None
+        self._max_dec_degrees: Optional[float] = None
+        self._max_dec_stdev: float = 0.0
+        self._min_ra_axis: Optional[float] = None
+        self._max_ra_axis: Optional[float] = None
+        self._max_ra_axis_stdev: float = 0.0
+        self._min_dec_axis: Optional[float] = None
+        self._max_dec_axis: Optional[float] = None
+        self._max_dec_axis_stdev: float = 0.0
+
     @property
     def active(self) -> bool:
         return self._active
@@ -64,10 +80,66 @@ class FileLogger:
     def log_dir(self) -> Path:
         return self._base_dir
 
+    def _reset_minmax(self):
+        """Reset running min/max statistics."""
+        self._sample_count = 0
+        self._min_ra_hours = None
+        self._max_ra_hours = None
+        self._max_ra_stdev = 0.0
+        self._min_dec_degrees = None
+        self._max_dec_degrees = None
+        self._max_dec_stdev = 0.0
+        self._min_ra_axis = None
+        self._max_ra_axis = None
+        self._max_ra_axis_stdev = 0.0
+        self._min_dec_axis = None
+        self._max_dec_axis = None
+        self._max_dec_axis_stdev = 0.0
+
+    def _update_minmax(self, sample: MountSample):
+        """Update running min/max from a mount sample."""
+        self._sample_count += 1
+
+        # RA min/max (decimal hours)
+        if self._min_ra_hours is None or sample.ra_hours < self._min_ra_hours:
+            self._min_ra_hours = sample.ra_hours
+        if self._max_ra_hours is None or sample.ra_hours > self._max_ra_hours:
+            self._max_ra_hours = sample.ra_hours
+
+        # RA StDev max
+        if sample.ra_stdev > self._max_ra_stdev:
+            self._max_ra_stdev = sample.ra_stdev
+
+        # DEC min/max (decimal degrees)
+        if self._min_dec_degrees is None or sample.dec_degrees < self._min_dec_degrees:
+            self._min_dec_degrees = sample.dec_degrees
+        if self._max_dec_degrees is None or sample.dec_degrees > self._max_dec_degrees:
+            self._max_dec_degrees = sample.dec_degrees
+
+        # DEC StDev max
+        if sample.dec_stdev > self._max_dec_stdev:
+            self._max_dec_stdev = sample.dec_stdev
+
+        # RA axis min/max
+        if sample.ra_axis_position is not None:
+            if self._min_ra_axis is None or sample.ra_axis_position < self._min_ra_axis:
+                self._min_ra_axis = sample.ra_axis_position
+            if self._max_ra_axis is None or sample.ra_axis_position > self._max_ra_axis:
+                self._max_ra_axis = sample.ra_axis_position
+
+        # DEC axis min/max
+        if sample.dec_axis_position is not None:
+            if self._min_dec_axis is None or sample.dec_axis_position < self._min_dec_axis:
+                self._min_dec_axis = sample.dec_axis_position
+            if self._max_dec_axis is None or sample.dec_axis_position > self._max_dec_axis:
+                self._max_dec_axis = sample.dec_axis_position
+
     def start_session(self, session_info: SessionInfo):
         """Open new log files for a monitoring session."""
         self._session_start = datetime.now().strftime("%Y%m%d-%H%M%S")
         prefix = f"MountMonitor_{self._session_start}"
+        self._reset_minmax()
+        self._session_info = session_info
 
         try:
             # .log file
@@ -120,19 +192,51 @@ class FileLogger:
         f.flush()
 
     def _write_dat_header(self, info: SessionInfo):
-        """Write .dat file header."""
+        """Write .dat file header with Java-compatible 27-column format."""
         f = self._dat_file
         f.write(f"MountMonitor mount data file (v.{self._version})\n")
         f.write(f"Location:\t{info.observatory}\n")
         f.write(f"Mount:\t{info.mount_name}\n")
         f.write(f"Mount ID:\t{info.mount_id}\n")
         f.write(f"Firmware:\t{info.firmware}\n")
-        # Column headers
-        f.write("Timestamp\tMount time\tRA raw\tRA [h]\t"
-                "RA dev [\"]\tRA StDev [\"]\t"
-                "DEC raw\tDEC [deg]\t"
-                "DEC dev [\"]\tDEC StDev [\"]\t"
-                "RA axis\tDEC axis\tStatus\n")
+
+        # Telescope pointing info (pier side, azimuth, altitude)
+        pier_side_str = info.pier_side.value if info.pier_side else "Unknown"
+        f.write(f"Telescopes are {pier_side_str} of the mount, "
+                f"pointing at azimuth {info.azimuth:.1f}, "
+                f"altitude {info.altitude:.1f}\n")
+
+        # 27 column headers (TAB-separated) matching Java original
+        headers = [
+            "RAW Mount time [HH:MM:SS.dd]",      # 1
+            "Mount time [HH:MM:SS.dd]",           # 2
+            "RAW RA [hh:mm:ss.dd]",               # 3
+            "RA [hh:mm:ss.dd]",                   # 4
+            "RA StDev [\".ddd]",                   # 5
+            "RAW DEC [dd:mm:ss.dd]",              # 6
+            "DEC [dd:mm:ss.dd]",                  # 7
+            "DEC StDev [\".ddd]",                  # 8
+            "RAW DEC AXIS [dd.dddd]",             # 9
+            "DEC AXIS [dd.dddd]",                 # 10
+            "DEC AXIS StDev [\".ddd]",             # 11
+            "RAW RA AXIS [dd.dddd]",              # 12
+            "RA AXIS [dd.dddd]",                  # 13
+            "RA AXIS StDev [\".ddd]",              # 14
+            "Min RA Value [hh:mm:ss.dd]",         # 15
+            "Max RA Value [hh:mm:ss.dd]",         # 16
+            "Max RA StDev [\".ddd]",               # 17
+            "Min DEC value [dd:mm:ss.dd]",        # 18
+            "Max DEC value [dd:mm:ss.dd]",        # 19
+            "Max DEC StDev [\".ddd]",              # 20
+            "Min RA AXIS Value [dd.dddd]",        # 21
+            "Max RA AXIS Value [dd.dddd]",        # 22
+            "Max RA AXIS StDev [\".ddd]",          # 23
+            "Min DEC AXIS Value [dd.dddd]",       # 24
+            "Max DEC AXIS Value [dd.dddd]",       # 25
+            "Max DEC AXIS StDev [\".ddd]",         # 26
+            "Status",                              # 27
+        ]
+        f.write("\t".join(headers) + "\n")
         f.flush()
 
     def _write_dti_header(self, info: SessionInfo):
@@ -161,23 +265,163 @@ class FileLogger:
         self._log_file.write(f"{timestamp}\t{message}\n")
         self._log_file.flush()
 
+    def log_tolerance_event(self, message: str):
+        """Write a tolerance alert event to the .log file."""
+        if not self._log_file:
+            return
+        timestamp = datetime.now().strftime("%d/%m/%Y %H:%M:%S.%f")[:-3]
+        self._log_file.write(f"{timestamp}\tTOLERANCE\t{message}\n")
+        self._log_file.flush()
+
     def log_mount_sample(self, sample: MountSample):
-        """Write a mount data sample to the .dat file."""
+        """Write a mount data sample to the .dat file (27-column Java format).
+
+        Columns:
+         1  RAW Mount time       - mount_time_str (raw from mount)
+         2  Mount time           - mount_time_str (same, no correction applied yet)
+         3  RAW RA               - ra_raw_str
+         4  RA                   - formatted from ra_hours
+         5  RA StDev             - ra_stdev
+         6  RAW DEC              - dec_raw_str
+         7  DEC                  - formatted from dec_degrees
+         8  DEC StDev            - dec_stdev
+         9  RAW DEC AXIS         - dec_axis_position (raw)
+        10  DEC AXIS             - dec_axis_position (same, no correction)
+        11  DEC AXIS StDev       - empty (not computed per-sample)
+        12  RAW RA AXIS          - ra_axis_position (raw)
+        13  RA AXIS              - ra_axis_position (same, no correction)
+        14  RA AXIS StDev        - empty (not computed per-sample)
+        15  Min RA Value         - running min RA formatted
+        16  Max RA Value         - running max RA formatted
+        17  Max RA StDev         - running max of ra_stdev
+        18  Min DEC value        - running min DEC formatted
+        19  Max DEC value        - running max DEC formatted
+        20  Max DEC StDev        - running max of dec_stdev
+        21  Min RA AXIS Value    - running min ra_axis_position
+        22  Max RA AXIS Value    - running max ra_axis_position
+        23  Max RA AXIS StDev    - running max (0 since not computed per-sample)
+        24  Min DEC AXIS Value   - running min dec_axis_position
+        25  Max DEC AXIS Value   - running max dec_axis_position
+        26  Max DEC AXIS StDev   - running max (0 since not computed per-sample)
+        27  Status               - status name
+        """
         if not self._dat_file:
             return
-        timestamp = sample.timestamp.strftime("%d/%m/%Y %H:%M:%S.%f")[:-3]
-        ra_axis = f"{sample.ra_axis_position:.6f}" if sample.ra_axis_position is not None else ""
-        dec_axis = f"{sample.dec_axis_position:.6f}" if sample.dec_axis_position is not None else ""
 
-        line = (
-            f"{timestamp}\t{sample.mount_time_str}\t"
-            f"{sample.ra_raw_str}\t{sample.ra_hours:.8f}\t"
-            f"{sample.ra_deviation_arcsec:.4f}\t{sample.ra_stdev:.4f}\t"
-            f"{sample.dec_raw_str}\t{sample.dec_degrees:.8f}\t"
-            f"{sample.dec_deviation_arcsec:.4f}\t{sample.dec_stdev:.4f}\t"
-            f"{ra_axis}\t{dec_axis}\t{sample.status.name}\n"
-        )
-        self._dat_file.write(line)
+        # Update running min/max
+        self._update_minmax(sample)
+
+        # Column 1: RAW Mount time
+        raw_mount_time = sample.mount_time_str
+
+        # Column 2: Mount time (same as raw for now)
+        mount_time = sample.mount_time_str
+
+        # Column 3: RAW RA
+        raw_ra = sample.ra_raw_str
+
+        # Column 4: RA formatted from decimal hours
+        ra_formatted = format_ra(sample.ra_hours, precision=2)
+
+        # Column 5: RA StDev
+        ra_stdev = f"{sample.ra_stdev:.3f}"
+
+        # Column 6: RAW DEC
+        raw_dec = sample.dec_raw_str
+
+        # Column 7: DEC formatted from decimal degrees
+        dec_formatted = format_dec(sample.dec_degrees, precision=2)
+
+        # Column 8: DEC StDev
+        dec_stdev = f"{sample.dec_stdev:.3f}"
+
+        # Column 9: RAW DEC AXIS
+        raw_dec_axis = f"{sample.dec_axis_position:.4f}" if sample.dec_axis_position is not None else ""
+
+        # Column 10: DEC AXIS (same as raw)
+        dec_axis = raw_dec_axis
+
+        # Column 11: DEC AXIS StDev (not available per-sample)
+        dec_axis_stdev = ""
+
+        # Column 12: RAW RA AXIS
+        raw_ra_axis = f"{sample.ra_axis_position:.4f}" if sample.ra_axis_position is not None else ""
+
+        # Column 13: RA AXIS (same as raw)
+        ra_axis = raw_ra_axis
+
+        # Column 14: RA AXIS StDev (not available per-sample)
+        ra_axis_stdev = ""
+
+        # Column 15: Min RA Value
+        min_ra_str = format_ra(self._min_ra_hours, precision=2) if self._min_ra_hours is not None else ""
+
+        # Column 16: Max RA Value
+        max_ra_str = format_ra(self._max_ra_hours, precision=2) if self._max_ra_hours is not None else ""
+
+        # Column 17: Max RA StDev
+        max_ra_stdev = f"{self._max_ra_stdev:.3f}"
+
+        # Column 18: Min DEC value
+        min_dec_str = format_dec(self._min_dec_degrees, precision=2) if self._min_dec_degrees is not None else ""
+
+        # Column 19: Max DEC value
+        max_dec_str = format_dec(self._max_dec_degrees, precision=2) if self._max_dec_degrees is not None else ""
+
+        # Column 20: Max DEC StDev
+        max_dec_stdev = f"{self._max_dec_stdev:.3f}"
+
+        # Column 21: Min RA AXIS Value
+        min_ra_axis_str = f"{self._min_ra_axis:.4f}" if self._min_ra_axis is not None else ""
+
+        # Column 22: Max RA AXIS Value
+        max_ra_axis_str = f"{self._max_ra_axis:.4f}" if self._max_ra_axis is not None else ""
+
+        # Column 23: Max RA AXIS StDev
+        max_ra_axis_stdev = f"{self._max_ra_axis_stdev:.3f}"
+
+        # Column 24: Min DEC AXIS Value
+        min_dec_axis_str = f"{self._min_dec_axis:.4f}" if self._min_dec_axis is not None else ""
+
+        # Column 25: Max DEC AXIS Value
+        max_dec_axis_str = f"{self._max_dec_axis:.4f}" if self._max_dec_axis is not None else ""
+
+        # Column 26: Max DEC AXIS StDev
+        max_dec_axis_stdev = f"{self._max_dec_axis_stdev:.3f}"
+
+        # Column 27: Status
+        status = sample.status.name
+
+        columns = [
+            raw_mount_time,      # 1
+            mount_time,          # 2
+            raw_ra,              # 3
+            ra_formatted,        # 4
+            ra_stdev,            # 5
+            raw_dec,             # 6
+            dec_formatted,       # 7
+            dec_stdev,           # 8
+            raw_dec_axis,        # 9
+            dec_axis,            # 10
+            dec_axis_stdev,      # 11
+            raw_ra_axis,         # 12
+            ra_axis,             # 13
+            ra_axis_stdev,       # 14
+            min_ra_str,          # 15
+            max_ra_str,          # 16
+            max_ra_stdev,        # 17
+            min_dec_str,         # 18
+            max_dec_str,         # 19
+            max_dec_stdev,       # 20
+            min_ra_axis_str,     # 21
+            max_ra_axis_str,     # 22
+            max_ra_axis_stdev,   # 23
+            min_dec_axis_str,    # 24
+            max_dec_axis_str,    # 25
+            max_dec_axis_stdev,  # 26
+            status,              # 27
+        ]
+        self._dat_file.write("\t".join(columns) + "\n")
 
     def log_time_sample(self, sample: TimeSample):
         """Write a time data sample to the .dti file."""
@@ -208,9 +452,52 @@ class FileLogger:
                 except OSError:
                     pass
 
+    def write_session_summary(self):
+        """Write session summary (min/max/count stats) to the .log file."""
+        if not self._log_file:
+            return
+
+        self._log_file.write("\n--- Session Summary ---\n")
+        self._log_file.write(f"Total samples:\t{self._sample_count}\n")
+
+        if self._sample_count > 0:
+            # RA range
+            if self._min_ra_hours is not None and self._max_ra_hours is not None:
+                min_ra_str = format_ra(self._min_ra_hours, precision=2)
+                max_ra_str = format_ra(self._max_ra_hours, precision=2)
+                self._log_file.write(f"RA range:\t{min_ra_str} - {max_ra_str}\n")
+
+            self._log_file.write(f"Max RA StDev:\t{self._max_ra_stdev:.3f}\"\n")
+
+            # DEC range
+            if self._min_dec_degrees is not None and self._max_dec_degrees is not None:
+                min_dec_str = format_dec(self._min_dec_degrees, precision=2)
+                max_dec_str = format_dec(self._max_dec_degrees, precision=2)
+                self._log_file.write(f"DEC range:\t{min_dec_str} - {max_dec_str}\n")
+
+            self._log_file.write(f"Max DEC StDev:\t{self._max_dec_stdev:.3f}\"\n")
+
+            # RA axis range
+            if self._min_ra_axis is not None and self._max_ra_axis is not None:
+                self._log_file.write(
+                    f"RA AXIS range:\t{self._min_ra_axis:.4f} - {self._max_ra_axis:.4f}\n"
+                )
+                self._log_file.write(f"Max RA AXIS StDev:\t{self._max_ra_axis_stdev:.3f}\"\n")
+
+            # DEC axis range
+            if self._min_dec_axis is not None and self._max_dec_axis is not None:
+                self._log_file.write(
+                    f"DEC AXIS range:\t{self._min_dec_axis:.4f} - {self._max_dec_axis:.4f}\n"
+                )
+                self._log_file.write(f"Max DEC AXIS StDev:\t{self._max_dec_axis_stdev:.3f}\"\n")
+
+        self._log_file.write("--- End Summary ---\n")
+        self._log_file.flush()
+
     def close(self):
         """Close all log files and write summary."""
         if self._log_file:
+            self.write_session_summary()
             self.log_event("Logging stopped.")
         self._active = False
         for attr in ['_log_file', '_dat_file', '_dti_file', '_sei_file']:

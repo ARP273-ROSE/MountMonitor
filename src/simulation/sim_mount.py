@@ -136,6 +136,15 @@ class SimulatedMount(MountConnection):
     def is_refraction_enabled(self) -> Optional[bool]:
         return True
 
+    def get_refraction_mode(self) -> Optional[str]:
+        return "continuously_updating"
+
+    def is_dual_tracking_enabled(self) -> Optional[bool]:
+        return True
+
+    def is_gps_synced(self) -> Optional[bool]:
+        return True
+
     def get_tracking_rate(self) -> Optional[str]:
         return "Sidereal"
 

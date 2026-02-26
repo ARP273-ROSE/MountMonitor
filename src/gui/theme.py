@@ -32,14 +32,14 @@ class Colors:
     # Graph data colors (matching original MountMonitor)
     GRAPH_RA = QColor(200, 100, 200)       # Magenta for RA
     GRAPH_DEC = QColor(200, 80, 80)        # Red for DEC
-    GRAPH_SEISMIC = QColor(180, 180, 180)  # Light gray for seismic
+    GRAPH_SEISMIC = QColor(220, 220, 230)  # Bright for seismic (Java: black on white bg)
     GRAPH_STDEV = QColor(80, 130, 220)     # Blue for STDEV
     GRAPH_TOLERANCE = QColor(80, 180, 80)  # Green for tolerance
     GRAPH_MINMAX = QColor(200, 100, 200)   # Dashed lines
     GRAPH_TIME_FIX = QColor(100, 100, 110) # Gray for time fixes
     GRAPH_TIME_PC = QColor(80, 180, 80)    # Green for PC loop time
     GRAPH_TIME_MOUNT = QColor(200, 80, 80) # Red for mount loop time
-    GRAPH_TIME_DIFF = QColor(180, 180, 180) # White for PC-mount diff
+    GRAPH_TIME_DIFF = QColor(230, 230, 235) # Bright white for PC-mount diff (Java: black on white bg)
     GRAPH_NTP = QColor(80, 130, 220)       # Blue for NTP
     GRAPH_SPEED_RAW = QColor(120, 120, 130) # Gray for raw speed
     GRAPH_SPEED_AVG = QColor(200, 200, 200) # White for averaged speed

@@ -152,6 +152,19 @@ class TrackingGraph(QWidget):
         self._stats_text.setFont(QFont('Consolas', 9))
         self._plot.addItem(self._stats_text)
 
+        # Tolerance value annotations (labels showing the arcsec value)
+        self._tol_upper_label = pg.TextItem(
+            text='', color=Colors.GRAPH_TOLERANCE, anchor=(1, 1)
+        )
+        self._tol_upper_label.setFont(QFont('Consolas', 8))
+        self._plot.addItem(self._tol_upper_label)
+
+        self._tol_lower_label = pg.TextItem(
+            text='', color=Colors.GRAPH_TOLERANCE, anchor=(1, 0)
+        )
+        self._tol_lower_label.setFont(QFont('Consolas', 8))
+        self._plot.addItem(self._tol_lower_label)
+
         # Time fix markers (grey vertical lines every 30s)
         self._time_fixes = []
         self._time_fix_labels = []
@@ -163,6 +176,7 @@ class TrackingGraph(QWidget):
 
     def update_data(self, timestamps: np.ndarray, values: np.ndarray,
                     stdev_values: np.ndarray = None,
+                    stdev_timestamps: np.ndarray = None,
                     min_val: float = None, max_val: float = None,
                     max_stdev: float = None,
                     mount_times: list = None):
@@ -172,6 +186,7 @@ class TrackingGraph(QWidget):
             timestamps: Array of POSIX timestamps
             values: Array of deviation values in arcseconds
             stdev_values: Running STDEV array
+            stdev_timestamps: Separate timestamps for STDEV (for graph correction)
             min_val: Minimum deviation value
             max_val: Maximum deviation value
             max_stdev: Maximum STDEV value
@@ -187,9 +202,13 @@ class TrackingGraph(QWidget):
 
         self._data_curve.setData(rel_times, values)
 
-        # Update STDEV
+        # Update STDEV (with optional corrected timestamps)
         if stdev_values is not None and len(stdev_values) == len(rel_times):
-            self._stdev_curve.setData(rel_times, stdev_values)
+            if stdev_timestamps is not None:
+                stdev_rel = stdev_timestamps - t0
+                self._stdev_curve.setData(stdev_rel, stdev_values)
+            else:
+                self._stdev_curve.setData(rel_times, stdev_values)
 
         # Update min/max lines with annotations
         if min_val is not None and max_val is not None:
@@ -225,10 +244,12 @@ class TrackingGraph(QWidget):
             )
 
     def set_tolerance(self, arcsec: float):
-        """Update tolerance lines."""
+        """Update tolerance lines and their annotations."""
         self._tolerance = arcsec
         self._tol_upper.setPos(arcsec)
         self._tol_lower.setPos(-arcsec)
+        self._tol_upper_label.setText(f'{arcsec:+.2f}"')
+        self._tol_lower_label.setText(f'{-arcsec:+.2f}"')
 
     def set_vertical_zoom(self, mode: str):
         """Set vertical zoom mode: data, tolerance, maximum, minmax."""
@@ -244,14 +265,18 @@ class TrackingGraph(QWidget):
             vb.enableAutoRange(axis=pg.ViewBox.YAxis)
 
     def _update_overlay_positions(self):
-        """Update watermark and stats text positions after range change."""
+        """Update watermark, stats text, and tolerance label positions after range change."""
         vb = self._plot.getViewBox()
         view_range = vb.viewRange()
         if view_range:
             x_center = (view_range[0][0] + view_range[0][1]) / 2
             y_center = (view_range[1][0] + view_range[1][1]) / 2
+            x_right = view_range[0][1]
             self._watermark.setPos(x_center, y_center)
-            self._stats_text.setPos(view_range[0][1], view_range[1][1])
+            self._stats_text.setPos(x_right, view_range[1][1])
+            # Position tolerance labels at right edge
+            self._tol_upper_label.setPos(x_right, self._tolerance)
+            self._tol_lower_label.setPos(x_right, -self._tolerance)
 
     def export_to_image(self, directory: str):
         """Export graph as PNG to the specified directory."""
@@ -532,3 +557,172 @@ class SeismicGraph(QWidget):
     def reset(self):
         self._data_curve.setData([], [])
         self._stdev_curve.setData([], [])
+
+
+class AxialGraph(QWidget):
+    """Axial velocity/displacement graph.
+
+    Shows for RA and DEC axes:
+    - Raw speed (thin grey)
+    - 6-sample running average speed (thick bright line)
+    - Linear regression overlay (extra thick, annotated with slope)
+    Equivalent to the Java Axial Velocity/Displacement graph.
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        self._plot = pg.PlotWidget()
+        self._plot.setBackground(Colors.BG_GRAPH)
+        self._plot.showGrid(x=False, y=True, alpha=0.1)
+        self._plot.setLabel('left', 'Speed', units='"/s',
+                            color=Colors.TEXT_SECONDARY.name())
+        self._plot.setLabel('bottom', 'Time', units='s',
+                            color=Colors.TEXT_SECONDARY.name())
+        self._plot.addLegend(offset=(10, 10))
+
+        # RA raw speed (thin grey)
+        self._ra_raw_curve = self._plot.plot(
+            pen=pg.mkPen(Colors.GRAPH_SPEED_RAW, width=1),
+            name="RA raw"
+        )
+        # DEC raw speed (thin grey, slightly different shade)
+        self._dec_raw_curve = self._plot.plot(
+            pen=pg.mkPen(QColor(140, 140, 150), width=1),
+            name="DEC raw"
+        )
+        # RA average speed (thick bright magenta)
+        self._ra_avg_curve = self._plot.plot(
+            pen=pg.mkPen(Colors.GRAPH_RA, width=2.5),
+            name="RA avg"
+        )
+        # DEC average speed (thick bright red)
+        self._dec_avg_curve = self._plot.plot(
+            pen=pg.mkPen(Colors.GRAPH_DEC, width=2.5),
+            name="DEC avg"
+        )
+        # Linear regression lines (extra thick white)
+        self._ra_reg_curve = self._plot.plot(
+            pen=pg.mkPen(Colors.GRAPH_SPEED_REG, width=3,
+                         style=Qt.PenStyle.DashLine),
+        )
+        self._dec_reg_curve = self._plot.plot(
+            pen=pg.mkPen(QColor(255, 200, 200), width=3,
+                         style=Qt.PenStyle.DashLine),
+        )
+
+        # Zero line
+        zero_pen = pg.mkPen(Colors.TEXT_MUTED, width=1,
+                            style=Qt.PenStyle.DashLine)
+        self._plot.addItem(pg.InfiniteLine(pos=0, angle=0, pen=zero_pen))
+
+        # Watermark
+        self._watermark = pg.TextItem(
+            text="AXIAL", color=Colors.TEXT_MUTED, anchor=(0.5, 0.5)
+        )
+        self._watermark.setFont(QFont('Arial', 24, QFont.Weight.Bold))
+        self._watermark.setOpacity(0.15)
+        self._plot.addItem(self._watermark)
+
+        # Regression annotation
+        self._reg_label = pg.TextItem(
+            text='', color=Colors.GRAPH_SPEED_REG, anchor=(1, 0)
+        )
+        self._reg_label.setFont(QFont('Consolas', 9))
+        self._plot.addItem(self._reg_label)
+
+        self._plot.sigRangeChanged.connect(self._update_overlay_positions)
+        layout.addWidget(self._plot)
+
+    def _update_overlay_positions(self):
+        """Update watermark and annotation positions."""
+        vb = self._plot.getViewBox()
+        vr = vb.viewRange()
+        if vr:
+            x_center = (vr[0][0] + vr[0][1]) / 2
+            y_center = (vr[1][0] + vr[1][1]) / 2
+            self._watermark.setPos(x_center, y_center)
+            self._reg_label.setPos(vr[0][1], vr[1][1])
+
+    def update_data(self,
+                    ra_raw_t=None, ra_raw_v=None,
+                    dec_raw_t=None, dec_raw_v=None,
+                    ra_avg_t=None, ra_avg_v=None,
+                    dec_avg_t=None, dec_avg_v=None):
+        """Update axial graph with speed data.
+
+        All timestamps/values are numpy arrays.
+        """
+        # Determine t0 from first available data
+        t0 = None
+        for t_arr in [ra_raw_t, dec_raw_t, ra_avg_t, dec_avg_t]:
+            if t_arr is not None and len(t_arr) > 0:
+                if t0 is None or t_arr[0] < t0:
+                    t0 = t_arr[0]
+        if t0 is None:
+            return
+
+        # Plot raw speeds
+        if ra_raw_t is not None and len(ra_raw_t) > 0:
+            self._ra_raw_curve.setData(ra_raw_t - t0, ra_raw_v)
+        if dec_raw_t is not None and len(dec_raw_t) > 0:
+            self._dec_raw_curve.setData(dec_raw_t - t0, dec_raw_v)
+
+        # Plot averaged speeds
+        if ra_avg_t is not None and len(ra_avg_t) > 0:
+            self._ra_avg_curve.setData(ra_avg_t - t0, ra_avg_v)
+        if dec_avg_t is not None and len(dec_avg_t) > 0:
+            self._dec_avg_curve.setData(dec_avg_t - t0, dec_avg_v)
+
+        # Compute linear regression on RA average speed
+        reg_parts = []
+        if ra_avg_t is not None and len(ra_avg_v) > 10:
+            t_rel = ra_avg_t - t0
+            try:
+                coeffs = np.polyfit(t_rel, ra_avg_v, 1)
+                fit_y = np.polyval(coeffs, t_rel)
+                self._ra_reg_curve.setData(t_rel, fit_y)
+                slope_per_min = coeffs[0] * 60.0
+                reg_parts.append(f"RA: {slope_per_min:+.4f}\"/s/min")
+            except Exception:
+                pass
+        else:
+            self._ra_reg_curve.setData([], [])
+
+        if dec_avg_t is not None and len(dec_avg_v) > 10:
+            t_rel = dec_avg_t - t0
+            try:
+                coeffs = np.polyfit(t_rel, dec_avg_v, 1)
+                fit_y = np.polyval(coeffs, t_rel)
+                self._dec_reg_curve.setData(t_rel, fit_y)
+                slope_per_min = coeffs[0] * 60.0
+                reg_parts.append(f"DEC: {slope_per_min:+.4f}\"/s/min")
+            except Exception:
+                pass
+        else:
+            self._dec_reg_curve.setData([], [])
+
+        self._reg_label.setText("  ".join(reg_parts))
+
+    def export_to_image(self, directory: str):
+        """Export axial graph as PNG."""
+        dir_path = Path(directory)
+        dir_path.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        filename = dir_path / f"Axial_{timestamp}.png"
+        try:
+            exporter = pg.exporters.ImageExporter(self._plot.plotItem)
+            exporter.parameters()['width'] = 1600
+            exporter.export(str(filename))
+            logger.info(f"Axial graph exported: {filename}")
+        except Exception as e:
+            logger.warning(f"Failed to export axial graph: {e}")
+
+    def reset(self):
+        """Clear all curves."""
+        for curve in [self._ra_raw_curve, self._dec_raw_curve,
+                      self._ra_avg_curve, self._dec_avg_curve,
+                      self._ra_reg_curve, self._dec_reg_curve]:
+            curve.setData([], [])

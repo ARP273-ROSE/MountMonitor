@@ -53,6 +53,8 @@ class MountPoller(QThread):
 
         self._last_status = MountStatus.UNKNOWN
         self._last_mount_time: Optional[str] = None
+        self._last_mount_time_parsed: Optional[float] = None
+        self._last_pc_time_for_loop: Optional[float] = None
         self._delay_after_slew = 0.0
         self._slew_delay_active = False
         self._slew_delay_start = 0.0
@@ -147,10 +149,29 @@ class MountPoller(QThread):
 
         logger.info("Poller stopped")
 
+    @staticmethod
+    def _parse_mount_time_to_seconds(time_str: str) -> Optional[float]:
+        """Parse HH:MM:SS or HH:MM:SS.dd to seconds since midnight."""
+        try:
+            parts = time_str.strip().split(':')
+            if len(parts) < 3:
+                return None
+            h = int(parts[0])
+            m = int(parts[1])
+            s = float(parts[2])
+            return h * 3600.0 + m * 60.0 + s
+        except (ValueError, IndexError):
+            return None
+
     def _poll_sequence(self) -> Optional[MountSample]:
-        """Execute one full polling sequence."""
+        """Execute one full polling sequence.
+
+        Sequence: status → time → RA → DEC (+ optional axial).
+        Computes PC-mount time difference and loop times.
+        """
         now = datetime.now()
         pc_time = time.time()
+        pc_seconds = now.hour * 3600.0 + now.minute * 60.0 + now.second + now.microsecond / 1e6
 
         # Get status
         status = self._connection.get_status()
@@ -165,14 +186,42 @@ class MountPoller(QThread):
         # Get mount time
         mount_time_str = self._connection.get_mount_time()
 
-        # Compute time difference
-        if mount_time_str and self._last_mount_time:
-            time_sample = TimeSample(
-                timestamp=now,
-                mount_time_str=mount_time_str or "",
-            )
-            self.time_sample_ready.emit(time_sample)
+        # Compute time differences
+        if mount_time_str:
+            mount_seconds = self._parse_mount_time_to_seconds(mount_time_str)
+            if mount_seconds is not None:
+                # PC - Mount difference in milliseconds
+                diff_ms = (pc_seconds - mount_seconds) * 1000.0
+                # Handle day wrap-around
+                if diff_ms > 43200000:
+                    diff_ms -= 86400000
+                elif diff_ms < -43200000:
+                    diff_ms += 86400000
 
+                # Compute loop times
+                pc_loop_ms = 0.0
+                mount_loop_ms = 0.0
+                if self._last_pc_time_for_loop is not None:
+                    pc_loop_ms = (pc_time - self._last_pc_time_for_loop) * 1000.0
+
+                if self._last_mount_time_parsed is not None:
+                    mount_dt = mount_seconds - self._last_mount_time_parsed
+                    if mount_dt < -43200:
+                        mount_dt += 86400
+                    mount_loop_ms = mount_dt * 1000.0
+
+                time_sample = TimeSample(
+                    timestamp=now,
+                    mount_time_str=mount_time_str,
+                    pc_mount_diff_ms=diff_ms,
+                    pc_loop_time_ms=pc_loop_ms,
+                    mount_loop_time_ms=mount_loop_ms,
+                )
+                self.time_sample_ready.emit(time_sample)
+
+                self._last_mount_time_parsed = mount_seconds
+
+        self._last_pc_time_for_loop = pc_time
         self._last_mount_time = mount_time_str
 
         # Get RA

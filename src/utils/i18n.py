@@ -76,6 +76,67 @@ TX = {
     "pref_ntp_server": {"en": "NTP server address", "fr": "Adresse du serveur NTP"},
     "pref_seismometer": {"en": "Seismometer", "fr": "Sismomètre"},
     "pref_mount_checks": {"en": "Mount checks", "fr": "Vérifications monture"},
+    "pref_connection": {"en": "Connection / Connexion", "fr": "Connection / Connexion"},
+    "pref_layout": {"en": "Layout / Mise en page", "fr": "Layout / Mise en page"},
+    "pref_graph_ratio": {
+        "en": "Graph:Textbox ratio / Ratio graphe:texte",
+        "fr": "Graph:Textbox ratio / Ratio graphe:texte",
+    },
+    "pref_polling_group": {"en": "Polling / Acquisition", "fr": "Polling / Acquisition"},
+    "pref_correct_graphs": {
+        "en": "Correct graphs for range / Corriger graphes pour la plage",
+        "fr": "Correct graphs for range / Corriger graphes pour la plage",
+    },
+    "pref_log_mode_label": {"en": "Mode", "fr": "Mode"},
+    "pref_delay_slew": {
+        "en": "Delay after slew / Délai après pointage",
+        "fr": "Delay after slew / Délai après pointage",
+    },
+    "pref_axial_mode": {
+        "en": "Axial mode / Mode axial",
+        "fr": "Axial mode / Mode axial",
+    },
+    "pref_ntp_group": {
+        "en": "NTP Time Server / Serveur NTP",
+        "fr": "NTP Time Server / Serveur NTP",
+    },
+    "pref_ntp_interval": {
+        "en": "Interval / Intervalle",
+        "fr": "Interval / Intervalle",
+    },
+    "pref_sei_offset": {"en": "Offset / Décalage", "fr": "Offset / Décalage"},
+    "pref_show_ra_ha": {
+        "en": "Show RA as HA [s] / AD en HA [s]",
+        "fr": "Show RA as HA [s] / AD en HA [s]",
+    },
+    "pref_ascom_driver": {
+        "en": "ASCOM Driver / Pilote ASCOM",
+        "fr": "ASCOM Driver / Pilote ASCOM",
+    },
+    "pref_reset_mode": {
+        "en": "Reset mode / Mode réinitialisation",
+        "fr": "Reset mode / Mode réinitialisation",
+    },
+    "pref_dump_graphs": {
+        "en": "Dump graphs / Export graphes",
+        "fr": "Dump graphs / Export graphes",
+    },
+    "pref_close_files": {
+        "en": "Close files / Fermer fichiers",
+        "fr": "Close files / Fermer fichiers",
+    },
+    "pref_tolerance_seismic": {
+        "en": "Seismic tolerance (%) / Tolérance sismique (%)",
+        "fr": "Seismic tolerance (%) / Tolérance sismique (%)",
+    },
+    "pref_history_lines": {
+        "en": "History lines / Lignes d'historique",
+        "fr": "History lines / Lignes d'historique",
+    },
+    "pref_expected_value": {
+        "en": "Expected value / Valeur attendue",
+        "fr": "Expected value / Valeur attendue",
+    },
 
     # Logging
     "logging_started": {"en": "Logging started", "fr": "Journalisation démarrée"},
