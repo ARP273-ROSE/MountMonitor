@@ -266,6 +266,29 @@ class LX200Connection(MountConnection):
                 pass
         return None
 
+    def get_refraction_mode(self) -> Optional[str]:
+        """Get refraction correction mode via :GREF# (10Micron).
+
+        Returns: 0 = not_updating, 1 = not_updating_tracking, 2 = continuously_updating.
+        """
+        result = self._send_command(':GREF#')
+        if result is None:
+            return None
+        val = result.strip()
+        mode_map = {
+            '0': 'not_updating',
+            '1': 'not_updating_tracking',
+            '2': 'continuously_updating',
+        }
+        return mode_map.get(val)
+
+    def is_dual_tracking_enabled(self) -> Optional[bool]:
+        """Check dual tracking via :Gdat# (10Micron). Returns True if enabled."""
+        result = self._send_command(':Gdat#')
+        if result is None:
+            return None
+        return result.strip() == '1'
+
     def is_gps_synced(self) -> Optional[bool]:
         """Check if GPS clock is synchronized via :gps# (10Micron)."""
         result = self._send_command(':gps#')

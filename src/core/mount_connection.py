@@ -104,6 +104,21 @@ class MountConnection(ABC):
         """Check if refraction correction is enabled."""
         return None
 
+    def get_refraction_mode(self) -> Optional[str]:
+        """Get refraction correction mode (10Micron specific).
+
+        Returns one of:
+        - "not_updating": Not updating
+        - "not_updating_tracking": Not updating while tracking
+        - "continuously_updating": Continuously updating
+        - None: Unknown or not supported
+        """
+        return None
+
+    def is_dual_tracking_enabled(self) -> Optional[bool]:
+        """Check if dual axis tracking is enabled."""
+        return None
+
     def get_tracking_rate(self) -> Optional[str]:
         """Get current tracking rate (sidereal, lunar, etc.)."""
         return None

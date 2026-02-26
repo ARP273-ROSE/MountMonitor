@@ -155,18 +155,17 @@ class DataProcessor:
         # Check tolerances
         self._check_tolerances(sample)
 
-        # Update PC timing
-        if self._last_pc_time is not None:
-            pc_loop_ms = (now - self._last_pc_time) * 1000.0
-            self.pc_loop_buffer.append(now, pc_loop_ms)
-        self._last_pc_time = now
-
         return sample
 
     def process_time_sample(self, sample: TimeSample):
-        """Process a time comparison sample."""
+        """Process a time comparison sample.
+
+        Stores PC-mount diff, PC loop time, mount loop time, and NTP diff.
+        """
         now = sample.timestamp.timestamp()
         self.time_diff_buffer.append(now, sample.pc_mount_diff_ms)
+        if sample.pc_loop_time_ms > 0:
+            self.pc_loop_buffer.append(now, sample.pc_loop_time_ms)
         if sample.mount_loop_time_ms > 0:
             self.mount_loop_buffer.append(now, sample.mount_loop_time_ms)
         if sample.pc_ntp_diff_ms is not None:
