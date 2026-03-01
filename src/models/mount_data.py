@@ -26,8 +26,8 @@ class PierSide(Enum):
 class ConnectionProtocol(Enum):
     """Communication protocol."""
     LX200 = "lx200"
+    LX200_SERIAL = "lx200_serial"
     ASCOM = "ascom"
-    ALPACA = "alpaca"
     SIMULATION = "simulation"
 
 
@@ -89,6 +89,22 @@ class SessionInfo:
     azimuth: float = 0.0
     altitude: float = 0.0
     start_time: Optional[datetime] = None
+
+
+@dataclass
+class EnvironmentSample:
+    """Environmental and diagnostic data from the mount (polled at low frequency)."""
+    timestamp: datetime = field(default_factory=datetime.now)
+    temperature_ext: Optional[float] = None      # External temperature (°C) from :GRTMP#
+    pressure: Optional[float] = None              # Barometric pressure (mbar) from :GRPRS#
+    temperature_int: Optional[float] = None       # Internal mount temperature (°C) from :GTMP1#
+    mount_status_code: Optional[int] = None       # Extended status code from :Gstat#
+    tracking_rate: Optional[float] = None         # Tracking rate multiplier from :GT#
+    meridian_flip_minutes: Optional[float] = None  # Minutes until meridian flip from :Gmte#
+    pier_side: PierSide = PierSide.UNKNOWN
+    alignment_stars: Optional[int] = None         # Number of alignment stars from :getain#
+    alignment_rms: Optional[float] = None         # Model RMS error (arcsec) from :getain#
+    polar_error_deg: Optional[float] = None       # Polar alignment error (deg) from :getain#
 
 
 @dataclass

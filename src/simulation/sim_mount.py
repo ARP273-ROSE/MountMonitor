@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Optional
 
 from ..core.mount_connection import MountConnection
-from ..models.mount_data import MountStatus, PierSide, ConnectionProtocol
+from ..models.mount_data import MountStatus, PierSide, ConnectionProtocol, EnvironmentSample
 from ..utils.coordinates import format_ra, format_dec
 
 
@@ -168,3 +168,26 @@ class SimulatedMount(MountConnection):
     def set_noise(self, sigma: float):
         """For testing: change noise level."""
         self._noise_sigma = sigma
+
+    def get_environment(self) -> EnvironmentSample:
+        """Return simulated environment data."""
+        elapsed = time.time() - self._start_time
+        # Simulate cooling night: starts at 5°C, drops ~2°C/hour
+        temp_ext = 5.0 - (elapsed / 3600.0) * 2.0 + random.gauss(0, 0.1)
+        # Internal temp starts higher, slowly cools
+        temp_int = 15.0 - (elapsed / 3600.0) * 0.5 + random.gauss(0, 0.05)
+        # Pressure slowly changes
+        pressure = 1013.0 - (elapsed / 3600.0) * 0.3 + random.gauss(0, 0.1)
+
+        return EnvironmentSample(
+            temperature_ext=temp_ext,
+            pressure=pressure,
+            temperature_int=temp_int,
+            mount_status_code=0 if self._status == MountStatus.TRACKING else 1,
+            tracking_rate=60.1 + random.gauss(0, 0.01),
+            meridian_flip_minutes=max(0, 180.0 - elapsed / 60.0),
+            pier_side=self._pier_side,
+            alignment_stars=22,
+            alignment_rms=12.9 + random.gauss(0, 0.1),
+            polar_error_deg=0.1848 + random.gauss(0, 0.001),
+        )

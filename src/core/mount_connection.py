@@ -2,14 +2,14 @@
 
 from abc import ABC, abstractmethod
 from typing import Optional
-from ..models.mount_data import MountStatus, PierSide, ConnectionProtocol
+from ..models.mount_data import MountStatus, PierSide, ConnectionProtocol, EnvironmentSample
 
 
 class MountConnection(ABC):
     """Abstract base class for telescope mount connections.
 
     All mount communication goes through this interface, regardless
-    of protocol (LX200, ASCOM, Alpaca, simulation).
+    of protocol (LX200 TCP/IP, LX200 Serial, ASCOM, simulation).
     """
 
     def __init__(self):
@@ -146,3 +146,11 @@ class MountConnection(ABC):
     def send_raw_command(self, command: str) -> Optional[str]:
         """Send a raw command and get the response. For advanced/10Micron commands."""
         return None
+
+    def get_environment(self) -> EnvironmentSample:
+        """Get environmental and diagnostic data from the mount.
+
+        Returns an EnvironmentSample with all available data filled in.
+        Default implementation returns an empty sample.
+        """
+        return EnvironmentSample()

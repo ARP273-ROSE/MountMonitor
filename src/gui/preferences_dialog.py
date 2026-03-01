@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QTabWidget, QWidget,
     QFormLayout, QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox,
     QCheckBox, QPushButton, QGroupBox, QLabel, QGridLayout,
-    QDialogButtonBox
+    QDialogButtonBox, QScrollArea
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
@@ -16,6 +16,31 @@ from PyQt6.QtGui import QFont
 from ..config.settings import Settings
 from ..utils.i18n import T
 from ..core.seismometer import Seismometer
+
+import logging
+import sys
+
+logger = logging.getLogger(__name__)
+
+
+def _ascom_choose(current_driver: str = "") -> str:
+    """Open the ASCOM Chooser dialog and return the selected driver ProgID.
+
+    Returns empty string if user cancels or ASCOM is not available.
+    """
+    if sys.platform != "win32":
+        return ""
+    try:
+        import comtypes
+        import comtypes.client
+        comtypes.CoInitialize()
+        chooser = comtypes.client.CreateObject("ASCOM.Utilities.Chooser")
+        chooser.DeviceType = "Telescope"
+        result = chooser.Choose(current_driver)
+        return str(result) if result else ""
+    except Exception as e:
+        logger.warning(f"ASCOM Chooser failed: {e}")
+        return ""
 
 
 class PreferencesDialog(QDialog):
@@ -25,17 +50,17 @@ class PreferencesDialog(QDialog):
         super().__init__(parent)
         self._settings = settings
         self.setWindowTitle(T("menu_preferences"))
-        self.setMinimumSize(550, 500)
-        self.resize(600, 550)
+        self.setMinimumSize(600, 550)
+        self.resize(680, 620)
 
         layout = QVBoxLayout(self)
 
         # Tab widget
         tabs = QTabWidget()
-        tabs.addTab(self._create_general_tab(), T("pref_general"))
-        tabs.addTab(self._create_processing_tab(), T("pref_processing"))
-        tabs.addTab(self._create_auxiliary_tab(), T("pref_auxiliary"))
-        tabs.addTab(self._create_misc_tab(), T("pref_misc"))
+        tabs.addTab(self._scrollable(self._create_general_tab()), T("pref_general"))
+        tabs.addTab(self._scrollable(self._create_processing_tab()), T("pref_processing"))
+        tabs.addTab(self._scrollable(self._create_auxiliary_tab()), T("pref_auxiliary"))
+        tabs.addTab(self._scrollable(self._create_misc_tab()), T("pref_misc"))
         layout.addWidget(tabs)
 
         # OK / Cancel buttons
@@ -45,6 +70,15 @@ class PreferencesDialog(QDialog):
         buttons.accepted.connect(self._save_and_accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
+    @staticmethod
+    def _scrollable(widget: QWidget) -> QScrollArea:
+        """Wrap a tab widget in a scroll area to prevent overlap."""
+        scroll = QScrollArea()
+        scroll.setWidget(widget)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        return scroll
 
     def _create_general_tab(self) -> QWidget:
         """General tab: observatory, mount connection, layout."""
@@ -69,8 +103,8 @@ class PreferencesDialog(QDialog):
         conn_form = QFormLayout(conn_group)
 
         self._protocol = QComboBox()
-        self._protocol.addItems(["LX200 (TCP/IP)", "ASCOM", "Alpaca", "Simulation"])
-        protocol_map = {"lx200": 0, "ascom": 1, "alpaca": 2, "simulation": 3}
+        self._protocol.addItems(["LX200 (TCP/IP)", "LX200 (Serial)", "ASCOM", "Simulation"])
+        protocol_map = {"lx200": 0, "lx200_serial": 1, "ascom": 2, "simulation": 3}
         self._protocol.setCurrentIndex(protocol_map.get(self._settings.get("mount_protocol"), 0))
         self._protocol.setToolTip("EN: Communication protocol\nFR: Protocole de communication")
         self._protocol.currentIndexChanged.connect(self._on_protocol_changed)
@@ -86,9 +120,30 @@ class PreferencesDialog(QDialog):
         self._mount_port.setToolTip("EN: Mount TCP port\nFR: Port TCP de la monture")
         conn_form.addRow(T("pref_mount_port"), self._mount_port)
 
+        # Serial port selector (auto-detected)
+        self._serial_port = QComboBox()
+        self._serial_port.setEditable(True)
+        self._refresh_serial_ports()
+        current_serial = self._settings.get("serial_port")
+        if current_serial:
+            self._serial_port.setCurrentText(current_serial)
+        self._serial_port.setToolTip("EN: Serial port for mount\nFR: Port série de la monture")
+        conn_form.addRow("Serial port / Port série", self._serial_port)
+
+        ascom_row = QHBoxLayout()
         self._ascom_driver = QLineEdit(self._settings.get("ascom_driver"))
         self._ascom_driver.setToolTip("EN: ASCOM driver ID\nFR: Identifiant du driver ASCOM")
-        conn_form.addRow(T("pref_ascom_driver"), self._ascom_driver)
+        self._ascom_driver.setReadOnly(True)
+        ascom_row.addWidget(self._ascom_driver)
+
+        self._ascom_choose_btn = QPushButton("Select... / Sélectionner...")
+        self._ascom_choose_btn.setToolTip(
+            "EN: Open ASCOM Chooser to select mount driver\n"
+            "FR: Ouvrir le sélecteur ASCOM pour choisir le driver"
+        )
+        self._ascom_choose_btn.clicked.connect(self._on_ascom_choose)
+        ascom_row.addWidget(self._ascom_choose_btn)
+        conn_form.addRow(T("pref_ascom_driver"), ascom_row)
 
         layout.addWidget(conn_group)
 
@@ -453,11 +508,31 @@ class PreferencesDialog(QDialog):
 
     def _on_protocol_changed(self, index: int):
         """Enable/disable fields based on protocol."""
-        is_tcp = (index == 0)
-        is_ascom = (index == 1)
+        is_tcp = (index == 0)        # LX200 TCP/IP
+        is_serial = (index == 1)     # LX200 Serial
+        is_ascom = (index == 2)      # ASCOM
         self._mount_ip.setEnabled(is_tcp)
         self._mount_port.setEnabled(is_tcp)
+        self._serial_port.setEnabled(is_serial)
         self._ascom_driver.setEnabled(is_ascom)
+        self._ascom_choose_btn.setEnabled(is_ascom)
+
+    def _on_ascom_choose(self):
+        """Open the ASCOM Chooser dialog."""
+        current = self._ascom_driver.text()
+        result = _ascom_choose(current)
+        if result:
+            self._ascom_driver.setText(result)
+
+    def _refresh_serial_ports(self):
+        """Populate serial port dropdown with detected ports."""
+        try:
+            import serial.tools.list_ports
+            ports = [p.device for p in serial.tools.list_ports.comports()]
+        except Exception:
+            ports = []
+        self._serial_port.clear()
+        self._serial_port.addItems(ports)
 
     def _save_and_accept(self):
         """Save settings and close dialog."""
@@ -466,10 +541,11 @@ class PreferencesDialog(QDialog):
         # General
         s.set("observatory_name", self._observatory_name.text())
         s.set("mount_name", self._mount_name.text())
-        protocol_map = {0: "lx200", 1: "ascom", 2: "alpaca", 3: "simulation"}
+        protocol_map = {0: "lx200", 1: "lx200_serial", 2: "ascom", 3: "simulation"}
         s.set("mount_protocol", protocol_map.get(self._protocol.currentIndex(), "lx200"))
         s.set("mount_ip", self._mount_ip.text())
         s.set("mount_port", self._mount_port.value())
+        s.set("serial_port", self._serial_port.currentText())
         s.set("ascom_driver", self._ascom_driver.text())
         s.set("graph_textbox_ratio", self._graph_ratio.value())
         lang_map = {0: "auto", 1: "en", 2: "fr"}

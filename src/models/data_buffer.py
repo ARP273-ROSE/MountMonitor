@@ -73,29 +73,50 @@ class DataBuffer:
     def compute_running_stdev(self, window_seconds: float):
         """Compute running standard deviation over a time window.
 
+        Uses an O(n) sliding window approach instead of O(n²) per-sample masking.
         This should be called periodically from the processing thread.
         """
         with self._lock:
-            if len(self._values) < 2:
+            n = len(self._values)
+            if n < 2:
                 self._running_stdevs.clear()
                 return
 
             timestamps = np.array(self._timestamps)
             values = np.array(self._values)
-            stdevs = []
+            stdevs = np.zeros(n)
 
-            for i in range(len(values)):
-                t = timestamps[i]
-                # Find samples within the window
-                mask = (timestamps >= t - window_seconds) & (timestamps <= t)
-                window_data = values[mask]
-                if len(window_data) > 1:
-                    sd = float(np.std(window_data, ddof=1))
-                    stdevs.append(sd)
+            # Sliding window with two pointers
+            left = 0
+            win_sum = 0.0
+            win_sum2 = 0.0
+            win_count = 0
+
+            for right in range(n):
+                # Expand window: add current sample
+                v = values[right]
+                win_sum += v
+                win_sum2 += v * v
+                win_count += 1
+
+                # Shrink window: remove samples outside the time window
+                while left < right and timestamps[left] < timestamps[right] - window_seconds:
+                    vl = values[left]
+                    win_sum -= vl
+                    win_sum2 -= vl * vl
+                    win_count -= 1
+                    left += 1
+
+                if win_count > 1:
+                    # Welford-style variance from running sums
+                    mean = win_sum / win_count
+                    variance = (win_sum2 / win_count) - (mean * mean)
+                    # Bessel correction: multiply by n/(n-1)
+                    variance = variance * win_count / (win_count - 1)
+                    sd = float(np.sqrt(max(0.0, variance)))
+                    stdevs[right] = sd
                     if sd > self._max_stdev:
                         self._max_stdev = sd
-                else:
-                    stdevs.append(0.0)
 
             self._running_stdevs = deque(stdevs, maxlen=self._max_size)
 

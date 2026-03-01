@@ -14,19 +14,21 @@ import numpy as np
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
     QMenuBar, QMenu, QToolBar, QPushButton, QLabel, QMessageBox,
-    QApplication, QStatusBar
+    QApplication, QStatusBar, QFileDialog
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSlot
 from PyQt6.QtGui import QAction, QFont, QIcon, QKeySequence
 
 from .graph_widgets import TrackingGraph, TimeGraph, SeismicGraph, AxialGraph
 from .fft_window import FFTWindow
+from .analysis_dialog import AnalysisDialog
 from .status_panel import StatusPanel
 from .preferences_dialog import PreferencesDialog
 from .theme import Colors
 from ..config.settings import Settings
 from ..core.mount_connection import MountConnection
 from ..core.lx200_protocol import LX200Connection
+from ..core.lx200_serial import LX200SerialConnection
 from ..core.ascom_connection import ASCOMConnection
 from ..core.data_processor import DataProcessor
 from ..core.poller import MountPoller
@@ -35,6 +37,7 @@ from ..core.seismometer import Seismometer
 from ..simulation.sim_mount import SimulatedMount
 from ..simulation.sim_seismometer import SimulatedSeismometer
 from ..logging_module.file_logger import FileLogger
+from ..logging_module.log_parser import parse_session, list_log_sessions
 from ..logging_module.crash_reporter import CrashReporter
 from ..models.mount_data import MountSample, MountStatus, SessionInfo, ConnectionProtocol
 from ..utils.i18n import T, set_language, get_language
@@ -136,6 +139,17 @@ class MainWindow(QMainWindow):
         disconnect_action.setEnabled(False)
         file_menu.addAction(disconnect_action)
         self._disconnect_action = disconnect_action
+
+        file_menu.addSeparator()
+
+        open_log_action = QAction(T("menu_open_log"), self)
+        open_log_action.setShortcut(QKeySequence("Ctrl+O"))
+        open_log_action.setToolTip(
+            "EN: Open and analyze a previous log file\n"
+            "FR: Ouvrir et analyser un fichier log précédent"
+        )
+        open_log_action.triggered.connect(self._open_log_file)
+        file_menu.addAction(open_log_action)
 
         file_menu.addSeparator()
 
@@ -318,6 +332,9 @@ class MainWindow(QMainWindow):
                     ip = self._settings.get("mount_ip")
                     port = self._settings.get("mount_port")
                     title += f"{freq:.1f}Hz on TCP/IP {ip}:{port}"
+                elif protocol == "lx200_serial":
+                    serial_port = self._settings.get("serial_port")
+                    title += f"{freq:.1f}Hz on {serial_port}"
                 elif protocol == "ascom":
                     driver = self._settings.get("ascom_driver") or "ASCOM"
                     title += f"{freq:.1f}Hz via {driver}"
@@ -350,14 +367,29 @@ class MainWindow(QMainWindow):
                 host=self._settings.get("mount_ip"),
                 port=self._settings.get("mount_port"),
             )
-        elif protocol == "ascom":
-            driver_id = self._settings.get("ascom_driver")
-            if not driver_id:
+        elif protocol == "lx200_serial":
+            serial_port = self._settings.get("serial_port")
+            if not serial_port:
                 self._status_panel.add_message(
-                    "EN: No ASCOM driver configured / FR: Aucun driver ASCOM configuré",
+                    "EN: No serial port configured / FR: Aucun port série configuré",
                     Colors.STATUS_ERROR,
                 )
                 return
+            self._connection = LX200SerialConnection(port=serial_port)
+        elif protocol == "ascom":
+            driver_id = self._settings.get("ascom_driver")
+            if not driver_id:
+                # Auto-open ASCOM Chooser if no driver configured
+                from .preferences_dialog import _ascom_choose
+                driver_id = _ascom_choose("")
+                if not driver_id:
+                    self._status_panel.add_message(
+                        "EN: No ASCOM driver selected / FR: Aucun driver ASCOM sélectionné",
+                        Colors.STATUS_ERROR,
+                    )
+                    return
+                self._settings.set("ascom_driver", driver_id)
+                self._settings.save()
             self._connection = ASCOMConnection(driver_id=driver_id)
         else:
             self._status_panel.add_message(
@@ -411,6 +443,7 @@ class MainWindow(QMainWindow):
         self._poller.connection_restored.connect(self._on_connection_restored)
         self._poller.log_message.connect(self._on_log_message)
         self._poller.mount_info_ready.connect(self._on_mount_info)
+        self._poller.environment_ready.connect(self._on_environment)
 
         self._poller.start()
         self._refresh_timer.start()
@@ -547,6 +580,9 @@ class MainWindow(QMainWindow):
             if self._settings.get("close_files_mode") in ("slewing", "parking"):
                 self._stop_logging()
 
+            # Auto-analysis on park: analyze the night session
+            self._auto_analyze_on_park()
+
         # After slew ends and tracking resumes → run checks + get target coords
         if was_slewing and now_tracking:
             QTimer.singleShot(1000, self._run_mount_checks)
@@ -620,6 +656,42 @@ class MainWindow(QMainWindow):
 
         # Run mount checks
         self._run_mount_checks()
+
+    def _on_environment(self, sample):
+        """Handle environment/diagnostics data from the poller."""
+        # Log to file
+        if self._logging_active:
+            self._file_logger.log_environment(sample)
+
+        # Log significant changes to status panel
+        parts = []
+        if sample.temperature_ext is not None:
+            parts.append(f"Temp: {sample.temperature_ext:.1f}\u00b0C")
+        if sample.pressure is not None:
+            parts.append(f"Press: {sample.pressure:.0f}mbar")
+        if sample.temperature_int is not None:
+            parts.append(f"Int: {sample.temperature_int:.1f}\u00b0C")
+        if sample.meridian_flip_minutes is not None:
+            parts.append(f"Flip: {sample.meridian_flip_minutes:.0f}min")
+        if parts:
+            self._status_panel.add_message("  ".join(parts))
+
+        # Log alignment data (less frequently visible)
+        if sample.alignment_stars is not None and sample.alignment_rms is not None:
+            logger.debug(
+                f"Alignment: {sample.alignment_stars} stars, "
+                f"RMS {sample.alignment_rms:.1f}\", "
+                f"polar error {sample.polar_error_deg:.4f}\u00b0"
+            )
+
+        # Log to event file
+        if self._logging_active:
+            if sample.temperature_ext is not None:
+                self._file_logger.log_event(
+                    f"ENV\tTemp={sample.temperature_ext:.1f}°C "
+                    f"Press={sample.pressure:.1f}mbar "
+                    f"IntTemp={sample.temperature_int:.1f if sample.temperature_int is not None else '?'}°C"
+                )
 
     def _on_seismic_data(self, timestamp: float, values: list[float]):
         """Handle seismometer data callback."""
@@ -728,8 +800,9 @@ class MainWindow(QMainWindow):
         self._fft_timer.start()
 
     def _update_fft(self):
-        """Update FFT window with current data."""
-        if not self._fft_window or not self._fft_window.isVisible():
+        """Update FFT window with current data. Also logs FFT to file."""
+        fft_visible = self._fft_window and self._fft_window.isVisible()
+        if not fft_visible and not self._logging_active:
             return
 
         freq = max(1.0, self._processor.actual_frequency)
@@ -753,13 +826,23 @@ class MainWindow(QMainWindow):
         if len(sei_data) > 64:
             sei_freqs, sei_mags = self._processor.compute_fft(sei_data, sei_rate)
 
-        self._fft_window.update_fft(
-            ra_freqs=ra_freqs, ra_mags=ra_mags,
-            dec_freqs=dec_freqs, dec_mags=dec_mags,
-            sei_freqs=sei_freqs, sei_mags=sei_mags,
-            ra_sample_rate=freq, dec_sample_rate=freq,
-            sei_sample_rate=sei_rate if len(sei_data) > 0 else None,
-        )
+        if fft_visible:
+            self._fft_window.update_fft(
+                ra_freqs=ra_freqs, ra_mags=ra_mags,
+                dec_freqs=dec_freqs, dec_mags=dec_mags,
+                sei_freqs=sei_freqs, sei_mags=sei_mags,
+                ra_sample_rate=freq, dec_sample_rate=freq,
+                sei_sample_rate=sei_rate if len(sei_data) > 0 else None,
+            )
+
+        # Log FFT data to .fft file
+        if self._logging_active:
+            if ra_freqs is not None and len(ra_freqs) > 0:
+                self._file_logger.log_fft_snapshot("RA", freq, ra_freqs, ra_mags)
+            if dec_freqs is not None and len(dec_freqs) > 0:
+                self._file_logger.log_fft_snapshot("DEC", freq, dec_freqs, dec_mags)
+            if sei_freqs is not None and len(sei_freqs) > 0:
+                self._file_logger.log_fft_snapshot("SEI", sei_rate, sei_freqs, sei_mags)
 
     # ── Logging ──────────────────────────────────────────────────
 
@@ -784,6 +867,9 @@ class MainWindow(QMainWindow):
         self._file_logger.start_session(session)
         self._logging_active = True
         self._btn_logging.setText("Stop Log / Arrêter log")
+        # Start FFT timer for logging even if FFT window is not open
+        if not self._fft_timer.isActive():
+            self._fft_timer.start()
         self._status_panel.add_message(T("logging_started"), Colors.STATUS_OK)
 
     def _stop_logging(self):
@@ -808,6 +894,205 @@ class MainWindow(QMainWindow):
             )
             self._file_logger.new_files(session)
             self._status_panel.add_message(T("new_log_files"))
+
+    # ── Log replay & analysis ───────────────────────────────────
+
+    def _open_log_file(self):
+        """Open a previous log file for replay and analysis."""
+        log_dir = str(self._file_logger.log_dir)
+
+        lang = get_language()
+        if lang == 'fr':
+            title = "Ouvrir un fichier log"
+            filter_str = "Fichiers données (*.dat);;Tous les fichiers (*)"
+        else:
+            title = "Open Log File"
+            filter_str = "Data files (*.dat);;All files (*)"
+
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, title, log_dir, filter_str
+        )
+        if not file_path:
+            return
+
+        self._status_panel.add_message(
+            f"Loading / Chargement : {Path(file_path).name}..."
+        )
+        QApplication.processEvents()
+
+        # Parse the session
+        session = parse_session(Path(file_path))
+
+        if session.sample_count == 0:
+            self._status_panel.add_message(
+                T("replay_no_data"), Colors.STATUS_ERROR
+            )
+            return
+
+        # Show info
+        msg = T("replay_loaded").format(
+            samples=f"{session.sample_count:,}",
+            duration=session.duration_str,
+        )
+        self._status_panel.add_message(msg, Colors.STATUS_OK)
+        self._status_panel.add_message(
+            f"  {T('replay_mode')}", Colors.STATUS_WARNING
+        )
+
+        # Load data into graphs
+        self._replay_session(session)
+
+        # Show FFT from replayed data
+        self._replay_fft(session)
+
+        # Open analysis dialog
+        QApplication.processEvents()
+        dialog = AnalysisDialog(session, self)
+        dialog.exec()
+
+        self._status_panel.add_message(
+            T("analysis_complete"), Colors.STATUS_OK
+        )
+
+    def _replay_session(self, session):
+        """Load parsed session data into the graph widgets."""
+        # RA graph
+        if len(session.ra_deviations) > 0:
+            self._ra_graph.update_data(
+                session.timestamps, session.ra_deviations,
+                stdev_values=session.ra_stdevs if len(session.ra_stdevs) == len(session.timestamps) else None,
+                min_val=float(np.min(session.ra_deviations)),
+                max_val=float(np.max(session.ra_deviations)),
+                max_stdev=float(np.max(session.ra_stdevs)) if len(session.ra_stdevs) > 0 and np.any(session.ra_stdevs > 0) else None,
+            )
+
+        # DEC graph
+        if len(session.dec_deviations) > 0:
+            self._dec_graph.update_data(
+                session.timestamps, session.dec_deviations,
+                stdev_values=session.dec_stdevs if len(session.dec_stdevs) == len(session.timestamps) else None,
+                min_val=float(np.min(session.dec_deviations)),
+                max_val=float(np.max(session.dec_deviations)),
+                max_stdev=float(np.max(session.dec_stdevs)) if len(session.dec_stdevs) > 0 and np.any(session.dec_stdevs > 0) else None,
+            )
+
+        # Time graph
+        if len(session.time_timestamps) > 0:
+            self._time_graph.update_data(
+                session.time_timestamps, session.time_pc_mount_diff,
+                pc_loop_t=session.time_timestamps if len(session.time_pc_loop) > 0 else None,
+                pc_loop_v=session.time_pc_loop if len(session.time_pc_loop) > 0 else None,
+                mount_loop_t=session.time_timestamps if len(session.time_mount_loop) > 0 else None,
+                mount_loop_v=session.time_mount_loop if len(session.time_mount_loop) > 0 else None,
+                ntp_t=session.time_timestamps if len(session.time_ntp_diff) > 0 and np.any(session.time_ntp_diff != 0) else None,
+                ntp_v=session.time_ntp_diff if len(session.time_ntp_diff) > 0 and np.any(session.time_ntp_diff != 0) else None,
+            )
+
+        # Axial graph
+        if len(session.ra_axis) > 2 and np.any(session.ra_axis != 0):
+            # Compute speeds from axis positions
+            t = session.timestamps[:len(session.ra_axis)]
+            dt = np.diff(t)
+            dt[dt == 0] = 1e-6
+            ra_speed = np.diff(session.ra_axis) / dt
+            dec_speed = np.diff(session.dec_axis) / dt if len(session.dec_axis) == len(session.ra_axis) else None
+
+            if len(ra_speed) > 0:
+                self._axial_graph.update_data(
+                    ra_raw_t=t[1:], ra_raw_v=ra_speed,
+                    dec_raw_t=t[1:] if dec_speed is not None else None,
+                    dec_raw_v=dec_speed,
+                )
+
+    def _replay_fft(self, session):
+        """Compute and display FFT from replayed data."""
+        if session.effective_frequency <= 0:
+            return
+
+        freq = session.effective_frequency
+
+        ra_freqs, ra_mags = None, None
+        dec_freqs, dec_mags = None, None
+
+        if len(session.ra_deviations) > 64:
+            ra_data = session.ra_deviations - np.mean(session.ra_deviations)
+            window = np.hanning(len(ra_data))
+            windowed = ra_data * window
+            n = len(windowed)
+            fft_result = np.fft.rfft(windowed)
+            ra_mags = 2.0 / n * np.abs(fft_result)
+            ra_freqs = np.fft.rfftfreq(n, d=1.0 / freq)
+            ra_freqs = ra_freqs[1:]
+            ra_mags = ra_mags[1:]
+
+        if len(session.dec_deviations) > 64:
+            dec_data = session.dec_deviations - np.mean(session.dec_deviations)
+            window = np.hanning(len(dec_data))
+            windowed = dec_data * window
+            n = len(windowed)
+            fft_result = np.fft.rfft(windowed)
+            dec_mags = 2.0 / n * np.abs(fft_result)
+            dec_freqs = np.fft.rfftfreq(n, d=1.0 / freq)
+            dec_freqs = dec_freqs[1:]
+            dec_mags = dec_mags[1:]
+
+        # Show FFT window with replayed data
+        if ra_freqs is not None or dec_freqs is not None:
+            if self._fft_window is None:
+                self._fft_window = FFTWindow()
+            self._fft_window.update_fft(
+                ra_freqs=ra_freqs, ra_mags=ra_mags,
+                dec_freqs=dec_freqs, dec_mags=dec_mags,
+                ra_sample_rate=freq, dec_sample_rate=freq,
+            )
+            self._fft_window.show()
+            self._fft_window.raise_()
+
+    def _auto_analyze_on_park(self):
+        """Automatically analyze the night session when mount is parked.
+
+        Finds the most recent .dat log file and runs the full analysis.
+        """
+        try:
+            log_dir = self._file_logger.log_dir
+            sessions = list_log_sessions(log_dir)
+            if not sessions:
+                return
+
+            # Use the most recent log file
+            latest = sessions[0]
+            dat_path = latest['path']
+
+            # Only analyze if file has meaningful data (> 1 KB)
+            if latest['size_kb'] < 1.0:
+                return
+
+            lang = get_language()
+            if lang == 'fr':
+                self._status_panel.add_message(
+                    "Monture parquée — analyse automatique de la nuit...",
+                    Colors.STATUS_OK,
+                )
+            else:
+                self._status_panel.add_message(
+                    "Mount parked — automatic night analysis...",
+                    Colors.STATUS_OK,
+                )
+            QApplication.processEvents()
+
+            session = parse_session(dat_path)
+            if session.sample_count < 10:
+                return
+
+            # Show analysis dialog
+            dialog = AnalysisDialog(session, self)
+            dialog.exec()
+
+            self._status_panel.add_message(
+                T("analysis_complete"), Colors.STATUS_OK
+            )
+        except Exception as e:
+            logger.error(f"Auto-analysis failed: {e}")
 
     # ── Zoom and reset ───────────────────────────────────────────
 
@@ -1054,8 +1339,15 @@ class MainWindow(QMainWindow):
         </ul>
 
         <h3>Log Files</h3>
-        <p>Stored in <code>Logs/</code> folder. Four file types:
-        .log (events), .dat (mount data), .dti (time data), .sei (seismic).</p>
+        <p>Stored in <code>Logs/</code> folder. Five file types:
+        .log (events), .dat (mount data), .dti (time data), .sei (seismic), .fft (FFT snapshots).</p>
+        <p>Logging starts automatically on connection.</p>
+
+        <h3>Log Replay &amp; Analysis</h3>
+        <p><b>File → Open Log</b> or <b>Ctrl+O</b>: Load a previous .dat file to replay in graphs
+        and get a comprehensive analysis report (quality rating, FFT, drift, tolerance stats).</p>
+        <p><b>Auto-analysis on park</b>: When the mount parks, an automatic analysis of the
+        night session is generated.</p>
         """.format(version=self._version)
 
     def _get_help_text_fr(self) -> str:
@@ -1087,6 +1379,7 @@ class MainWindow(QMainWindow):
         <ul>
         <li><b>Ctrl+K</b> : Connecter</li>
         <li><b>Ctrl+D</b> : Déconnecter</li>
+        <li><b>Ctrl+O</b> : Ouvrir un log (relecture + analyse)</li>
         <li><b>Ctrl+F</b> : Fenêtre FFT</li>
         <li><b>Ctrl+,</b> : Préférences</li>
         <li><b>F1</b> : Cette aide</li>
@@ -1100,8 +1393,16 @@ class MainWindow(QMainWindow):
         </ul>
 
         <h3>Fichiers log</h3>
-        <p>Stockés dans le dossier <code>Logs/</code>. Quatre types :
-        .log (événements), .dat (données monture), .dti (données temps), .sei (sismique).</p>
+        <p>Stockés dans le dossier <code>Logs/</code>. Cinq types :
+        .log (événements), .dat (données monture), .dti (temps), .sei (sismique), .fft (FFT).</p>
+        <p>L'enregistrement démarre automatiquement à la connexion.</p>
+
+        <h3>Relecture et analyse des logs</h3>
+        <p><b>Fichier → Ouvrir un log</b> ou <b>Ctrl+O</b> : charger un fichier .dat pour
+        revisudaliser les graphiques et obtenir un rapport d'analyse complet
+        (qualité, FFT, dérive, tolérance).</p>
+        <p><b>Analyse auto au parcage</b> : quand la monture se parque, l'analyse
+        de la nuit se lance automatiquement.</p>
         """.format(version=self._version)
 
     def _show_about(self):

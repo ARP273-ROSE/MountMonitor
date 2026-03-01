@@ -13,7 +13,7 @@ from PyQt6.QtCore import QThread, pyqtSignal, QMutex
 
 from .mount_connection import MountConnection
 from .data_processor import DataProcessor
-from ..models.mount_data import MountSample, TimeSample, MountStatus, PierSide
+from ..models.mount_data import MountSample, TimeSample, MountStatus, PierSide, EnvironmentSample
 from ..utils.coordinates import parse_ra, parse_dec
 
 logger = logging.getLogger(__name__)
@@ -35,6 +35,7 @@ class MountPoller(QThread):
     sample_ready = pyqtSignal(object)       # MountSample
     time_sample_ready = pyqtSignal(object)  # TimeSample
     status_changed = pyqtSignal(object)     # MountStatus
+    environment_ready = pyqtSignal(object)  # EnvironmentSample
     connection_lost = pyqtSignal()
     connection_restored = pyqtSignal()
     error = pyqtSignal(str)
@@ -60,6 +61,8 @@ class MountPoller(QThread):
         self._slew_delay_start = 0.0
         self._log_tracking_only = False
         self._axial_enabled = False
+        self._last_env_poll: float = 0.0
+        self._env_poll_interval: float = 30.0  # Poll environment every 30 seconds
 
     def set_frequency(self, hz: float):
         """Set polling frequency in Hz."""
@@ -136,6 +139,16 @@ class MountPoller(QThread):
                         if now - last_stdev_compute > 1.0:
                             self._processor.compute_stdevs()
                             last_stdev_compute = now
+
+                    # Poll environment data at low frequency (every 30s)
+                    now_env = time.perf_counter()
+                    if now_env - self._last_env_poll > self._env_poll_interval:
+                        self._last_env_poll = now_env
+                        try:
+                            env_sample = self._connection.get_environment()
+                            self.environment_ready.emit(env_sample)
+                        except Exception as e:
+                            logger.debug(f"Environment poll error: {e}")
 
             except Exception as e:
                 logger.error(f"Polling error: {e}")

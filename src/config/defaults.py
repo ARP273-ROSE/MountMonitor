@@ -4,11 +4,11 @@ DEFAULTS = {
     # General
     "observatory_name": "My Observatory",
     "mount_name": "",
-    "mount_protocol": "lx200",  # lx200, ascom, alpaca
+    "mount_protocol": "lx200",  # lx200, lx200_serial, ascom, simulation
     "mount_ip": "192.168.1.1",
     "mount_port": 3492,
+    "serial_port": "",
     "ascom_driver": "",
-    "alpaca_url": "",
     "language": "auto",  # auto, fr, en
 
     # Processing
