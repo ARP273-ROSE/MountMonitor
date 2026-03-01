@@ -143,6 +143,23 @@ TX = {
     "logging_stopped": {"en": "Logging stopped", "fr": "Journalisation arrêtée"},
     "new_log_files": {"en": "New log files created", "fr": "Nouveaux fichiers log créés"},
 
+    # Log replay & analysis
+    "menu_open_log": {"en": "Open Log...", "fr": "Ouvrir un log..."},
+    "open_log_title": {"en": "Open Log File", "fr": "Ouvrir un fichier log"},
+    "replay_loaded": {
+        "en": "Log loaded: {samples} samples, duration {duration}",
+        "fr": "Log chargé : {samples} échantillons, durée {duration}",
+    },
+    "replay_no_data": {
+        "en": "No data found in this log file",
+        "fr": "Aucune donnée trouvée dans ce fichier log",
+    },
+    "replay_mode": {"en": "REPLAY MODE", "fr": "MODE RELECTURE"},
+    "analysis_complete": {
+        "en": "Analysis complete",
+        "fr": "Analyse terminée",
+    },
+
     # Zoom
     "horizontal_zoom": {"en": "Horizontal Zoom", "fr": "Zoom horizontal"},
     "vertical_zoom": {"en": "Vertical Zoom", "fr": "Zoom vertical"},

@@ -10,7 +10,7 @@ import logging
 from typing import Optional
 
 from .mount_connection import MountConnection
-from ..models.mount_data import MountStatus, PierSide, ConnectionProtocol
+from ..models.mount_data import MountStatus, PierSide, ConnectionProtocol, EnvironmentSample
 
 logger = logging.getLogger(__name__)
 
@@ -308,3 +308,81 @@ class LX200Connection(MountConnection):
     def send_raw_command(self, command: str) -> Optional[str]:
         """Send any raw LX200 command."""
         return self._send_command(command)
+
+    def get_environment(self) -> EnvironmentSample:
+        """Get environment data via LX200 extended commands (10Micron specific)."""
+        sample = EnvironmentSample()
+
+        # External temperature
+        result = self._send_command(":GRTMP#")
+        if result:
+            try:
+                sample.temperature_ext = float(result.strip().rstrip("#"))
+            except ValueError:
+                pass
+
+        # Barometric pressure
+        result = self._send_command(":GRPRS#")
+        if result:
+            try:
+                sample.pressure = float(result.strip().rstrip("#"))
+            except ValueError:
+                pass
+
+        # Internal temperature
+        result = self._send_command(":GTMP1#")
+        if result:
+            try:
+                sample.temperature_int = float(result.strip().rstrip("#"))
+            except ValueError:
+                pass
+
+        # Extended status code
+        result = self._send_command(":Gstat#")
+        if result:
+            try:
+                sample.mount_status_code = int(result.strip().rstrip("#"))
+            except ValueError:
+                pass
+
+        # Tracking rate multiplier
+        result = self._send_command(":GT#")
+        if result:
+            try:
+                sample.tracking_rate = float(result.strip().rstrip("#"))
+            except ValueError:
+                pass
+
+        # Meridian flip time
+        result = self._send_command(":Gmte#")
+        if result:
+            try:
+                val = result.strip().rstrip("#")
+                if val:
+                    sample.meridian_flip_minutes = float(val)
+            except ValueError:
+                pass
+
+        # Pier side
+        result = self._send_command(":pS#")
+        if result:
+            val = result.strip().rstrip("#").lower()
+            if "east" in val:
+                sample.pier_side = PierSide.EAST
+            elif "west" in val:
+                sample.pier_side = PierSide.WEST
+
+        # Alignment model info
+        result = self._send_command(":getain#")
+        if result:
+            try:
+                val = result.strip().rstrip("#")
+                parts = val.split(",")
+                if len(parts) >= 3:
+                    sample.alignment_stars = int(parts[0])
+                    sample.alignment_rms = float(parts[1])
+                    sample.polar_error_deg = float(parts[2])
+            except (ValueError, IndexError):
+                pass
+
+        return sample
