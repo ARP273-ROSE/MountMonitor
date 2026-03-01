@@ -1,10 +1,12 @@
 """File logging system for MountMonitor.
 
-Creates and manages 4 log file types:
+Creates and manages 6 log file types:
   .log  - Events, settings changes, tolerance alerts
   .dat  - RA/DEC data (TAB-separated, 27-column Java-compatible format)
   .dti  - Time data (TAB-separated)
   .sei  - Seismometer data (TAB-separated)
+  .fft  - FFT analysis snapshots (TAB-separated)
+  .env  - Environment/diagnostics data (temperature, pressure, alignment)
 
 Files are named: MountMonitor_YYYYMMDD-HHMMSS.ext
 Stored in a Logs/ subdirectory.
@@ -17,7 +19,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, TextIO
 
-from ..models.mount_data import MountSample, TimeSample, SessionInfo
+from ..models.mount_data import MountSample, TimeSample, SessionInfo, EnvironmentSample, PierSide
 from ..utils.coordinates import format_ra, format_dec
 
 logger = logging.getLogger(__name__)
@@ -53,6 +55,8 @@ class FileLogger:
         self._dat_file: Optional[TextIO] = None
         self._dti_file: Optional[TextIO] = None
         self._sei_file: Optional[TextIO] = None
+        self._fft_file: Optional[TextIO] = None
+        self._env_file: Optional[TextIO] = None
         self._session_start: Optional[str] = None
         self._version = _read_version()
         self._active = False
@@ -166,6 +170,18 @@ class FileLogger:
             )
             self._write_sei_header(session_info)
 
+            # .fft file
+            self._fft_file = open(
+                self._base_dir / f"{prefix}.fft", 'w', encoding='utf-8'
+            )
+            self._write_fft_header(session_info)
+
+            # .env file (environment/diagnostics)
+            self._env_file = open(
+                self._base_dir / f"{prefix}.env", 'w', encoding='utf-8'
+            )
+            self._write_env_header(session_info)
+
             self._active = True
             self.log_event("Logging started.")
             logger.info(f"Log files created: {prefix}.*")
@@ -256,6 +272,49 @@ class FileLogger:
         f.write(f"Location:\t{info.observatory}\n")
         f.write("Timestamp\tRaw data\tOffset data\tStDev\n")
         f.flush()
+
+    def _write_fft_header(self, info: SessionInfo):
+        """Write .fft file header."""
+        f = self._fft_file
+        f.write(f"MountMonitor FFT data file (v.{self._version})\n")
+        f.write(f"Location:\t{info.observatory}\n")
+        f.write(f"Mount:\t{info.mount_name}\n")
+        f.write("Timestamp\tAxis\tSample Rate [Hz]\tNum Bins\t"
+                "Peak1 Freq [Hz]\tPeak1 Period [s]\tPeak1 Amp\t"
+                "Peak2 Freq [Hz]\tPeak2 Period [s]\tPeak2 Amp\t"
+                "Peak3 Freq [Hz]\tPeak3 Period [s]\tPeak3 Amp\n")
+        f.flush()
+
+    def _write_env_header(self, info: SessionInfo):
+        """Write .env file header."""
+        f = self._env_file
+        f.write(f"MountMonitor environment data file (v.{self._version})\n")
+        f.write(f"Location:\t{info.observatory}\n")
+        f.write(f"Mount:\t{info.mount_name}\n")
+        f.write("Timestamp\tTemp Ext [°C]\tPressure [mbar]\tTemp Int [°C]\t"
+                "Status Code\tTracking Rate\tMeridian Flip [min]\tPier Side\t"
+                "Align Stars\tAlign RMS [\"]\tPolar Error [°]\n")
+        f.flush()
+
+    def log_environment(self, sample: EnvironmentSample):
+        """Write an environment data point to the .env file."""
+        if not self._env_file:
+            return
+        ts = sample.timestamp.strftime("%H:%M:%S")
+        temp_ext = f"{sample.temperature_ext:.1f}" if sample.temperature_ext is not None else ""
+        pressure = f"{sample.pressure:.1f}" if sample.pressure is not None else ""
+        temp_int = f"{sample.temperature_int:.1f}" if sample.temperature_int is not None else ""
+        status = str(sample.mount_status_code) if sample.mount_status_code is not None else ""
+        rate = f"{sample.tracking_rate:.1f}" if sample.tracking_rate is not None else ""
+        flip = f"{sample.meridian_flip_minutes:.1f}" if sample.meridian_flip_minutes is not None else ""
+        pier = sample.pier_side.value if sample.pier_side != PierSide.UNKNOWN else ""
+        stars = str(sample.alignment_stars) if sample.alignment_stars is not None else ""
+        rms = f"{sample.alignment_rms:.1f}" if sample.alignment_rms is not None else ""
+        polar = f"{sample.polar_error_deg:.4f}" if sample.polar_error_deg is not None else ""
+
+        line = f"{ts}\t{temp_ext}\t{pressure}\t{temp_int}\t{status}\t{rate}\t{flip}\t{pier}\t{stars}\t{rms}\t{polar}\n"
+        self._env_file.write(line)
+        self._env_file.flush()
 
     def log_event(self, message: str):
         """Write an event to the .log file."""
@@ -442,9 +501,52 @@ class FileLogger:
         ts = datetime.fromtimestamp(timestamp).strftime("%H:%M:%S.%f")[:-3]
         self._sei_file.write(f"{ts}\t{raw:.1f}\t{offset:.1f}\t{stdev:.4f}\n")
 
+    def log_fft_snapshot(self, axis: str, sample_rate: float,
+                         frequencies, magnitudes):
+        """Write an FFT snapshot to the .fft file.
+
+        Logs the top 3 peaks for the given axis (RA, DEC, or SEI).
+        Called periodically by the FFT timer.
+        """
+        if not self._fft_file:
+            return
+        if frequencies is None or magnitudes is None:
+            return
+        if len(frequencies) == 0 or len(magnitudes) == 0:
+            return
+
+        ts = datetime.now().strftime("%H:%M:%S")
+        num_bins = len(frequencies)
+
+        # Find top 3 peaks
+        if len(magnitudes) > 3:
+            peak_indices = magnitudes.argsort()[::-1][:3]
+        else:
+            peak_indices = list(range(len(magnitudes)))
+
+        peaks = []
+        for idx in peak_indices:
+            freq = float(frequencies[idx])
+            amp = float(magnitudes[idx])
+            period = 1.0 / freq if freq > 0 else 0.0
+            peaks.append((freq, period, amp))
+
+        # Pad to 3 peaks
+        while len(peaks) < 3:
+            peaks.append((0.0, 0.0, 0.0))
+
+        line = (
+            f"{ts}\t{axis}\t{sample_rate:.2f}\t{num_bins}\t"
+            f"{peaks[0][0]:.6f}\t{peaks[0][1]:.2f}\t{peaks[0][2]:.6f}\t"
+            f"{peaks[1][0]:.6f}\t{peaks[1][1]:.2f}\t{peaks[1][2]:.6f}\t"
+            f"{peaks[2][0]:.6f}\t{peaks[2][1]:.2f}\t{peaks[2][2]:.6f}\n"
+        )
+        self._fft_file.write(line)
+
     def flush_all(self):
         """Flush all open files."""
-        for f in [self._log_file, self._dat_file, self._dti_file, self._sei_file]:
+        for f in [self._log_file, self._dat_file, self._dti_file,
+                  self._sei_file, self._fft_file, self._env_file]:
             if f:
                 try:
                     f.flush()
@@ -500,7 +602,7 @@ class FileLogger:
             self.write_session_summary()
             self.log_event("Logging stopped.")
         self._active = False
-        for attr in ['_log_file', '_dat_file', '_dti_file', '_sei_file']:
+        for attr in ['_log_file', '_dat_file', '_dti_file', '_sei_file', '_fft_file', '_env_file']:
             f = getattr(self, attr)
             if f:
                 try:

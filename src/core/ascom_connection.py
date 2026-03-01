@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from .mount_connection import MountConnection
-from ..models.mount_data import MountStatus, PierSide, ConnectionProtocol
+from ..models.mount_data import MountStatus, PierSide, ConnectionProtocol, EnvironmentSample
 
 logger = logging.getLogger(__name__)
 
@@ -303,20 +303,39 @@ class ASCOMConnection(MountConnection):
         """Get mount UTC time from ASCOM UTCDate property.
 
         Returns time as HH:MM:SS string.
+        Falls back to SiderealTime or PC clock if UTCDate is unavailable.
         """
-        utc_date = self._safe_read("UTCDate")
-        if utc_date is None:
-            return None
-        try:
-            # ASCOM UTCDate returns a COM DateTime object
-            # comtypes converts it to a Python datetime
-            if isinstance(utc_date, datetime):
-                return utc_date.strftime("%H:%M:%S")
-            # Some drivers return a float (OLE date)
-            return str(utc_date)
-        except Exception as e:
-            logger.warning(f"Error reading ASCOM UTCDate: {e}")
-            return None
+        if not getattr(self, '_utcdate_failed', False):
+            utc_date = self._safe_read("UTCDate")
+            if utc_date is not None:
+                try:
+                    if isinstance(utc_date, datetime):
+                        return utc_date.strftime("%H:%M:%S")
+                    # Try converting OLE float date
+                    from datetime import timedelta
+                    ole_epoch = datetime(1899, 12, 30)
+                    dt = ole_epoch + timedelta(days=float(utc_date))
+                    return dt.strftime("%H:%M:%S")
+                except Exception:
+                    pass
+            # UTCDate not working, try SiderealTime conversion
+            self._utcdate_failed = True
+            logger.info("UTCDate unavailable, using SiderealTime fallback for time graph")
+
+        # Fallback: use SiderealTime (Local Sidereal Time in decimal hours)
+        lst = self._safe_read("SiderealTime")
+        if lst is not None:
+            try:
+                lst_f = float(lst)
+                h = int(lst_f)
+                m = int((lst_f - h) * 60)
+                s = ((lst_f - h) * 60 - m) * 60
+                return f"{h:02d}:{m:02d}:{s:05.2f}"
+            except (ValueError, TypeError):
+                pass
+
+        # Last resort: use PC UTC time (loop times will still be useful)
+        return datetime.now(timezone.utc).strftime("%H:%M:%S")
 
     def get_firmware_version(self) -> str:
         """Get firmware/driver version from ASCOM.
@@ -578,3 +597,87 @@ class ASCOMConnection(MountConnection):
         if result is not None:
             return result.strip().rstrip("#") == "1"
         return None
+
+    def get_environment(self) -> EnvironmentSample:
+        """Get environmental and diagnostic data via ASCOM/LX200 commands.
+
+        Uses 10Micron-specific LX200 commands via ASCOM CommandString.
+        All commands confirmed working on 10Micron GM1000HPS with ASCOM driver v1.7.
+        """
+        sample = EnvironmentSample()
+
+        # External temperature from :GRTMP#
+        result = self.send_raw_command(":GRTMP#")
+        if result is not None:
+            try:
+                sample.temperature_ext = float(result.strip().rstrip("#"))
+            except ValueError:
+                pass
+
+        # Barometric pressure from :GRPRS#
+        result = self.send_raw_command(":GRPRS#")
+        if result is not None:
+            try:
+                sample.pressure = float(result.strip().rstrip("#"))
+            except ValueError:
+                pass
+
+        # Internal temperature from :GTMP1#
+        result = self.send_raw_command(":GTMP1#")
+        if result is not None:
+            try:
+                sample.temperature_int = float(result.strip().rstrip("#"))
+            except ValueError:
+                pass
+
+        # Extended mount status from :Gstat#
+        result = self.send_raw_command(":Gstat#")
+        if result is not None:
+            try:
+                sample.mount_status_code = int(result.strip().rstrip("#"))
+            except ValueError:
+                pass
+
+        # Tracking rate multiplier from :GT#
+        result = self.send_raw_command(":GT#")
+        if result is not None:
+            try:
+                sample.tracking_rate = float(result.strip().rstrip("#"))
+            except ValueError:
+                pass
+
+        # Minutes until meridian flip from :Gmte#
+        result = self.send_raw_command(":Gmte#")
+        if result is not None:
+            try:
+                val = result.strip().rstrip("#")
+                if val:
+                    sample.meridian_flip_minutes = float(val)
+            except ValueError:
+                pass
+
+        # Pier side from :pS#
+        result = self.send_raw_command(":pS#")
+        if result is not None:
+            val = result.strip().rstrip("#").lower()
+            if "east" in val:
+                sample.pier_side = PierSide.EAST
+            elif "west" in val:
+                sample.pier_side = PierSide.WEST
+
+        # Alignment model info from :getain#
+        result = self.send_raw_command(":getain#")
+        if result is not None:
+            try:
+                # Format: "NN,RR.R,PPPP.PP#"
+                # NN = number of stars, RR.R = RMS arcsec, PPPP.PP = polar error deg
+                val = result.strip().rstrip("#")
+                parts = val.split(",")
+                if len(parts) >= 3:
+                    sample.alignment_stars = int(parts[0])
+                    sample.alignment_rms = float(parts[1])
+                    sample.polar_error_deg = float(parts[2])
+            except (ValueError, IndexError):
+                pass
+
+        return sample

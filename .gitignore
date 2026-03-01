@@ -32,11 +32,15 @@ Seismic_graphs/
 Time_graphs/
 FFT_graphs/
 
-# Original Java files (kept for reference, not tracked)
+# Original Java files and launchers (kept for reference, not tracked)
 *.jar
 *.dll
 *.chm
 *.pref
+MountMonitor.bat
+MountMonitor_simAll.bat
+MountMonitor_simMount.bat
+MountMonitor_simSeismometer.bat
 
 # LaTeX temp files
 *.aux
@@ -49,6 +53,7 @@ FFT_graphs/
 
 # LaTeX source (only PDF committed)
 manual_mountmonitor.tex
+cours_fourier_mountmonitor.tex
 
 # Secrets
 CLAUDE.md

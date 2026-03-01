@@ -31,7 +31,7 @@ def _setup_pyqtgraph():
         background=Colors.BG_GRAPH,
         foreground=Colors.TEXT_SECONDARY,
         antialias=True,
-        useOpenGL=True,
+        useOpenGL=False,
     )
 
 
@@ -60,29 +60,22 @@ class TrackingGraph(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # Create plot widget
+        # Create plot widget — disable auto-range to prevent signal cascades
         self._plot = pg.PlotWidget()
         self._plot.setBackground(Colors.BG_GRAPH)
         self._plot.showGrid(x=False, y=True, alpha=0.1)
+        self._plot.setTitle(title, color=data_color.name(), size='11pt')
         self._plot.setLabel('left', 'Deviation', units='"', color=Colors.TEXT_SECONDARY.name())
         self._plot.setLabel('bottom', 'Time', units='s', color=Colors.TEXT_SECONDARY.name())
-
-        # Right Y axis for STDEV
-        self._stdev_viewbox = pg.ViewBox()
-        self._plot.scene().addItem(self._stdev_viewbox)
-        self._plot.getAxis('right').linkToView(self._stdev_viewbox)
-        self._stdev_viewbox.setXLink(self._plot)
-        self._plot.showAxis('right')
-        self._plot.getAxis('right').setLabel('STDEV', units='"', color=Colors.GRAPH_STDEV.name())
+        self._plot.getViewBox().disableAutoRange()
 
         # Data line
         pen = pg.mkPen(color=data_color, width=1.5)
         self._data_curve = self._plot.plot(pen=pen, name=title)
 
-        # STDEV line (in stdev viewbox)
+        # STDEV line (plotted on main axis — avoids dual-ViewBox signal loops)
         stdev_pen = pg.mkPen(color=Colors.GRAPH_STDEV, width=1.5)
-        self._stdev_curve = pg.PlotCurveItem(pen=stdev_pen)
-        self._stdev_viewbox.addItem(self._stdev_curve)
+        self._stdev_curve = self._plot.plot(pen=stdev_pen)
 
         # Tolerance lines (green horizontal)
         tol_pen = pg.mkPen(color=Colors.GRAPH_TOLERANCE, width=1, style=Qt.PenStyle.SolidLine)
@@ -108,7 +101,7 @@ class TrackingGraph(QWidget):
         # Max STDEV line (blue dashed)
         max_stdev_pen = pg.mkPen(color=Colors.GRAPH_STDEV, width=1, style=Qt.PenStyle.DashLine)
         self._max_stdev_line = pg.InfiniteLine(pos=0, angle=0, pen=max_stdev_pen)
-        self._stdev_viewbox.addItem(self._max_stdev_line)
+        self._plot.addItem(self._max_stdev_line)
         self._max_stdev_line.setVisible(False)
 
         # Watermark text
@@ -141,7 +134,7 @@ class TrackingGraph(QWidget):
             text='', color=Colors.GRAPH_STDEV, anchor=(0, 0.5)
         )
         self._max_stdev_label.setFont(QFont('Consolas', 8))
-        self._stdev_viewbox.addItem(self._max_stdev_label)
+        self._plot.addItem(self._max_stdev_label)
         self._max_stdev_label.setVisible(False)
 
         # Stats text overlay
@@ -171,9 +164,6 @@ class TrackingGraph(QWidget):
 
         layout.addWidget(self._plot)
 
-        # Connect resize to update watermark position
-        self._plot.sigRangeChanged.connect(self._update_overlay_positions)
-
     def update_data(self, timestamps: np.ndarray, values: np.ndarray,
                     stdev_values: np.ndarray = None,
                     stdev_timestamps: np.ndarray = None,
@@ -182,15 +172,7 @@ class TrackingGraph(QWidget):
                     mount_times: list = None):
         """Update graph with new data.
 
-        Args:
-            timestamps: Array of POSIX timestamps
-            values: Array of deviation values in arcseconds
-            stdev_values: Running STDEV array
-            stdev_timestamps: Separate timestamps for STDEV (for graph correction)
-            min_val: Minimum deviation value
-            max_val: Maximum deviation value
-            max_stdev: Maximum STDEV value
-            mount_times: Optional list of (timestamp, time_string) for time fixes
+        Manages range manually to avoid sigRangeChanged cascades.
         """
         if len(timestamps) == 0:
             return
@@ -199,6 +181,10 @@ class TrackingGraph(QWidget):
         t0 = timestamps[0]
         rel_times = timestamps - t0
         t_end = rel_times[-1]
+
+        # Block signals during batch update to prevent cascades
+        vb = self._plot.getViewBox()
+        vb.blockSignals(True)
 
         self._data_curve.setData(rel_times, values)
 
@@ -216,7 +202,6 @@ class TrackingGraph(QWidget):
             self._max_line.setPos(max_val)
             self._min_line.setVisible(True)
             self._max_line.setVisible(True)
-            # Annotations showing deviation from median
             self._min_label.setText(f" {min_val:+.2f}\"")
             self._min_label.setPos(t_end, min_val)
             self._min_label.setVisible(True)
@@ -243,8 +228,24 @@ class TrackingGraph(QWidget):
                 f"{current:+.2f}\"  \u03c3={rms:.2f}\""
             )
 
+        # Manually set range (replaces auto-range)
+        y_min = float(np.min(values))
+        y_max = float(np.max(values))
+        margin = max(abs(y_min), abs(y_max), self._tolerance) * 1.3
+        vb.setRange(xRange=(0, max(t_end, 1.0)), yRange=(-margin, margin), padding=0)
+        vb.blockSignals(False)
+
+        # Position overlays after range is set
+        x_right = max(t_end, 1.0)
+        self._watermark.setPos(t_end / 2, 0)
+        self._stats_text.setPos(x_right, margin)
+        self._tol_upper_label.setPos(x_right, self._tolerance)
+        self._tol_lower_label.setPos(x_right, -self._tolerance)
+
     def set_tolerance(self, arcsec: float):
-        """Update tolerance lines and their annotations."""
+        """Update tolerance lines and their annotations (only if changed)."""
+        if arcsec == self._tolerance:
+            return
         self._tolerance = arcsec
         self._tol_upper.setPos(arcsec)
         self._tol_lower.setPos(-arcsec)
@@ -264,20 +265,6 @@ class TrackingGraph(QWidget):
         elif mode == "minmax":
             vb.enableAutoRange(axis=pg.ViewBox.YAxis)
 
-    def _update_overlay_positions(self):
-        """Update watermark, stats text, and tolerance label positions after range change."""
-        vb = self._plot.getViewBox()
-        view_range = vb.viewRange()
-        if view_range:
-            x_center = (view_range[0][0] + view_range[0][1]) / 2
-            y_center = (view_range[1][0] + view_range[1][1]) / 2
-            x_right = view_range[0][1]
-            self._watermark.setPos(x_center, y_center)
-            self._stats_text.setPos(x_right, view_range[1][1])
-            # Position tolerance labels at right edge
-            self._tol_upper_label.setPos(x_right, self._tolerance)
-            self._tol_lower_label.setPos(x_right, -self._tolerance)
-
     def export_to_image(self, directory: str):
         """Export graph as PNG to the specified directory."""
         dir_path = Path(directory)
@@ -294,50 +281,56 @@ class TrackingGraph(QWidget):
 
     def _update_time_fixes(self, t0: float, rel_times: np.ndarray,
                            mount_times: list = None):
-        """Draw grey vertical lines every 30 seconds with time labels."""
-        # Remove old time fixes
-        for item in self._time_fixes:
-            self._plot.removeItem(item)
-        for item in self._time_fix_labels:
-            self._plot.removeItem(item)
-        self._time_fixes.clear()
-        self._time_fix_labels.clear()
+        """Draw grey vertical lines every 30 seconds with time labels.
 
+        Reuses existing plot items instead of removing/recreating them each frame.
+        """
         if len(rel_times) == 0:
             return
 
         t_max = rel_times[-1]
+        needed = max(0, int(t_max / 30.0))  # Number of 30s marks needed
+
         fix_pen = pg.mkPen(Colors.TEXT_MUTED, width=1, style=Qt.PenStyle.DotLine)
+        label_font = QFont('Consolas', 7)
 
-        # Place a line every 30 seconds
-        t = 30.0
-        while t < t_max:
-            line = pg.InfiniteLine(pos=t, angle=90, pen=fix_pen)
+        # Add more items if needed
+        while len(self._time_fixes) < needed:
+            line = pg.InfiniteLine(pos=0, angle=90, pen=fix_pen)
+            label = pg.TextItem(text='', color=Colors.TEXT_MUTED, anchor=(0.5, 1))
+            label.setFont(label_font)
             self._plot.addItem(line)
-            self._time_fixes.append(line)
-
-            # Time label from mount_times or from offset
-            label_text = ""
-            if mount_times:
-                # Find closest mount time to this offset
-                target_ts = t0 + t
-                closest = min(mount_times, key=lambda mt: abs(mt[0] - target_ts), default=None)
-                if closest and abs(closest[0] - target_ts) < 15:
-                    label_text = closest[1]
-            if not label_text:
-                # Fallback: show relative seconds
-                m, s = divmod(int(t), 60)
-                label_text = f"{m:02d}:{s:02d}"
-
-            label = pg.TextItem(text=label_text, color=Colors.TEXT_MUTED, anchor=(0.5, 1))
-            label.setFont(QFont('Consolas', 7))
-            vr = self._plot.getViewBox().viewRange()
-            y_top = vr[1][1] if vr else 0
-            label.setPos(t, y_top)
             self._plot.addItem(label)
+            self._time_fixes.append(line)
             self._time_fix_labels.append(label)
 
-            t += 30.0
+        vr = self._plot.getViewBox().viewRange()
+        y_top = vr[1][1] if vr else 0
+
+        # Update positions and visibility of existing items
+        for i in range(len(self._time_fixes)):
+            t = 30.0 * (i + 1)
+            if t < t_max:
+                self._time_fixes[i].setPos(t)
+                self._time_fixes[i].setVisible(True)
+
+                # Time label from mount_times or from offset
+                label_text = ""
+                if mount_times:
+                    target_ts = t0 + t
+                    closest = min(mount_times, key=lambda mt: abs(mt[0] - target_ts), default=None)
+                    if closest and abs(closest[0] - target_ts) < 15:
+                        label_text = closest[1]
+                if not label_text:
+                    m, s = divmod(int(t), 60)
+                    label_text = f"{m:02d}:{s:02d}"
+
+                self._time_fix_labels[i].setText(label_text)
+                self._time_fix_labels[i].setPos(t, y_top)
+                self._time_fix_labels[i].setVisible(True)
+            else:
+                self._time_fixes[i].setVisible(False)
+                self._time_fix_labels[i].setVisible(False)
 
     def reset(self):
         """Clear graph data."""
@@ -350,11 +343,9 @@ class TrackingGraph(QWidget):
         self._max_label.setVisible(False)
         self._max_stdev_label.setVisible(False)
         for item in self._time_fixes:
-            self._plot.removeItem(item)
+            item.setVisible(False)
         for item in self._time_fix_labels:
-            self._plot.removeItem(item)
-        self._time_fixes.clear()
-        self._time_fix_labels.clear()
+            item.setVisible(False)
 
 
 class TimeGraph(QWidget):
@@ -375,6 +366,7 @@ class TimeGraph(QWidget):
         self._plot = pg.PlotWidget()
         self._plot.setBackground(Colors.BG_GRAPH)
         self._plot.showGrid(x=False, y=True, alpha=0.1)
+        self._plot.setTitle("TIME — PC vs Mount Clock", color='#aaaaaa', size='11pt')
         self._plot.setLabel('left', 'Time diff', units='ms', color=Colors.TEXT_SECONDARY.name())
         self._plot.setLabel('bottom', 'Time', units='s', color=Colors.TEXT_SECONDARY.name())
 
@@ -418,15 +410,9 @@ class TimeGraph(QWidget):
         )
         self._values_text.setFont(QFont('Consolas', 9))
         self._plot.addItem(self._values_text)
-        self._plot.sigRangeChanged.connect(self._update_values_pos)
+        self._plot.getViewBox().disableAutoRange()
 
         layout.addWidget(self._plot)
-
-    def _update_values_pos(self):
-        """Keep values text in top-right corner."""
-        vr = self._plot.getViewBox().viewRange()
-        if vr:
-            self._values_text.setPos(vr[0][1], vr[1][1])
 
     def update_data(self, diff_t, diff_v, pc_loop_t=None, pc_loop_v=None,
                     mount_loop_t=None, mount_loop_v=None,
@@ -434,7 +420,11 @@ class TimeGraph(QWidget):
         """Update time graph data."""
         if len(diff_t) > 0:
             t0 = diff_t[0]
-            self._diff_curve.setData(diff_t - t0, diff_v)
+            vb = self._plot.getViewBox()
+            vb.blockSignals(True)
+
+            rel_t = diff_t - t0
+            self._diff_curve.setData(rel_t, diff_v)
             if pc_loop_t is not None and len(pc_loop_t) > 0:
                 self._pc_loop_curve.setData(pc_loop_t - t0, pc_loop_v)
             if mount_loop_t is not None and len(mount_loop_t) > 0:
@@ -442,11 +432,29 @@ class TimeGraph(QWidget):
             if ntp_t is not None and len(ntp_t) > 0:
                 self._ntp_curve.setData(ntp_t - t0, ntp_v)
 
+            # Manual range
+            all_v = [diff_v]
+            if pc_loop_v is not None and len(pc_loop_v) > 0:
+                all_v.append(pc_loop_v)
+            if mount_loop_v is not None and len(mount_loop_v) > 0:
+                all_v.append(mount_loop_v)
+            combined = np.concatenate(all_v)
+            y_min = float(np.min(combined))
+            y_max = float(np.max(combined))
+            y_margin = max(abs(y_max - y_min) * 0.1, 1.0)
+            t_end = rel_t[-1]
+            vb.setRange(xRange=(0, max(t_end, 1.0)),
+                        yRange=(y_min - y_margin, y_max + y_margin), padding=0)
+            vb.blockSignals(False)
+
+            # Position overlays
+            self._values_text.setPos(max(t_end, 1.0), y_max + y_margin)
+            self._watermark.setPos(t_end / 2, (y_min + y_max) / 2)
+
             # Values + drift rate annotation
             parts = []
             if len(diff_v) > 0:
                 parts.append(f"PC-Mount: {diff_v[-1]:+.1f}ms")
-                # Compute drift rate (ms/min)
                 if len(diff_v) > 20 and len(diff_t) > 20:
                     dt = diff_t[-1] - diff_t[0]
                     if dt > 0:
@@ -495,6 +503,7 @@ class SeismicGraph(QWidget):
         self._plot = pg.PlotWidget()
         self._plot.setBackground(Colors.BG_GRAPH)
         self._plot.showGrid(x=False, y=True, alpha=0.1)
+        self._plot.setTitle("SEISMIC — Vibrations", color='#aaaaaa', size='11pt')
         self._plot.setLabel('left', 'Amplitude', color=Colors.TEXT_SECONDARY.name())
         self._plot.setLabel('bottom', 'Time', units='s', color=Colors.TEXT_SECONDARY.name())
 
@@ -522,6 +531,7 @@ class SeismicGraph(QWidget):
         self._watermark.setFont(QFont('Arial', 24, QFont.Weight.Bold))
         self._watermark.setOpacity(0.15)
         self._plot.addItem(self._watermark)
+        self._plot.getViewBox().disableAutoRange()
 
         layout.addWidget(self._plot)
 
@@ -530,9 +540,25 @@ class SeismicGraph(QWidget):
         """Update seismic graph."""
         if len(timestamps) > 0:
             t0 = timestamps[0]
-            self._data_curve.setData(timestamps - t0, values)
+            vb = self._plot.getViewBox()
+            vb.blockSignals(True)
+
+            rel_t = timestamps - t0
+            self._data_curve.setData(rel_t, values)
             if stdev_values is not None and len(stdev_values) == len(timestamps):
-                self._stdev_curve.setData(timestamps - t0, stdev_values)
+                self._stdev_curve.setData(rel_t, stdev_values)
+
+            # Manual range
+            t_end = float(rel_t[-1])
+            y_min = float(np.min(values))
+            y_max = float(np.max(values))
+            y_margin = max(abs(y_max - y_min) * 0.15, 1.0)
+            vb.setRange(xRange=(0, max(t_end, 1.0)),
+                        yRange=(y_min - y_margin, y_max + y_margin), padding=0)
+            vb.blockSignals(False)
+
+            # Position watermark
+            self._watermark.setPos(t_end / 2, (y_min + y_max) / 2)
 
     def set_tolerance(self, percent: float, data_range: int):
         """Set tolerance as percentage of range."""
@@ -577,6 +603,7 @@ class AxialGraph(QWidget):
         self._plot = pg.PlotWidget()
         self._plot.setBackground(Colors.BG_GRAPH)
         self._plot.showGrid(x=False, y=True, alpha=0.1)
+        self._plot.setTitle("AXIAL — Speed / Displacement", color='#aaaaaa', size='11pt')
         self._plot.setLabel('left', 'Speed', units='"/s',
                             color=Colors.TEXT_SECONDARY.name())
         self._plot.setLabel('bottom', 'Time', units='s',
@@ -633,18 +660,8 @@ class AxialGraph(QWidget):
         self._reg_label.setFont(QFont('Consolas', 9))
         self._plot.addItem(self._reg_label)
 
-        self._plot.sigRangeChanged.connect(self._update_overlay_positions)
+        self._plot.getViewBox().disableAutoRange()
         layout.addWidget(self._plot)
-
-    def _update_overlay_positions(self):
-        """Update watermark and annotation positions."""
-        vb = self._plot.getViewBox()
-        vr = vb.viewRange()
-        if vr:
-            x_center = (vr[0][0] + vr[0][1]) / 2
-            y_center = (vr[1][0] + vr[1][1]) / 2
-            self._watermark.setPos(x_center, y_center)
-            self._reg_label.setPos(vr[0][1], vr[1][1])
 
     def update_data(self,
                     ra_raw_t=None, ra_raw_v=None,
@@ -663,6 +680,9 @@ class AxialGraph(QWidget):
                     t0 = t_arr[0]
         if t0 is None:
             return
+
+        vb = self._plot.getViewBox()
+        vb.blockSignals(True)
 
         # Plot raw speeds
         if ra_raw_t is not None and len(ra_raw_t) > 0:
@@ -705,6 +725,29 @@ class AxialGraph(QWidget):
             self._dec_reg_curve.setData([], [])
 
         self._reg_label.setText("  ".join(reg_parts))
+
+        # Manual range management
+        all_v = []
+        t_end = 0.0
+        for t_arr, v_arr in [(ra_raw_t, ra_raw_v), (dec_raw_t, dec_raw_v),
+                              (ra_avg_t, ra_avg_v), (dec_avg_t, dec_avg_v)]:
+            if t_arr is not None and len(t_arr) > 0:
+                all_v.append(v_arr)
+                t_end = max(t_end, float((t_arr - t0)[-1]))
+        if all_v:
+            combined = np.concatenate(all_v)
+            y_min = float(np.min(combined))
+            y_max = float(np.max(combined))
+            y_margin = max(abs(y_max - y_min) * 0.15, 0.01)
+            vb.setRange(xRange=(0, max(t_end, 1.0)),
+                        yRange=(y_min - y_margin, y_max + y_margin), padding=0)
+
+        vb.blockSignals(False)
+
+        # Position overlays
+        self._watermark.setPos(t_end / 2, 0)
+        if all_v:
+            self._reg_label.setPos(max(t_end, 1.0), y_max + y_margin)
 
     def export_to_image(self, directory: str):
         """Export axial graph as PNG."""

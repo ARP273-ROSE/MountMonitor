@@ -24,8 +24,8 @@ The application reads RA, DEC, and timing data from the mount, displays real-tim
 
 #### Communication Protocols
 - **LX200 TCP/IP** — Native protocol for 10Micron and compatible mounts
-- **ASCOM** — Windows ASCOM drivers via COM interface
-- **Alpaca** — Platform-independent ASCOM Alpaca (planned)
+- **LX200 Serial** — Serial connection (RS-232, 9600 8N1)
+- **ASCOM** — Windows ASCOM drivers via COM interface with native Chooser dialog
 - **Simulation** — Built-in mount and seismometer simulation for testing
 
 #### Advanced Analysis
@@ -34,10 +34,21 @@ The application reads RA, DEC, and timing data from the mount, displays real-tim
 - **Seismometer Support** — USB seismometer integration for vibration correlation
 - **Tolerance Alerts** — Real-time warnings when tracking exceeds limits
 
-#### Data Logging
-- Four log file types: `.log` (events), `.dat` (mount data), `.dti` (timing), `.sei` (seismic)
+#### Data Logging & Analysis
+- Six log file types: `.log` (events), `.dat` (mount data), `.dti` (timing), `.sei` (seismic), `.fft` (FFT snapshots), `.env` (environment/diagnostics)
 - Tab-separated ASCII format, easily imported into spreadsheets
-- Automatic file management with configurable close/dump triggers
+- Automatic logging on connect — records all parameters throughout the night
+- **Log replay**: Open previous `.dat` files to visualize past sessions
+- **Automatic morning analysis**: Comprehensive report auto-generated when the mount parks
+- 13-section analysis report: quality rating, RA/DEC stats, FFT/PE detection, drift, environment, recommendations
+
+#### Environment Monitoring (10Micron)
+- External/internal temperature logging every 30 seconds
+- Barometric pressure tracking
+- Alignment model quality (stars, RMS, polar error)
+- Extended mount status codes (`:Gstat#`)
+- Meridian flip countdown
+- All data included in the morning analysis report
 
 #### Modern Interface
 - Dark astronomy-friendly theme (preserves night vision)
@@ -101,7 +112,7 @@ python main.py --sim-all --log-level DEBUG
 
 ### Requirements
 
-- Python 3.11+
+- Python 3.10+
 - PyQt6
 - pyqtgraph
 - numpy
