@@ -19,7 +19,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, TextIO
 
-from ..models.mount_data import MountSample, TimeSample, SessionInfo, EnvironmentSample, PierSide
+from ..models.mount_data import MountSample, MountStatus, TimeSample, SessionInfo, EnvironmentSample, PierSide
 from ..utils.coordinates import format_ra, format_dec
 
 logger = logging.getLogger(__name__)
@@ -61,7 +61,7 @@ class FileLogger:
         self._version = _read_version()
         self._active = False
 
-        # Running min/max tracking for .dat 27-column format
+        # Running min/max tracking for .dat 27-column format (ALL samples)
         self._sample_count: int = 0
         self._min_ra_hours: Optional[float] = None
         self._max_ra_hours: Optional[float] = None
@@ -76,6 +76,17 @@ class FileLogger:
         self._max_dec_axis: Optional[float] = None
         self._max_dec_axis_stdev: float = 0.0
 
+        # Tracking-only statistics for session summary
+        self._tracking_count: int = 0
+        self._tracking_min_ra: Optional[float] = None
+        self._tracking_max_ra: Optional[float] = None
+        self._tracking_max_ra_stdev: float = 0.0
+        self._tracking_min_dec: Optional[float] = None
+        self._tracking_max_dec: Optional[float] = None
+        self._tracking_max_dec_stdev: float = 0.0
+        self._slewing_count: int = 0
+        self._parked_count: int = 0
+
     @property
     def active(self) -> bool:
         return self._active
@@ -83,6 +94,22 @@ class FileLogger:
     @property
     def log_dir(self) -> Path:
         return self._base_dir
+
+    def _safe_write(self, file_obj: Optional[TextIO], data: str) -> bool:
+        """Write data to a file, handling transient I/O errors (NAS hiccups).
+
+        Returns True on success, False on failure.
+        """
+        if not file_obj:
+            return False
+        try:
+            file_obj.write(data)
+            return True
+        except OSError as e:
+            if not getattr(self, '_io_error_logged', False):
+                logger.warning(f"I/O error writing log data: {e}")
+                self._io_error_logged = True
+            return False
 
     def _reset_minmax(self):
         """Reset running min/max statistics."""
@@ -99,6 +126,16 @@ class FileLogger:
         self._min_dec_axis = None
         self._max_dec_axis = None
         self._max_dec_axis_stdev = 0.0
+        # Tracking-only
+        self._tracking_count = 0
+        self._tracking_min_ra = None
+        self._tracking_max_ra = None
+        self._tracking_max_ra_stdev = 0.0
+        self._tracking_min_dec = None
+        self._tracking_max_dec = None
+        self._tracking_max_dec_stdev = 0.0
+        self._slewing_count = 0
+        self._parked_count = 0
 
     def _update_minmax(self, sample: MountSample):
         """Update running min/max from a mount sample."""
@@ -137,6 +174,27 @@ class FileLogger:
                 self._min_dec_axis = sample.dec_axis_position
             if self._max_dec_axis is None or sample.dec_axis_position > self._max_dec_axis:
                 self._max_dec_axis = sample.dec_axis_position
+
+    def _update_tracking_stats(self, sample: MountSample):
+        """Update tracking-only statistics for session summary."""
+        if sample.status == MountStatus.TRACKING:
+            self._tracking_count += 1
+            if self._tracking_min_ra is None or sample.ra_hours < self._tracking_min_ra:
+                self._tracking_min_ra = sample.ra_hours
+            if self._tracking_max_ra is None or sample.ra_hours > self._tracking_max_ra:
+                self._tracking_max_ra = sample.ra_hours
+            if sample.ra_stdev > self._tracking_max_ra_stdev:
+                self._tracking_max_ra_stdev = sample.ra_stdev
+            if self._tracking_min_dec is None or sample.dec_degrees < self._tracking_min_dec:
+                self._tracking_min_dec = sample.dec_degrees
+            if self._tracking_max_dec is None or sample.dec_degrees > self._tracking_max_dec:
+                self._tracking_max_dec = sample.dec_degrees
+            if sample.dec_stdev > self._tracking_max_dec_stdev:
+                self._tracking_max_dec_stdev = sample.dec_stdev
+        elif sample.status == MountStatus.SLEWING:
+            self._slewing_count += 1
+        elif sample.status == MountStatus.PARKED:
+            self._parked_count += 1
 
     def start_session(self, session_info: SessionInfo):
         """Open new log files for a monitoring session."""
@@ -313,24 +371,33 @@ class FileLogger:
         polar = f"{sample.polar_error_deg:.4f}" if sample.polar_error_deg is not None else ""
 
         line = f"{ts}\t{temp_ext}\t{pressure}\t{temp_int}\t{status}\t{rate}\t{flip}\t{pier}\t{stars}\t{rms}\t{polar}\n"
-        self._env_file.write(line)
-        self._env_file.flush()
+        if self._safe_write(self._env_file, line):
+            try:
+                self._env_file.flush()
+            except OSError:
+                pass
 
     def log_event(self, message: str):
         """Write an event to the .log file."""
         if not self._log_file:
             return
         timestamp = datetime.now().strftime("%d/%m/%Y %H:%M:%S.%f")[:-3]
-        self._log_file.write(f"{timestamp}\t{message}\n")
-        self._log_file.flush()
+        if self._safe_write(self._log_file, f"{timestamp}\t{message}\n"):
+            try:
+                self._log_file.flush()
+            except OSError:
+                pass
 
     def log_tolerance_event(self, message: str):
         """Write a tolerance alert event to the .log file."""
         if not self._log_file:
             return
         timestamp = datetime.now().strftime("%d/%m/%Y %H:%M:%S.%f")[:-3]
-        self._log_file.write(f"{timestamp}\tTOLERANCE\t{message}\n")
-        self._log_file.flush()
+        if self._safe_write(self._log_file, f"{timestamp}\tTOLERANCE\t{message}\n"):
+            try:
+                self._log_file.flush()
+            except OSError:
+                pass
 
     def log_mount_sample(self, sample: MountSample):
         """Write a mount data sample to the .dat file (27-column Java format).
@@ -367,8 +434,11 @@ class FileLogger:
         if not self._dat_file:
             return
 
-        # Update running min/max
+        # Update running min/max (all samples, for .dat columns 15-26)
         self._update_minmax(sample)
+
+        # Update tracking-only stats (for session summary)
+        self._update_tracking_stats(sample)
 
         # Column 1: RAW Mount time
         raw_mount_time = sample.mount_time_str
@@ -480,7 +550,7 @@ class FileLogger:
             max_dec_axis_stdev,  # 26
             status,              # 27
         ]
-        self._dat_file.write("\t".join(columns) + "\n")
+        self._safe_write(self._dat_file, "\t".join(columns) + "\n")
 
     def log_time_sample(self, sample: TimeSample):
         """Write a time data sample to the .dti file."""
@@ -492,14 +562,14 @@ class FileLogger:
             f"{sample.pc_loop_time_ms:.1f}\t{sample.mount_loop_time_ms:.1f}\t"
             f"{ntp}\n"
         )
-        self._dti_file.write(line)
+        self._safe_write(self._dti_file, line)
 
     def log_seismic_data(self, timestamp: float, raw: float, offset: float, stdev: float):
         """Write a seismic data point to the .sei file."""
         if not self._sei_file:
             return
         ts = datetime.fromtimestamp(timestamp).strftime("%H:%M:%S.%f")[:-3]
-        self._sei_file.write(f"{ts}\t{raw:.1f}\t{offset:.1f}\t{stdev:.4f}\n")
+        self._safe_write(self._sei_file, f"{ts}\t{raw:.1f}\t{offset:.1f}\t{stdev:.4f}\n")
 
     def log_fft_snapshot(self, axis: str, sample_rate: float,
                          frequencies, magnitudes):
@@ -541,7 +611,7 @@ class FileLogger:
             f"{peaks[1][0]:.6f}\t{peaks[1][1]:.2f}\t{peaks[1][2]:.6f}\t"
             f"{peaks[2][0]:.6f}\t{peaks[2][1]:.2f}\t{peaks[2][2]:.6f}\n"
         )
-        self._fft_file.write(line)
+        self._safe_write(self._fft_file, line)
 
     def flush_all(self):
         """Flush all open files."""
@@ -555,45 +625,58 @@ class FileLogger:
                     pass
 
     def write_session_summary(self):
-        """Write session summary (min/max/count stats) to the .log file."""
+        """Write session summary to the .log file.
+
+        Shows tracking-only statistics (not polluted by slewing/parked data).
+        The Java original had this problem too — the Python version now
+        separates tracking stats from total stats.
+        """
         if not self._log_file:
             return
 
-        self._log_file.write("\n--- Session Summary ---\n")
-        self._log_file.write(f"Total samples:\t{self._sample_count}\n")
+        w = self._log_file.write
+        w("\n--- Session Summary ---\n")
+        w(f"Total samples:\t{self._sample_count}\n")
+        w(f"  Tracking:\t{self._tracking_count}\n")
+        w(f"  Slewing:\t{self._slewing_count}\n")
+        w(f"  Parked:\t{self._parked_count}\n")
+        w(f"  Other:\t{self._sample_count - self._tracking_count - self._slewing_count - self._parked_count}\n")
 
-        if self._sample_count > 0:
-            # RA range
-            if self._min_ra_hours is not None and self._max_ra_hours is not None:
-                min_ra_str = format_ra(self._min_ra_hours, precision=2)
-                max_ra_str = format_ra(self._max_ra_hours, precision=2)
-                self._log_file.write(f"RA range:\t{min_ra_str} - {max_ra_str}\n")
+        if self._tracking_count > 0:
+            tracking_pct = self._tracking_count / self._sample_count * 100
+            w(f"Tracking efficiency:\t{tracking_pct:.1f}%\n")
 
-            self._log_file.write(f"Max RA StDev:\t{self._max_ra_stdev:.3f}\"\n")
+        w("\n--- Tracking Data (TRACKING samples only) ---\n")
 
-            # DEC range
-            if self._min_dec_degrees is not None and self._max_dec_degrees is not None:
-                min_dec_str = format_dec(self._min_dec_degrees, precision=2)
-                max_dec_str = format_dec(self._max_dec_degrees, precision=2)
-                self._log_file.write(f"DEC range:\t{min_dec_str} - {max_dec_str}\n")
+        if self._tracking_count > 0:
+            # RA range (tracking only)
+            if self._tracking_min_ra is not None and self._tracking_max_ra is not None:
+                min_ra_str = format_ra(self._tracking_min_ra, precision=2)
+                max_ra_str = format_ra(self._tracking_max_ra, precision=2)
+                w(f"RA range:\t{min_ra_str} - {max_ra_str}\n")
 
-            self._log_file.write(f"Max DEC StDev:\t{self._max_dec_stdev:.3f}\"\n")
+            w(f"Max RA StDev:\t{self._tracking_max_ra_stdev:.3f}\"\n")
 
-            # RA axis range
-            if self._min_ra_axis is not None and self._max_ra_axis is not None:
-                self._log_file.write(
-                    f"RA AXIS range:\t{self._min_ra_axis:.4f} - {self._max_ra_axis:.4f}\n"
-                )
-                self._log_file.write(f"Max RA AXIS StDev:\t{self._max_ra_axis_stdev:.3f}\"\n")
+            # DEC range (tracking only)
+            if self._tracking_min_dec is not None and self._tracking_max_dec is not None:
+                min_dec_str = format_dec(self._tracking_min_dec, precision=2)
+                max_dec_str = format_dec(self._tracking_max_dec, precision=2)
+                w(f"DEC range:\t{min_dec_str} - {max_dec_str}\n")
 
-            # DEC axis range
-            if self._min_dec_axis is not None and self._max_dec_axis is not None:
-                self._log_file.write(
-                    f"DEC AXIS range:\t{self._min_dec_axis:.4f} - {self._max_dec_axis:.4f}\n"
-                )
-                self._log_file.write(f"Max DEC AXIS StDev:\t{self._max_dec_axis_stdev:.3f}\"\n")
+            w(f"Max DEC StDev:\t{self._tracking_max_dec_stdev:.3f}\"\n")
+        else:
+            w("No TRACKING samples recorded.\n")
 
-        self._log_file.write("--- End Summary ---\n")
+        # RA axis range (all samples, same as .dat columns)
+        if self._min_ra_axis is not None and self._max_ra_axis is not None:
+            w(f"\n--- Axial Data (all samples) ---\n")
+            w(f"RA AXIS range:\t{self._min_ra_axis:.4f} - {self._max_ra_axis:.4f}\n")
+            w(f"Max RA AXIS StDev:\t{self._max_ra_axis_stdev:.3f}\"\n")
+        if self._min_dec_axis is not None and self._max_dec_axis is not None:
+            w(f"DEC AXIS range:\t{self._min_dec_axis:.4f} - {self._max_dec_axis:.4f}\n")
+            w(f"Max DEC AXIS StDev:\t{self._max_dec_axis_stdev:.3f}\"\n")
+
+        w("--- End Summary ---\n")
         self._log_file.flush()
 
     def close(self):

@@ -90,7 +90,8 @@ class SimulatedMount(MountConnection):
         return self._status
 
     def get_mount_time(self) -> Optional[str]:
-        now = datetime.now()
+        from datetime import timezone
+        now = datetime.now(timezone.utc)
         return now.strftime("%H:%M:%S")
 
     def get_firmware_version(self) -> str:

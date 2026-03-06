@@ -111,6 +111,7 @@ class ASCOMConnection(MountConnection):
         self._max_reconnect_attempts = 5
         self._lock = threading.Lock()
         self._com_initialized = False
+        self._warned_properties: set = set()  # Rate-limit warnings per property
 
     @property
     def driver_id(self) -> str:
@@ -210,18 +211,26 @@ class ASCOMConnection(MountConnection):
     def _safe_read(self, property_name: str, default=None):
         """Safely read a property from the ASCOM telescope object.
 
-        Handles COM errors gracefully and logs warnings.
+        Handles COM errors gracefully. Logs WARNING only on first failure
+        per property, then DEBUG to avoid log spam.
         Returns default value on failure.
         """
         if self._telescope is None or not self._connected:
             return default
         try:
-            return getattr(self._telescope, property_name)
+            value = getattr(self._telescope, property_name)
+            # Property recovered — allow future warning if it fails again
+            self._warned_properties.discard(property_name)
+            return value
         except AttributeError:
             logger.debug(f"ASCOM property not available: {property_name}")
             return default
         except Exception as e:
-            logger.warning(f"ASCOM error reading {property_name}: {e}")
+            if property_name not in self._warned_properties:
+                logger.warning(f"ASCOM error reading {property_name}: {e}")
+                self._warned_properties.add(property_name)
+            else:
+                logger.debug(f"ASCOM error reading {property_name}: {e}")
             # Check if connection is lost
             self._check_connection_alive()
             return default
@@ -302,8 +311,13 @@ class ASCOMConnection(MountConnection):
     def get_mount_time(self) -> Optional[str]:
         """Get mount UTC time from ASCOM UTCDate property.
 
-        Returns time as HH:MM:SS string.
-        Falls back to SiderealTime or PC clock if UTCDate is unavailable.
+        Returns time as HH:MM:SS string in UTC.
+        Falls back to PC UTC clock if UTCDate is unavailable.
+
+        NOTE: SiderealTime is NOT used as fallback because it is astronomical
+        sidereal time, not civil time. Comparing it with PC clock would give
+        nonsensical time differences (the Java original used :GL# local time
+        instead, but ASCOM provides UTCDate which is the correct approach).
         """
         if not getattr(self, '_utcdate_failed', False):
             utc_date = self._safe_read("UTCDate")
@@ -318,23 +332,11 @@ class ASCOMConnection(MountConnection):
                     return dt.strftime("%H:%M:%S")
                 except Exception:
                     pass
-            # UTCDate not working, try SiderealTime conversion
+            # UTCDate not working — fall through to PC UTC clock
             self._utcdate_failed = True
-            logger.info("UTCDate unavailable, using SiderealTime fallback for time graph")
+            logger.warning("UTCDate unavailable from ASCOM driver, using PC UTC clock")
 
-        # Fallback: use SiderealTime (Local Sidereal Time in decimal hours)
-        lst = self._safe_read("SiderealTime")
-        if lst is not None:
-            try:
-                lst_f = float(lst)
-                h = int(lst_f)
-                m = int((lst_f - h) * 60)
-                s = ((lst_f - h) * 60 - m) * 60
-                return f"{h:02d}:{m:02d}:{s:05.2f}"
-            except (ValueError, TypeError):
-                pass
-
-        # Last resort: use PC UTC time (loop times will still be useful)
+        # Fallback: use PC UTC time (time diff will be ~0 but loop times still useful)
         return datetime.now(timezone.utc).strftime("%H:%M:%S")
 
     def get_firmware_version(self) -> str:

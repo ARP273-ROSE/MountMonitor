@@ -65,8 +65,8 @@ class TrackingGraph(QWidget):
         self._plot.setBackground(Colors.BG_GRAPH)
         self._plot.showGrid(x=False, y=True, alpha=0.1)
         self._plot.setTitle(title, color=data_color.name(), size='11pt')
-        self._plot.setLabel('left', 'Deviation', units='"', color=Colors.TEXT_SECONDARY.name())
-        self._plot.setLabel('bottom', 'Time', units='s', color=Colors.TEXT_SECONDARY.name())
+        self._plot.setLabel('left', T('deviation'), units='"', color=Colors.TEXT_SECONDARY.name())
+        self._plot.setLabel('bottom', T('time_label'), units='s', color=Colors.TEXT_SECONDARY.name())
         self._plot.getViewBox().disableAutoRange()
 
         # Data line
@@ -159,8 +159,10 @@ class TrackingGraph(QWidget):
         self._plot.addItem(self._tol_lower_label)
 
         # Time fix markers (grey vertical lines every 30s)
+        # Pool a fixed max number to avoid unbounded growth over long sessions
         self._time_fixes = []
         self._time_fix_labels = []
+        self._MAX_TIME_FIXES = 40  # Max visible at once; recycle pool
 
         layout.addWidget(self._plot)
 
@@ -283,19 +285,34 @@ class TrackingGraph(QWidget):
                            mount_times: list = None):
         """Draw grey vertical lines every 30 seconds with time labels.
 
-        Reuses existing plot items instead of removing/recreating them each frame.
+        Uses a fixed-size pool of plot items to avoid unbounded growth.
+        Only shows marks within the visible time range.
         """
         if len(rel_times) == 0:
             return
 
         t_max = rel_times[-1]
-        needed = max(0, int(t_max / 30.0))  # Number of 30s marks needed
+
+        # Determine visible range — show last portion only for long sessions
+        vr = self._plot.getViewBox().viewRange()
+        x_min = max(0.0, vr[0][0]) if vr else 0.0
+        x_max = vr[0][1] if vr else t_max
+        y_top = vr[1][1] if vr else 0
+
+        # Compute which 30s marks fall in visible range
+        first_mark = max(1, int(x_min / 30.0) + 1)
+        last_mark = int(min(t_max, x_max) / 30.0)
+        visible_marks = list(range(first_mark, last_mark + 1))
+
+        # Limit to pool size
+        if len(visible_marks) > self._MAX_TIME_FIXES:
+            visible_marks = visible_marks[-self._MAX_TIME_FIXES:]
 
         fix_pen = pg.mkPen(Colors.TEXT_MUTED, width=1, style=Qt.PenStyle.DotLine)
         label_font = QFont('Consolas', 7)
 
-        # Add more items if needed
-        while len(self._time_fixes) < needed:
+        # Grow pool up to max if needed
+        while len(self._time_fixes) < min(len(visible_marks), self._MAX_TIME_FIXES):
             line = pg.InfiniteLine(pos=0, angle=90, pen=fix_pen)
             label = pg.TextItem(text='', color=Colors.TEXT_MUTED, anchor=(0.5, 1))
             label.setFont(label_font)
@@ -304,25 +321,20 @@ class TrackingGraph(QWidget):
             self._time_fixes.append(line)
             self._time_fix_labels.append(label)
 
-        vr = self._plot.getViewBox().viewRange()
-        y_top = vr[1][1] if vr else 0
-
-        # Update positions and visibility of existing items
+        # Update pool items: assign visible marks to pool slots
         for i in range(len(self._time_fixes)):
-            t = 30.0 * (i + 1)
-            if t < t_max:
+            if i < len(visible_marks):
+                mark_idx = visible_marks[i]
+                t = 30.0 * mark_idx
                 self._time_fixes[i].setPos(t)
                 self._time_fixes[i].setVisible(True)
 
-                # Time label from mount_times or from offset
-                label_text = ""
-                if mount_times:
-                    target_ts = t0 + t
-                    closest = min(mount_times, key=lambda mt: abs(mt[0] - target_ts), default=None)
-                    if closest and abs(closest[0] - target_ts) < 15:
-                        label_text = closest[1]
-                if not label_text:
-                    m, s = divmod(int(t), 60)
+                # Time label
+                m, s = divmod(int(t), 60)
+                h, m = divmod(m, 60)
+                if h > 0:
+                    label_text = f"{h}:{m:02d}:{s:02d}"
+                else:
                     label_text = f"{m:02d}:{s:02d}"
 
                 self._time_fix_labels[i].setText(label_text)
@@ -366,9 +378,9 @@ class TimeGraph(QWidget):
         self._plot = pg.PlotWidget()
         self._plot.setBackground(Colors.BG_GRAPH)
         self._plot.showGrid(x=False, y=True, alpha=0.1)
-        self._plot.setTitle("TIME — PC vs Mount Clock", color='#aaaaaa', size='11pt')
-        self._plot.setLabel('left', 'Time diff', units='ms', color=Colors.TEXT_SECONDARY.name())
-        self._plot.setLabel('bottom', 'Time', units='s', color=Colors.TEXT_SECONDARY.name())
+        self._plot.setTitle(T("time_graph_title"), color='#aaaaaa', size='11pt')
+        self._plot.setLabel('left', T('time_diff'), units='ms', color=Colors.TEXT_SECONDARY.name())
+        self._plot.setLabel('bottom', T('time_label'), units='s', color=Colors.TEXT_SECONDARY.name())
 
         # Add legend
         self._plot.addLegend(offset=(10, 10))
@@ -398,7 +410,7 @@ class TimeGraph(QWidget):
 
         # Watermark
         self._watermark = pg.TextItem(
-            text="TIME", color=Colors.TEXT_MUTED, anchor=(0.5, 0.5)
+            text=T("time_graph"), color=Colors.TEXT_MUTED, anchor=(0.5, 0.5)
         )
         self._watermark.setFont(QFont('Arial', 24, QFont.Weight.Bold))
         self._watermark.setOpacity(0.15)
@@ -503,9 +515,9 @@ class SeismicGraph(QWidget):
         self._plot = pg.PlotWidget()
         self._plot.setBackground(Colors.BG_GRAPH)
         self._plot.showGrid(x=False, y=True, alpha=0.1)
-        self._plot.setTitle("SEISMIC — Vibrations", color='#aaaaaa', size='11pt')
-        self._plot.setLabel('left', 'Amplitude', color=Colors.TEXT_SECONDARY.name())
-        self._plot.setLabel('bottom', 'Time', units='s', color=Colors.TEXT_SECONDARY.name())
+        self._plot.setTitle(T("seismic_title"), color='#aaaaaa', size='11pt')
+        self._plot.setLabel('left', T('amplitude'), color=Colors.TEXT_SECONDARY.name())
+        self._plot.setLabel('bottom', T('time_label'), units='s', color=Colors.TEXT_SECONDARY.name())
 
         # Data curve
         self._data_curve = self._plot.plot(
@@ -526,7 +538,7 @@ class SeismicGraph(QWidget):
 
         # Watermark
         self._watermark = pg.TextItem(
-            text="SEISMIC", color=Colors.TEXT_MUTED, anchor=(0.5, 0.5)
+            text=T("seismic"), color=Colors.TEXT_MUTED, anchor=(0.5, 0.5)
         )
         self._watermark.setFont(QFont('Arial', 24, QFont.Weight.Bold))
         self._watermark.setOpacity(0.15)
@@ -603,10 +615,10 @@ class AxialGraph(QWidget):
         self._plot = pg.PlotWidget()
         self._plot.setBackground(Colors.BG_GRAPH)
         self._plot.showGrid(x=False, y=True, alpha=0.1)
-        self._plot.setTitle("AXIAL — Speed / Displacement", color='#aaaaaa', size='11pt')
-        self._plot.setLabel('left', 'Speed', units='"/s',
+        self._plot.setTitle(T("axial_title"), color='#aaaaaa', size='11pt')
+        self._plot.setLabel('left', T('speed_label'), units='"/s',
                             color=Colors.TEXT_SECONDARY.name())
-        self._plot.setLabel('bottom', 'Time', units='s',
+        self._plot.setLabel('bottom', T('time_label'), units='s',
                             color=Colors.TEXT_SECONDARY.name())
         self._plot.addLegend(offset=(10, 10))
 
@@ -647,7 +659,7 @@ class AxialGraph(QWidget):
 
         # Watermark
         self._watermark = pg.TextItem(
-            text="AXIAL", color=Colors.TEXT_MUTED, anchor=(0.5, 0.5)
+            text=T("axial_title").split("—")[0].strip(), color=Colors.TEXT_MUTED, anchor=(0.5, 0.5)
         )
         self._watermark.setFont(QFont('Arial', 24, QFont.Weight.Bold))
         self._watermark.setOpacity(0.15)

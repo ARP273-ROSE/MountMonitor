@@ -34,6 +34,7 @@ FFT_graphs/
 
 # Original Java files and launchers (kept for reference, not tracked)
 *.jar
+*.class
 *.dll
 *.chm
 *.pref
@@ -41,6 +42,9 @@ MountMonitor.bat
 MountMonitor_simAll.bat
 MountMonitor_simMount.bat
 MountMonitor_simSeismometer.bat
+
+# Mount log files (large binary data, not tracked)
+mountlog/
 
 # LaTeX temp files
 *.aux

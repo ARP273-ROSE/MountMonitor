@@ -83,9 +83,10 @@ def arcsec_to_dec(arcsec: float) -> float:
     return arcsec / 3600.0
 
 
-def ra_diff_arcsec(ra1: float, ra2: float) -> float:
-    """Difference in RA (hours) converted to arcseconds.
+def ra_diff_arcsec(ra1: float, ra2: float, declination_deg: float = 0.0) -> float:
+    """Difference in RA (hours) converted to true arcseconds on sky.
 
+    Applies cos(dec) correction for true angular separation.
     Handles wrap-around at 24h.
     """
     diff = ra1 - ra2
@@ -93,7 +94,8 @@ def ra_diff_arcsec(ra1: float, ra2: float) -> float:
         diff -= 24.0
     elif diff < -12.0:
         diff += 24.0
-    return diff * 15.0 * 3600.0
+    cos_dec = math.cos(math.radians(declination_deg))
+    return diff * 15.0 * 3600.0 * cos_dec
 
 
 def dec_diff_arcsec(dec1: float, dec2: float) -> float:

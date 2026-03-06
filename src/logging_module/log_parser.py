@@ -2,6 +2,8 @@
 
 Parses .dat (27-column mount data) and .dti (time data) files
 to reconstruct session data for replay and analysis.
+
+Filters TRACKING-only data and segments by target for accurate analysis.
 """
 
 import logging
@@ -14,6 +16,28 @@ from typing import Optional
 import numpy as np
 
 logger = logging.getLogger(__name__)
+
+# Thresholds for detecting a target change (slew between objects)
+_RA_JUMP_THRESHOLD_HOURS = 0.25   # 15 arcmin in RA = new target
+_DEC_JUMP_THRESHOLD_DEG = 2.0     # 2 degrees in DEC = new target
+_MIN_SEGMENT_SAMPLES = 20         # Minimum samples to consider a segment valid
+
+
+@dataclass
+class TargetSegment:
+    """A segment of tracking data on a single target."""
+    start_index: int = 0
+    end_index: int = 0
+    ra_median_hours: float = 0.0
+    dec_median_degrees: float = 0.0
+    sample_count: int = 0
+    ra_deviations: np.ndarray = field(default_factory=lambda: np.array([]))
+    dec_deviations: np.ndarray = field(default_factory=lambda: np.array([]))
+    timestamps: np.ndarray = field(default_factory=lambda: np.array([]))
+    ra_hours: np.ndarray = field(default_factory=lambda: np.array([]))
+    dec_degrees: np.ndarray = field(default_factory=lambda: np.array([]))
+    ra_stdevs: np.ndarray = field(default_factory=lambda: np.array([]))
+    dec_stdevs: np.ndarray = field(default_factory=lambda: np.array([]))
 
 
 @dataclass
@@ -28,7 +52,7 @@ class ParsedSession:
     firmware: str = ""
     start_time: Optional[datetime] = None
 
-    # Mount data arrays (from .dat)
+    # Mount data arrays (from .dat) — ALL samples (raw)
     mount_times: list[str] = field(default_factory=list)
     ra_raw_strs: list[str] = field(default_factory=list)
     ra_hours: np.ndarray = field(default_factory=lambda: np.array([]))
@@ -41,9 +65,20 @@ class ParsedSession:
     statuses: list[str] = field(default_factory=list)
     timestamps: np.ndarray = field(default_factory=lambda: np.array([]))
 
-    # Computed deviation arrays (from RA/DEC raw)
+    # Computed deviation arrays — TRACKING only, per-segment combined
     ra_deviations: np.ndarray = field(default_factory=lambda: np.array([]))
     dec_deviations: np.ndarray = field(default_factory=lambda: np.array([]))
+
+    # TRACKING-only filtered arrays (for analysis)
+    tracking_mask: np.ndarray = field(default_factory=lambda: np.array([], dtype=bool))
+    tracking_timestamps: np.ndarray = field(default_factory=lambda: np.array([]))
+    tracking_ra_hours: np.ndarray = field(default_factory=lambda: np.array([]))
+    tracking_dec_degrees: np.ndarray = field(default_factory=lambda: np.array([]))
+    tracking_ra_stdevs: np.ndarray = field(default_factory=lambda: np.array([]))
+    tracking_dec_stdevs: np.ndarray = field(default_factory=lambda: np.array([]))
+
+    # Target segments (each segment = one target in TRACKING mode)
+    target_segments: list[TargetSegment] = field(default_factory=list)
 
     # Time data arrays (from .dti)
     time_mount_times: list[str] = field(default_factory=list)
@@ -71,6 +106,10 @@ class ParsedSession:
     @property
     def sample_count(self) -> int:
         return len(self.mount_times)
+
+    @property
+    def tracking_sample_count(self) -> int:
+        return int(np.sum(self.tracking_mask)) if len(self.tracking_mask) > 0 else 0
 
     @property
     def duration_seconds(self) -> float:
@@ -138,9 +177,84 @@ def _parse_dec_to_degrees(dec_str: str) -> float:
         return 0.0
 
 
+def _ra_diff_hours(ra1: float, ra2: float) -> float:
+    """Compute RA difference in hours, handling 24h wrap."""
+    diff = ra1 - ra2
+    if diff > 12.0:
+        diff -= 24.0
+    elif diff < -12.0:
+        diff += 24.0
+    return diff
+
+
+def _segment_tracking_data(
+    ra_hours: np.ndarray, dec_degrees: np.ndarray,
+    timestamps: np.ndarray, ra_stdevs: np.ndarray, dec_stdevs: np.ndarray,
+) -> list[TargetSegment]:
+    """Segment TRACKING data into target groups.
+
+    Detects target changes by finding large jumps in RA or DEC.
+    Computes per-segment deviations from each segment's own median.
+    """
+    n = len(ra_hours)
+    if n < _MIN_SEGMENT_SAMPLES:
+        return []
+
+    # Find segment boundaries: indices where RA or DEC jump significantly
+    boundaries = [0]
+    for i in range(1, n):
+        ra_jump = abs(_ra_diff_hours(ra_hours[i], ra_hours[i - 1]))
+        dec_jump = abs(dec_degrees[i] - dec_degrees[i - 1])
+        if ra_jump > _RA_JUMP_THRESHOLD_HOURS or dec_jump > _DEC_JUMP_THRESHOLD_DEG:
+            boundaries.append(i)
+    boundaries.append(n)
+
+    segments = []
+    for b in range(len(boundaries) - 1):
+        start = boundaries[b]
+        end = boundaries[b + 1]
+        count = end - start
+        if count < _MIN_SEGMENT_SAMPLES:
+            continue
+
+        seg_ra = ra_hours[start:end]
+        seg_dec = dec_degrees[start:end]
+        seg_ts = timestamps[start:end]
+        seg_ra_stdev = ra_stdevs[start:end]
+        seg_dec_stdev = dec_stdevs[start:end]
+
+        ra_median = float(np.median(seg_ra))
+        dec_median = float(np.median(seg_dec))
+        cos_dec = np.cos(np.radians(dec_median))
+
+        # RA deviations in true arcseconds on the sky
+        ra_dev = np.array([_ra_diff_hours(r, ra_median) for r in seg_ra]) * 15.0 * 3600.0 * cos_dec
+        # DEC deviations in arcseconds
+        dec_dev = (seg_dec - dec_median) * 3600.0
+
+        seg = TargetSegment(
+            start_index=start,
+            end_index=end,
+            ra_median_hours=ra_median,
+            dec_median_degrees=dec_median,
+            sample_count=count,
+            ra_deviations=ra_dev,
+            dec_deviations=dec_dev,
+            timestamps=seg_ts,
+            ra_hours=seg_ra,
+            dec_degrees=seg_dec,
+            ra_stdevs=seg_ra_stdev,
+            dec_stdevs=seg_dec_stdev,
+        )
+        segments.append(seg)
+
+    return segments
+
+
 def parse_dat_file(dat_path: Path) -> ParsedSession:
     """Parse a .dat file (27-column TAB-separated mount data).
 
+    Filters TRACKING samples, segments by target, computes per-segment deviations.
     Returns a ParsedSession with all mount data arrays populated.
     """
     session = ParsedSession(file_path=str(dat_path))
@@ -257,7 +371,7 @@ def parse_dat_file(dat_path: Path) -> ParsedSession:
         corrected_times.append(t + offset)
         prev_t = t
 
-    # Convert to numpy arrays
+    # Convert to numpy arrays (ALL samples — raw)
     session.mount_times = mount_times
     session.ra_raw_strs = ra_raw_strs
     session.ra_hours = np.array(ra_hours_list)
@@ -270,17 +384,46 @@ def parse_dat_file(dat_path: Path) -> ParsedSession:
     session.statuses = statuses
     session.timestamps = np.array(corrected_times)
 
-    # Compute deviations from median (same as live DataProcessor)
-    if len(session.ra_hours) > 0:
-        ra_median = np.median(session.ra_hours)
-        # RA deviation in arcseconds: (ra - ref) * 15 * 3600 * cos(dec)
-        dec_median = np.median(session.dec_degrees)
-        cos_dec = np.cos(np.radians(dec_median))
-        session.ra_deviations = (session.ra_hours - ra_median) * 15.0 * 3600.0 * cos_dec
+    # ── Filter TRACKING-only samples ──
+    tracking_mask = np.array([s == "TRACKING" for s in statuses], dtype=bool)
+    session.tracking_mask = tracking_mask
 
-    if len(session.dec_degrees) > 0:
-        dec_median = np.median(session.dec_degrees)
-        session.dec_deviations = (session.dec_degrees - dec_median) * 3600.0
+    if np.any(tracking_mask):
+        session.tracking_timestamps = session.timestamps[tracking_mask]
+        session.tracking_ra_hours = session.ra_hours[tracking_mask]
+        session.tracking_dec_degrees = session.dec_degrees[tracking_mask]
+        session.tracking_ra_stdevs = session.ra_stdevs[tracking_mask]
+        session.tracking_dec_stdevs = session.dec_stdevs[tracking_mask]
+
+        # ── Segment tracking data by target ──
+        segments = _segment_tracking_data(
+            session.tracking_ra_hours,
+            session.tracking_dec_degrees,
+            session.tracking_timestamps,
+            session.tracking_ra_stdevs,
+            session.tracking_dec_stdevs,
+        )
+        session.target_segments = segments
+
+        # ── Combine per-segment deviations into session-level arrays ──
+        if segments:
+            all_ra_dev = np.concatenate([seg.ra_deviations for seg in segments])
+            all_dec_dev = np.concatenate([seg.dec_deviations for seg in segments])
+            session.ra_deviations = all_ra_dev
+            session.dec_deviations = all_dec_dev
+        else:
+            # Fallback: single segment from all tracking data
+            ra_med = float(np.median(session.tracking_ra_hours))
+            dec_med = float(np.median(session.tracking_dec_degrees))
+            cos_dec = np.cos(np.radians(dec_med))
+            ra_diffs = np.array([_ra_diff_hours(r, ra_med) for r in session.tracking_ra_hours])
+            session.ra_deviations = ra_diffs * 15.0 * 3600.0 * cos_dec
+            session.dec_deviations = (session.tracking_dec_degrees - dec_med) * 3600.0
+
+        logger.info(f"Segmented into {len(segments)} target(s) from "
+                     f"{int(np.sum(tracking_mask))} tracking samples")
+    else:
+        logger.warning("No TRACKING samples found in session")
 
     # Extract date from filename
     fname = dat_path.stem  # MountMonitor_YYYYMMDD-HHMMSS
@@ -294,7 +437,8 @@ def parse_dat_file(dat_path: Path) -> ParsedSession:
             pass
 
     logger.info(f"Parsed {len(mount_times)} samples from {dat_path.name} "
-                f"(duration: {session.duration_str})")
+                f"({int(np.sum(tracking_mask))} tracking, "
+                f"duration: {session.duration_str})")
     return session
 
 

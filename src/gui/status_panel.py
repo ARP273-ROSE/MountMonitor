@@ -54,9 +54,10 @@ class StatusPanel(QWidget):
         values_layout.addWidget(self._status_label, 0, 1, 1, 3)
 
         # RA values
-        ra_label = QLabel("RA:")
+        ra_label = QLabel(T("label_ra"))
         ra_label.setFont(mono_font)
         ra_label.setStyleSheet(f"color: {Colors.GRAPH_RA.name()};")
+        ra_label.setToolTip("EN: Right Ascension\nFR: Ascension Droite")
         values_layout.addWidget(ra_label, 1, 0)
 
         self._ra_value = QLabel("--:--:--.--")
@@ -73,9 +74,10 @@ class StatusPanel(QWidget):
         values_layout.addWidget(self._ra_stdev, 1, 3)
 
         # DEC values
-        dec_label = QLabel("DEC:")
+        dec_label = QLabel(T("label_dec"))
         dec_label.setFont(mono_font)
         dec_label.setStyleSheet(f"color: {Colors.GRAPH_DEC.name()};")
+        dec_label.setToolTip("EN: Declination\nFR: Déclinaison")
         values_layout.addWidget(dec_label, 2, 0)
 
         self._dec_value = QLabel("+--:--:--.--")
@@ -92,9 +94,10 @@ class StatusPanel(QWidget):
         values_layout.addWidget(self._dec_stdev, 2, 3)
 
         # Frequency and sample count
-        self._freq_label = QLabel("0.0 Hz | 0 samples")
+        self._freq_label = QLabel(f"0.0 Hz | 0 {T('samples')}")
         self._freq_label.setFont(QFont("Consolas", 9))
         self._freq_label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY.name()};")
+        self._freq_label.setToolTip("EN: Polling frequency and sample count\nFR: Fréquence d'acquisition et nombre d'échantillons")
         values_layout.addWidget(self._freq_label, 3, 0, 1, 4)
 
         layout.addWidget(values_frame)
@@ -148,7 +151,7 @@ class StatusPanel(QWidget):
             MountStatus.SLEWING: (Colors.STATUS_WARNING, T("mount_slewing")),
             MountStatus.PARKED: (Colors.STATUS_INACTIVE, T("mount_parked")),
             MountStatus.IDLE: (Colors.STATUS_INACTIVE, T("mount_idle")),
-            MountStatus.ERROR: (Colors.STATUS_ERROR, "Error"),
+            MountStatus.ERROR: (Colors.STATUS_ERROR, T("error_status")),
             MountStatus.UNKNOWN: (Colors.STATUS_INACTIVE, T("disconnected")),
         }
         color, text = status_map.get(status, (Colors.STATUS_INACTIVE, "?"))
@@ -157,7 +160,7 @@ class StatusPanel(QWidget):
 
     def update_frequency(self, freq_hz: float, sample_count: int):
         """Update frequency and sample count display."""
-        self._freq_label.setText(f"{freq_hz:.1f} Hz | {sample_count} samples")
+        self._freq_label.setText(f"{freq_hz:.1f} Hz | {sample_count} {T('samples')}")
 
     def update_stdev(self, ra_stdev: float, dec_stdev: float):
         """Update STDEV display values."""
@@ -201,5 +204,5 @@ class StatusPanel(QWidget):
         self._dec_dev.setText("Δ --.--\"")
         self._ra_stdev.setText("σ --.--\"")
         self._dec_stdev.setText("σ --.--\"")
-        self._freq_label.setText("0.0 Hz | 0 samples")
+        self._freq_label.setText(f"0.0 Hz | 0 {T('samples')}")
         self._log_text.clear()

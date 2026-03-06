@@ -128,7 +128,7 @@ class PreferencesDialog(QDialog):
         if current_serial:
             self._serial_port.setCurrentText(current_serial)
         self._serial_port.setToolTip("EN: Serial port for mount\nFR: Port série de la monture")
-        conn_form.addRow("Serial port / Port série", self._serial_port)
+        conn_form.addRow(T("pref_serial_port"), self._serial_port)
 
         ascom_row = QHBoxLayout()
         self._ascom_driver = QLineEdit(self._settings.get("ascom_driver"))
@@ -136,7 +136,7 @@ class PreferencesDialog(QDialog):
         self._ascom_driver.setReadOnly(True)
         ascom_row.addWidget(self._ascom_driver)
 
-        self._ascom_choose_btn = QPushButton("Select... / Sélectionner...")
+        self._ascom_choose_btn = QPushButton(T("pref_select_ascom"))
         self._ascom_choose_btn.setToolTip(
             "EN: Open ASCOM Chooser to select mount driver\n"
             "FR: Ouvrir le sélecteur ASCOM pour choisir le driver"
@@ -163,7 +163,7 @@ class PreferencesDialog(QDialog):
         lang_map = {"auto": 0, "en": 1, "fr": 2}
         self._language.setCurrentIndex(lang_map.get(self._settings.get("language"), 0))
         self._language.setToolTip("EN: Interface language\nFR: Langue de l'interface")
-        layout_form.addRow("Language / Langue", self._language)
+        layout_form.addRow(T("pref_language"), self._language)
 
         layout.addWidget(layout_group)
         layout.addStretch()
@@ -210,7 +210,7 @@ class PreferencesDialog(QDialog):
         tol_form = QFormLayout(tol_group)
 
         self._reference_mode = QComboBox()
-        self._reference_mode.addItems(["Median", "Mount target coordinates"])
+        self._reference_mode.addItems([T("ref_median"), T("ref_target")])
         self._reference_mode.setCurrentIndex(0 if self._settings.get("reference_mode") == "median" else 1)
         self._reference_mode.setToolTip("EN: Reference for deviations\nFR: Référence pour les déviations")
         tol_form.addRow(T("pref_reference"), self._reference_mode)
@@ -258,7 +258,7 @@ class PreferencesDialog(QDialog):
         log_form = QFormLayout(log_group)
 
         self._log_mode = QComboBox()
-        self._log_mode.addItems(["All / Tout", "Only when tracking / Suivi uniquement"])
+        self._log_mode.addItems([T("log_all"), T("log_tracking_only")])
         self._log_mode.setCurrentIndex(0 if self._settings.get("log_mode") == "all" else 1)
         self._log_mode.setToolTip("EN: What to log\nFR: Quoi journaliser")
         log_form.addRow(T("pref_log_mode_label"), self._log_mode)
@@ -271,14 +271,14 @@ class PreferencesDialog(QDialog):
         log_form.addRow(T("pref_delay_slew"), self._delay_slew)
 
         self._axial_mode = QComboBox()
-        self._axial_mode.addItems(["Off / Désactivé", "Axial velocity / Vitesse axiale", "Axial displacement / Déplacement axial"])
+        self._axial_mode.addItems([T("axial_off"), T("axial_velocity"), T("axial_displacement")])
         mode_map = {"off": 0, "velocity": 1, "displacement": 2}
         self._axial_mode.setCurrentIndex(mode_map.get(self._settings.get("axial_mode"), 0))
         self._axial_mode.setToolTip("EN: Axial position monitoring mode\nFR: Mode de surveillance position axiale")
         log_form.addRow(T("pref_axial_mode"), self._axial_mode)
 
         self._reset_mode = QComboBox()
-        self._reset_mode.addItems(["Manual / Manuel", "When slewing / En pointage"])
+        self._reset_mode.addItems([T("mode_manual"), T("mode_slewing")])
         reset_mode_map = {"manual": 0, "slewing": 1}
         self._reset_mode.setCurrentIndex(reset_mode_map.get(self._settings.get("reset_mode"), 0))
         self._reset_mode.setToolTip(
@@ -289,9 +289,7 @@ class PreferencesDialog(QDialog):
 
         self._dump_mode = QComboBox()
         self._dump_mode.addItems([
-            "Manual / Manuel",
-            "When slewing / En pointage",
-            "When parking / Au parcage",
+            T("mode_manual"), T("mode_slewing"), T("mode_parking"),
         ])
         dump_mode_map = {"manual": 0, "slewing": 1, "parking": 2}
         self._dump_mode.setCurrentIndex(dump_mode_map.get(self._settings.get("dump_mode"), 0))
@@ -303,9 +301,7 @@ class PreferencesDialog(QDialog):
 
         self._close_files_mode = QComboBox()
         self._close_files_mode.addItems([
-            "Manual / Manuel",
-            "When slewing / En pointage",
-            "When parking / Au parcage",
+            T("mode_manual"), T("mode_slewing"), T("mode_parking"),
         ])
         close_mode_map = {"manual": 0, "slewing": 1, "parking": 2}
         self._close_files_mode.setCurrentIndex(close_mode_map.get(self._settings.get("close_files_mode"), 0))
@@ -363,7 +359,7 @@ class PreferencesDialog(QDialog):
         self._sei_enabled = QCheckBox()
         self._sei_enabled.setChecked(self._settings.get("seismometer_enabled"))
         self._sei_enabled.setToolTip("EN: Enable seismometer data display\nFR: Activer l'affichage sismomètre")
-        sei_form.addRow("Enable / Activer", self._sei_enabled)
+        sei_form.addRow(T("pref_enable"), self._sei_enabled)
 
         self._sei_port = QComboBox()
         self._sei_port.setEditable(True)
@@ -373,14 +369,14 @@ class PreferencesDialog(QDialog):
         if current_port:
             self._sei_port.setCurrentText(current_port)
         self._sei_port.setToolTip("EN: Serial port for seismometer\nFR: Port série du sismomètre")
-        sei_form.addRow("Serial port / Port série", self._sei_port)
+        sei_form.addRow(T("pref_serial_port"), self._sei_port)
 
         self._sei_freq = QDoubleSpinBox()
         self._sei_freq.setRange(1, 100)
         self._sei_freq.setValue(self._settings.get("seismometer_frequency_hz"))
         self._sei_freq.setSuffix(" Hz")
         self._sei_freq.setToolTip("EN: Seismometer sampling frequency\nFR: Fréquence d'échantillonnage sismomètre")
-        sei_form.addRow("Frequency / Fréquence", self._sei_freq)
+        sei_form.addRow(T("pref_frequency"), self._sei_freq)
 
         self._sei_offset = QSpinBox()
         self._sei_offset.setRange(0, 10000)
@@ -392,7 +388,7 @@ class PreferencesDialog(QDialog):
         self._sei_range.setRange(100, 100000)
         self._sei_range.setValue(self._settings.get("seismometer_range"))
         self._sei_range.setToolTip("EN: Vertical range for seismic graph\nFR: Plage verticale du graphe sismique")
-        sei_form.addRow("Range / Plage", self._sei_range)
+        sei_form.addRow(T("pref_range"), self._sei_range)
 
         layout.addWidget(sei_group)
         layout.addStretch()
@@ -411,9 +407,7 @@ class PreferencesDialog(QDialog):
         checks_grid.addWidget(expected_label, 0, 1)
 
         # Row 1: Refraction
-        self._check_refraction = QCheckBox(
-            "Check refraction correction / Vérifier correction réfraction"
-        )
+        self._check_refraction = QCheckBox(T("check_refraction_label"))
         self._check_refraction.setChecked(self._settings.get("check_refraction_enabled"))
         self._check_refraction.setToolTip(
             "EN: Verify refraction correction at startup and after each slew\n"
@@ -423,9 +417,9 @@ class PreferencesDialog(QDialog):
 
         self._refraction_value = QComboBox()
         self._refraction_value.addItems([
-            "Not updating / Pas de mise à jour",
-            "Not updating while tracking / Pas de maj en suivi",
-            "Continuously updating / Mise à jour continue",
+            T("refraction_not_updating"),
+            T("refraction_not_tracking"),
+            T("refraction_continuous"),
         ])
         ref_val_map = {
             "not_updating": 0,
@@ -442,9 +436,7 @@ class PreferencesDialog(QDialog):
         checks_grid.addWidget(self._refraction_value, 1, 1)
 
         # Row 2: Tracking rate
-        self._check_tracking = QCheckBox(
-            "Check tracking rate / Vérifier vitesse de suivi"
-        )
+        self._check_tracking = QCheckBox(T("check_tracking_label"))
         self._check_tracking.setChecked(self._settings.get("check_tracking_rate"))
         self._check_tracking.setToolTip(
             "EN: Verify tracking rate matches expected value\n"
@@ -464,7 +456,7 @@ class PreferencesDialog(QDialog):
         checks_grid.addWidget(self._tracking_rate_value, 2, 1)
 
         # Row 3: GPS sync
-        self._check_gps = QCheckBox("Check GPS sync / Vérifier synchro GPS")
+        self._check_gps = QCheckBox(T("check_gps_label"))
         self._check_gps.setChecked(self._settings.get("check_gps_sync"))
         self._check_gps.setToolTip(
             "EN: Verify GPS clock synchronization\nFR: Vérifier la synchronisation GPS"
@@ -483,7 +475,7 @@ class PreferencesDialog(QDialog):
         checks_grid.addWidget(self._gps_sync_value, 3, 1)
 
         # Row 4: Dual tracking
-        self._check_dual = QCheckBox("Check dual tracking / Vérifier suivi dual")
+        self._check_dual = QCheckBox(T("check_dual_label"))
         self._check_dual.setChecked(self._settings.get("check_dual_tracking"))
         self._check_dual.setToolTip(
             "EN: Verify dual tracking status\nFR: Vérifier le statut du suivi dual"
