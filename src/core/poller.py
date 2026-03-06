@@ -6,7 +6,7 @@ status, and axial data. Emits signals for the GUI to consume.
 
 import time
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from PyQt6.QtCore import QThread, pyqtSignal, QMutex
@@ -124,6 +124,8 @@ class MountPoller(QThread):
                             continue
                         else:
                             self._slew_delay_active = False
+                            # After slew: check mount settings (like Java)
+                            self._check_mount_settings_after_slew()
 
                     # Skip if only logging tracking and mount isn't tracking
                     if self._log_tracking_only and sample.status != MountStatus.TRACKING:
@@ -184,7 +186,14 @@ class MountPoller(QThread):
         """
         now = datetime.now()
         pc_time = time.time()
-        pc_seconds = now.hour * 3600.0 + now.minute * 60.0 + now.second + now.microsecond / 1e6
+        # Use same timezone as the mount for time diff computation:
+        # - ASCOM: UTCDate returns UTC → use PC UTC
+        # - LX200: :GL# returns local time → use PC local time
+        if self._connection.mount_time_is_utc:
+            pc_ref = datetime.now(timezone.utc)
+        else:
+            pc_ref = now
+        pc_seconds = pc_ref.hour * 3600.0 + pc_ref.minute * 60.0 + pc_ref.second + pc_ref.microsecond / 1e6
 
         # Get status
         status = self._connection.get_status()
@@ -203,7 +212,7 @@ class MountPoller(QThread):
         if mount_time_str:
             mount_seconds = self._parse_mount_time_to_seconds(mount_time_str)
             if mount_seconds is not None:
-                # PC - Mount difference in milliseconds
+                # PC - Mount difference in milliseconds (same timezone)
                 diff_ms = (pc_seconds - mount_seconds) * 1000.0
                 # Handle day wrap-around
                 if diff_ms > 43200000:
@@ -297,6 +306,18 @@ class MountPoller(QThread):
             )
         except Exception as e:
             logger.error(f"Failed to retrieve mount info: {e}")
+
+    def _check_mount_settings_after_slew(self):
+        """Check mount settings after slew ends (like Java checkMountSettings)."""
+        try:
+            warnings = self._connection.check_mount_settings()
+            for warning in warnings:
+                self.log_message.emit(f"WRONG SET-UP: {warning}")
+                logger.warning(f"Mount settings issue: {warning}")
+            if not warnings:
+                self.log_message.emit("Logging started.")
+        except Exception as e:
+            logger.debug(f"Mount settings check failed: {e}")
 
     def stop(self):
         """Stop the polling loop."""

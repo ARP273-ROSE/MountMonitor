@@ -22,6 +22,7 @@ from PyQt6.QtGui import QAction, QFont, QIcon, QKeySequence
 from .graph_widgets import TrackingGraph, TimeGraph, SeismicGraph, AxialGraph
 from .fft_window import FFTWindow
 from .analysis_dialog import AnalysisDialog
+from .log10m_dialog import Log10mAnalysisDialog
 from .status_panel import StatusPanel
 from .preferences_dialog import PreferencesDialog
 from .theme import Colors
@@ -151,6 +152,15 @@ class MainWindow(QMainWindow):
         open_log_action.triggered.connect(self._open_log_file)
         file_menu.addAction(open_log_action)
 
+        open_log10m_action = QAction(T("menu_open_log10m"), self)
+        open_log10m_action.setShortcut(QKeySequence("Ctrl+Shift+O"))
+        open_log10m_action.setToolTip(
+            "EN: Analyze 10micron mount internal log files (.log10m)\n"
+            "FR: Analyser les fichiers log internes de la monture 10micron (.log10m)"
+        )
+        open_log10m_action.triggered.connect(self._open_log10m_files)
+        file_menu.addAction(open_log10m_action)
+
         file_menu.addSeparator()
 
         quit_action = QAction(T("menu_quit"), self)
@@ -197,7 +207,7 @@ class MainWindow(QMainWindow):
             (T("reset_buffers"), self._reset_buffers),
             (T("reset_both"), self._reset_both),
             (T("reset_new_files"), self._new_log_files),
-            ("Dump Graphs / Exporter graphes", self._dump_graphs),
+            (T("dump_graphs_action"), self._dump_graphs),
         ]:
             action = QAction(label, self)
             action.triggered.connect(slot)
@@ -243,13 +253,13 @@ class MainWindow(QMainWindow):
         toolbar.setIconSize(toolbar.iconSize())
         self.addToolBar(toolbar)
 
-        self._btn_connect = QPushButton("Connect / Connecter")
-        self._btn_connect.setToolTip("EN: Connect to mount\nFR: Se connecter à la monture")
+        self._btn_connect = QPushButton(T("btn_connect"))
+        self._btn_connect.setToolTip(T("tt_connect"))
         self._btn_connect.clicked.connect(self._toggle_connection)
         toolbar.addWidget(self._btn_connect)
 
-        self._btn_logging = QPushButton("Start Log / Démarrer log")
-        self._btn_logging.setToolTip("EN: Start/stop data logging\nFR: Démarrer/arrêter l'enregistrement")
+        self._btn_logging = QPushButton(T("btn_start_log"))
+        self._btn_logging.setToolTip(T("tt_start_logging"))
         self._btn_logging.setEnabled(False)
         self._btn_logging.clicked.connect(self._toggle_logging)
         toolbar.addWidget(self._btn_logging)
@@ -257,12 +267,12 @@ class MainWindow(QMainWindow):
         toolbar.addSeparator()
 
         btn_fft = QPushButton("FFT")
-        btn_fft.setToolTip("EN: Open FFT analysis\nFR: Ouvrir l'analyse FFT")
+        btn_fft.setToolTip(T("tt_fft"))
         btn_fft.clicked.connect(self._show_fft)
         toolbar.addWidget(btn_fft)
 
         btn_prefs = QPushButton(T("menu_preferences"))
-        btn_prefs.setToolTip("EN: Open preferences\nFR: Ouvrir les préférences")
+        btn_prefs.setToolTip(T("tt_preferences"))
         btn_prefs.clicked.connect(self._show_preferences)
         toolbar.addWidget(btn_prefs)
 
@@ -371,8 +381,7 @@ class MainWindow(QMainWindow):
             serial_port = self._settings.get("serial_port")
             if not serial_port:
                 self._status_panel.add_message(
-                    "EN: No serial port configured / FR: Aucun port série configuré",
-                    Colors.STATUS_ERROR,
+                    T("no_serial_port"), Colors.STATUS_ERROR,
                 )
                 return
             self._connection = LX200SerialConnection(port=serial_port)
@@ -384,8 +393,7 @@ class MainWindow(QMainWindow):
                 driver_id = _ascom_choose("")
                 if not driver_id:
                     self._status_panel.add_message(
-                        "EN: No ASCOM driver selected / FR: Aucun driver ASCOM sélectionné",
-                        Colors.STATUS_ERROR,
+                        T("no_ascom_driver"), Colors.STATUS_ERROR,
                     )
                     return
                 self._settings.set("ascom_driver", driver_id)
@@ -393,7 +401,7 @@ class MainWindow(QMainWindow):
             self._connection = ASCOMConnection(driver_id=driver_id)
         else:
             self._status_panel.add_message(
-                f"Protocol {protocol} not yet implemented", Colors.STATUS_ERROR
+                f"{T('protocol_not_impl')}: {protocol}", Colors.STATUS_ERROR
             )
             return
 
@@ -405,7 +413,7 @@ class MainWindow(QMainWindow):
 
         self._connected = True
         self._status_panel.set_connected(True)
-        self._btn_connect.setText("Disconnect / Déconnecter")
+        self._btn_connect.setText(T("btn_disconnect"))
         self._connect_action.setEnabled(False)
         self._disconnect_action.setEnabled(True)
         self._btn_logging.setEnabled(True)
@@ -508,7 +516,7 @@ class MainWindow(QMainWindow):
 
         self._connected = False
         self._status_panel.set_connected(False)
-        self._btn_connect.setText("Connect / Connecter")
+        self._btn_connect.setText(T("btn_connect"))
         self._connect_action.setEnabled(True)
         self._disconnect_action.setEnabled(False)
         self._btn_logging.setEnabled(False)
@@ -866,7 +874,7 @@ class MainWindow(QMainWindow):
         )
         self._file_logger.start_session(session)
         self._logging_active = True
-        self._btn_logging.setText("Stop Log / Arrêter log")
+        self._btn_logging.setText(T("btn_stop_log"))
         # Start FFT timer for logging even if FFT window is not open
         if not self._fft_timer.isActive():
             self._fft_timer.start()
@@ -878,7 +886,7 @@ class MainWindow(QMainWindow):
             return
         self._file_logger.close()
         self._logging_active = False
-        self._btn_logging.setText("Start Log / Démarrer log")
+        self._btn_logging.setText(T("btn_start_log"))
         self._status_panel.add_message(T("logging_stopped"))
 
     def _new_log_files(self):
@@ -896,6 +904,11 @@ class MainWindow(QMainWindow):
             self._status_panel.add_message(T("new_log_files"))
 
     # ── Log replay & analysis ───────────────────────────────────
+
+    def _open_log10m_files(self):
+        """Open and analyze 10micron mount .log10m internal log files."""
+        dialog = Log10mAnalysisDialog(self)
+        dialog.exec()
 
     def _open_log_file(self):
         """Open a previous log file for replay and analysis."""
@@ -916,7 +929,7 @@ class MainWindow(QMainWindow):
             return
 
         self._status_panel.add_message(
-            f"Loading / Chargement : {Path(file_path).name}..."
+            f"{T('loading_file')} : {Path(file_path).name}..."
         )
         QApplication.processEvents()
 
@@ -1067,17 +1080,9 @@ class MainWindow(QMainWindow):
             if latest['size_kb'] < 1.0:
                 return
 
-            lang = get_language()
-            if lang == 'fr':
-                self._status_panel.add_message(
-                    "Monture parquée — analyse automatique de la nuit...",
-                    Colors.STATUS_OK,
-                )
-            else:
-                self._status_panel.add_message(
-                    "Mount parked — automatic night analysis...",
-                    Colors.STATUS_OK,
-                )
+            self._status_panel.add_message(
+                T("parked_auto_analysis"), Colors.STATUS_OK,
+            )
             QApplication.processEvents()
 
             session = parse_session(dat_path)
@@ -1174,7 +1179,7 @@ class MainWindow(QMainWindow):
             self._axial_graph.export_to_image("Axial_graphs")
         if self._fft_window and self._fft_window.isVisible():
             self._fft_window.export_to_image("FFT_graphs")
-        self._status_panel.add_message("Graphs exported / Graphes exportés")
+        self._status_panel.add_message(T("graphs_exported"))
 
     # ── Mount checks ────────────────────────────────────────────
 

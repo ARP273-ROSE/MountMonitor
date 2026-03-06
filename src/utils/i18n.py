@@ -76,67 +76,31 @@ TX = {
     "pref_ntp_server": {"en": "NTP server address", "fr": "Adresse du serveur NTP"},
     "pref_seismometer": {"en": "Seismometer", "fr": "Sismomètre"},
     "pref_mount_checks": {"en": "Mount checks", "fr": "Vérifications monture"},
-    "pref_connection": {"en": "Connection / Connexion", "fr": "Connection / Connexion"},
-    "pref_layout": {"en": "Layout / Mise en page", "fr": "Layout / Mise en page"},
-    "pref_graph_ratio": {
-        "en": "Graph:Textbox ratio / Ratio graphe:texte",
-        "fr": "Graph:Textbox ratio / Ratio graphe:texte",
-    },
-    "pref_polling_group": {"en": "Polling / Acquisition", "fr": "Polling / Acquisition"},
-    "pref_correct_graphs": {
-        "en": "Correct graphs for range / Corriger graphes pour la plage",
-        "fr": "Correct graphs for range / Corriger graphes pour la plage",
-    },
+    "pref_connection": {"en": "Connection", "fr": "Connexion"},
+    "pref_layout": {"en": "Layout", "fr": "Mise en page"},
+    "pref_graph_ratio": {"en": "Graph:Textbox ratio", "fr": "Ratio graphe:texte"},
+    "pref_polling_group": {"en": "Polling", "fr": "Acquisition"},
+    "pref_correct_graphs": {"en": "Correct graphs for range", "fr": "Corriger graphes pour la plage"},
     "pref_log_mode_label": {"en": "Mode", "fr": "Mode"},
-    "pref_delay_slew": {
-        "en": "Delay after slew / Délai après pointage",
-        "fr": "Delay after slew / Délai après pointage",
-    },
-    "pref_axial_mode": {
-        "en": "Axial mode / Mode axial",
-        "fr": "Axial mode / Mode axial",
-    },
-    "pref_ntp_group": {
-        "en": "NTP Time Server / Serveur NTP",
-        "fr": "NTP Time Server / Serveur NTP",
-    },
-    "pref_ntp_interval": {
-        "en": "Interval / Intervalle",
-        "fr": "Interval / Intervalle",
-    },
-    "pref_sei_offset": {"en": "Offset / Décalage", "fr": "Offset / Décalage"},
-    "pref_show_ra_ha": {
-        "en": "Show RA as HA [s] / AD en HA [s]",
-        "fr": "Show RA as HA [s] / AD en HA [s]",
-    },
-    "pref_ascom_driver": {
-        "en": "ASCOM Driver / Pilote ASCOM",
-        "fr": "ASCOM Driver / Pilote ASCOM",
-    },
-    "pref_reset_mode": {
-        "en": "Reset mode / Mode réinitialisation",
-        "fr": "Reset mode / Mode réinitialisation",
-    },
-    "pref_dump_graphs": {
-        "en": "Dump graphs / Export graphes",
-        "fr": "Dump graphs / Export graphes",
-    },
-    "pref_close_files": {
-        "en": "Close files / Fermer fichiers",
-        "fr": "Close files / Fermer fichiers",
-    },
-    "pref_tolerance_seismic": {
-        "en": "Seismic tolerance (%) / Tolérance sismique (%)",
-        "fr": "Seismic tolerance (%) / Tolérance sismique (%)",
-    },
-    "pref_history_lines": {
-        "en": "History lines / Lignes d'historique",
-        "fr": "History lines / Lignes d'historique",
-    },
-    "pref_expected_value": {
-        "en": "Expected value / Valeur attendue",
-        "fr": "Expected value / Valeur attendue",
-    },
+    "pref_delay_slew": {"en": "Delay after slew (s)", "fr": "Délai après pointage (s)"},
+    "pref_axial_mode": {"en": "Axial mode", "fr": "Mode axial"},
+    "pref_ntp_group": {"en": "NTP Time Server", "fr": "Serveur NTP"},
+    "pref_ntp_interval": {"en": "Interval (s)", "fr": "Intervalle (s)"},
+    "pref_sei_offset": {"en": "Offset", "fr": "Décalage"},
+    "pref_show_ra_ha": {"en": "Show RA as HA [s]", "fr": "AD en HA [s]"},
+    "pref_ascom_driver": {"en": "ASCOM Driver", "fr": "Pilote ASCOM"},
+    "pref_reset_mode": {"en": "Reset mode", "fr": "Mode réinitialisation"},
+    "pref_dump_graphs": {"en": "Dump graphs", "fr": "Export graphes"},
+    "pref_close_files": {"en": "Close files", "fr": "Fermer fichiers"},
+    "pref_tolerance_seismic": {"en": "Seismic tolerance (%)", "fr": "Tolérance sismique (%)"},
+    "pref_history_lines": {"en": "History lines", "fr": "Lignes d'historique"},
+    "pref_expected_value": {"en": "Expected value", "fr": "Valeur attendue"},
+    "pref_serial_port": {"en": "Serial port", "fr": "Port série"},
+    "pref_select_ascom": {"en": "Select...", "fr": "Sélectionner..."},
+    "pref_language": {"en": "Language", "fr": "Langue"},
+    "pref_enable": {"en": "Enable", "fr": "Activer"},
+    "pref_frequency": {"en": "Frequency (Hz)", "fr": "Fréquence (Hz)"},
+    "pref_range": {"en": "Range", "fr": "Plage"},
 
     # Logging
     "logging_started": {"en": "Logging started", "fr": "Journalisation démarrée"},
@@ -145,6 +109,7 @@ TX = {
 
     # Log replay & analysis
     "menu_open_log": {"en": "Open Log...", "fr": "Ouvrir un log..."},
+    "menu_open_log10m": {"en": "Analyze Mount Logs (.log10m)...", "fr": "Analyser logs monture (.log10m)..."},
     "open_log_title": {"en": "Open Log File", "fr": "Ouvrir un fichier log"},
     "replay_loaded": {
         "en": "Log loaded: {samples} samples, duration {duration}",
@@ -187,6 +152,111 @@ TX = {
     "update_skip": {"en": "Skip", "fr": "Ignorer"},
     "update_checking": {"en": "Checking for updates...", "fr": "Vérification des mises à jour..."},
     "update_up_to_date": {"en": "You are up to date", "fr": "Vous êtes à jour"},
+
+    # Status panel labels
+    "label_ra": {"en": "RA:", "fr": "AD :"},
+    "label_dec": {"en": "DEC:", "fr": "DÉC :"},
+    "samples": {"en": "samples", "fr": "échantillons"},
+    "error_status": {"en": "Error", "fr": "Erreur"},
+
+    # Buttons
+    "btn_connect": {"en": "Connect", "fr": "Connecter"},
+    "btn_disconnect": {"en": "Disconnect", "fr": "Déconnecter"},
+    "btn_start_log": {"en": "Start Log", "fr": "Démarrer log"},
+    "btn_stop_log": {"en": "Stop Log", "fr": "Arrêter log"},
+
+    # Messages
+    "graphs_exported": {"en": "Graphs exported", "fr": "Graphes exportés"},
+    "loading_file": {"en": "Loading", "fr": "Chargement"},
+    "no_serial_port": {
+        "en": "No serial port configured",
+        "fr": "Aucun port série configuré",
+    },
+    "no_ascom_driver": {
+        "en": "No ASCOM driver selected",
+        "fr": "Aucun driver ASCOM sélectionné",
+    },
+    "protocol_not_impl": {
+        "en": "Protocol not yet implemented",
+        "fr": "Protocole non implémenté",
+    },
+    "parked_auto_analysis": {
+        "en": "Mount parked — automatic night analysis...",
+        "fr": "Monture parquée — analyse automatique de la nuit...",
+    },
+    "dump_graphs_action": {"en": "Dump Graphs", "fr": "Exporter graphes"},
+
+    # Graph labels
+    "deviation": {"en": "Deviation", "fr": "Déviation"},
+    "time_label": {"en": "Time", "fr": "Temps"},
+    "time_graph_title": {
+        "en": "TIME — PC vs Mount Clock",
+        "fr": "TEMPS — PC vs Horloge monture",
+    },
+    "time_diff": {"en": "Time diff", "fr": "Diff. temps"},
+    "seismic_title": {
+        "en": "SEISMIC — Vibrations",
+        "fr": "SISMIQUE — Vibrations",
+    },
+    "amplitude": {"en": "Amplitude", "fr": "Amplitude"},
+    "axial_title": {
+        "en": "AXIAL — Speed / Displacement",
+        "fr": "AXIAL — Vitesse / Déplacement",
+    },
+    "speed_label": {"en": "Speed", "fr": "Vitesse"},
+    "frequency_label": {"en": "Frequency", "fr": "Fréquence"},
+    "period_label": {"en": "Period", "fr": "Période"},
+
+    # Preferences combobox items
+    "ref_median": {"en": "Median", "fr": "Médiane"},
+    "ref_target": {
+        "en": "Mount target coordinates",
+        "fr": "Coordonnées cible monture",
+    },
+    "log_all": {"en": "All", "fr": "Tout"},
+    "log_tracking_only": {
+        "en": "Only when tracking",
+        "fr": "Suivi uniquement",
+    },
+    "axial_off": {"en": "Off", "fr": "Désactivé"},
+    "axial_velocity": {"en": "Axial velocity", "fr": "Vitesse axiale"},
+    "axial_displacement": {
+        "en": "Axial displacement",
+        "fr": "Déplacement axial",
+    },
+    "mode_manual": {"en": "Manual", "fr": "Manuel"},
+    "mode_slewing": {"en": "When slewing", "fr": "En pointage"},
+    "mode_parking": {"en": "When parking", "fr": "Au parcage"},
+
+    # Mount checks labels
+    "check_refraction_label": {
+        "en": "Check refraction correction",
+        "fr": "Vérifier correction réfraction",
+    },
+    "check_tracking_label": {
+        "en": "Check tracking rate",
+        "fr": "Vérifier vitesse de suivi",
+    },
+    "check_gps_label": {
+        "en": "Check GPS sync",
+        "fr": "Vérifier synchro GPS",
+    },
+    "check_dual_label": {
+        "en": "Check dual tracking",
+        "fr": "Vérifier suivi dual",
+    },
+    "refraction_not_updating": {
+        "en": "Not updating",
+        "fr": "Pas de mise à jour",
+    },
+    "refraction_not_tracking": {
+        "en": "Not updating while tracking",
+        "fr": "Pas de maj en suivi",
+    },
+    "refraction_continuous": {
+        "en": "Continuously updating",
+        "fr": "Mise à jour continue",
+    },
 
     # Tooltips
     "tt_connect": {

@@ -1,13 +1,15 @@
 """Night session analysis dialog for MountMonitor.
 
 Provides comprehensive analysis of a recorded session:
-- Overall quality rating
-- RA/DEC tracking statistics
+- Overall quality rating (TRACKING data only)
+- Per-target RA/DEC tracking statistics
 - Periodic error detection via FFT
 - Drift analysis
 - Time synchronization analysis
 - Event summary
 - Detailed recommendations
+
+All text is bilingual FR/EN.
 """
 
 import logging
@@ -21,14 +23,15 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont, QTextCursor
 
-from ..logging_module.log_parser import ParsedSession
+from ..logging_module.log_parser import ParsedSession, TargetSegment
 from ..utils.i18n import T, get_language
+from ..utils.coordinates import format_ra, format_dec
 
 logger = logging.getLogger(__name__)
 
 
 def _rating_emoji(rating: str) -> str:
-    """Return text indicator for quality rating (no emoji per CLAUDE.md)."""
+    """Return bilingual text indicator for quality rating."""
     mapping = {
         'excellent': '[EXCELLENT]',
         'good': '[GOOD / BON]',
@@ -48,6 +51,13 @@ def _rating_color(rating: str) -> str:
     }.get(rating, '#ffffff')
 
 
+def _bi(en: str, fr: str, lang: str) -> str:
+    """Return bilingual string: both EN and FR always shown."""
+    if lang == 'fr':
+        return f"{fr} / {en}"
+    return f"{en} / {fr}"
+
+
 class AnalysisDialog(QDialog):
     """Comprehensive session analysis dialog."""
 
@@ -59,10 +69,8 @@ class AnalysisDialog(QDialog):
         self._run_analysis()
 
     def _setup_ui(self):
-        if self._lang == 'fr':
-            title = "Analyse de session — MountMonitor"
-        else:
-            title = "Session Analysis — MountMonitor"
+        title = _bi("Session Analysis — MountMonitor",
+                     "Analyse de session — MountMonitor", self._lang)
         self.setWindowTitle(title)
         self.setMinimumSize(900, 700)
         self.resize(1000, 800)
@@ -73,10 +81,12 @@ class AnalysisDialog(QDialog):
         header = QLabel()
         header.setFont(QFont("Arial", 14, QFont.Weight.Bold))
         header.setStyleSheet("color: #88ccff; margin: 8px;")
-        if self._lang == 'fr':
-            header.setText("Rapport d'analyse de la nuit")
-        else:
-            header.setText("Night Session Analysis Report")
+        header.setText(_bi("Night Session Analysis Report",
+                           "Rapport d'analyse de la nuit", self._lang))
+        header.setToolTip(
+            "EN: Comprehensive analysis of the recorded session\n"
+            "FR: Analyse complète de la session enregistrée"
+        )
         layout.addWidget(header)
 
         # Report text area
@@ -87,14 +97,17 @@ class AnalysisDialog(QDialog):
             "QTextEdit { background: #1a1a2e; color: #e0e0e0; "
             "border: 1px solid #333; padding: 8px; }"
         )
+        self._report.setToolTip(
+            "EN: Full analysis report text\n"
+            "FR: Texte complet du rapport d'analyse"
+        )
         layout.addWidget(self._report)
 
         # Buttons
         btn_layout = QHBoxLayout()
 
         btn_export = QPushButton(
-            "Export TXT" if self._lang == 'en'
-            else "Exporter TXT"
+            _bi("Export TXT", "Exporter TXT", self._lang)
         )
         btn_export.setToolTip(
             "EN: Export analysis report as text file\n"
@@ -106,7 +119,7 @@ class AnalysisDialog(QDialog):
         btn_layout.addStretch()
 
         btn_close = QPushButton(
-            "Close" if self._lang == 'en' else "Fermer"
+            _bi("Close", "Fermer", self._lang)
         )
         btn_close.setToolTip(
             "EN: Close analysis window\n"
@@ -137,11 +150,13 @@ class AnalysisDialog(QDialog):
         lines.append(f"  Mount          : {s.mount_name or 'N/A'}")
         if s.firmware:
             lines.append(f"  Firmware       : {s.firmware}")
-        lines.append(f"  Duration       : {s.duration_str}")
-        lines.append(f"  Samples        : {s.sample_count:,}")
+        lines.append(f"  Duration / Durée : {s.duration_str}")
+        lines.append(f"  Total samples / Échantillons totaux : {s.sample_count:,}")
+        lines.append(f"  Tracking samples / Échantillons suivi : {s.tracking_sample_count:,}")
         if s.effective_frequency > 0:
-            lines.append(f"  Sample rate    : {s.effective_frequency:.2f} Hz")
-        lines.append(f"  File           : {s.file_path}")
+            lines.append(f"  Sample rate / Fréquence : {s.effective_frequency:.2f} Hz")
+        lines.append(f"  Targets / Cibles : {len(s.target_segments)}")
+        lines.append(f"  File / Fichier : {s.file_path}")
         lines.append("")
 
         if s.sample_count == 0:
@@ -149,8 +164,15 @@ class AnalysisDialog(QDialog):
             self._report.setPlainText("\n".join(lines))
             return
 
+        if s.tracking_sample_count == 0:
+            lines.append("  [!] No TRACKING data found / Aucune donnée de suivi trouvée")
+            lines.append("      Only SLEWING/PARKED/IDLE samples in file.")
+            lines.append("      Seuls des échantillons SLEWING/PARKED/IDLE dans le fichier.")
+            self._report.setPlainText("\n".join(lines))
+            return
+
         # ═══════════════════════════════════════════════════════════
-        # 2. OVERALL QUALITY RATING
+        # 2. OVERALL QUALITY RATING (combined from all segments)
         # ═══════════════════════════════════════════════════════════
         ra_rms = float(np.std(s.ra_deviations)) if len(s.ra_deviations) > 0 else 999
         dec_rms = float(np.std(s.dec_deviations)) if len(s.dec_deviations) > 0 else 999
@@ -165,273 +187,81 @@ class AnalysisDialog(QDialog):
         else:
             rating = 'poor'
 
-        rating_color = _rating_color(rating)
         rating_text = _rating_emoji(rating)
 
         lines.append("=" * 70)
         lines.append("  OVERALL QUALITY / QUALITE GLOBALE")
         lines.append("=" * 70)
         lines.append("")
-        lines.append(f"  Rating         : {rating_text}")
-        lines.append(f"  Combined RMS   : {combined_rms:.3f}\"")
-        lines.append(f"  RA RMS         : {ra_rms:.3f}\"")
-        lines.append(f"  DEC RMS        : {dec_rms:.3f}\"")
+        lines.append(f"  Rating / Note      : {rating_text}")
+        lines.append(f"  Combined RMS       : {combined_rms:.3f}\"")
+        lines.append(f"  RA RMS             : {ra_rms:.3f}\"")
+        lines.append(f"  DEC RMS            : {dec_rms:.3f}\"")
         lines.append("")
 
-        if fr:
-            if rating == 'excellent':
-                lines.append("  Votre suivi est excellent ! Les étoiles seront")
-                lines.append("  parfaitement ponctuelles sur vos images.")
-            elif rating == 'good':
-                lines.append("  Bon suivi. Résultats satisfaisants pour la plupart")
-                lines.append("  des focales. Quelques améliorations possibles.")
-            elif rating == 'fair':
-                lines.append("  Suivi moyen. Visible sur les longues poses avec")
-                lines.append("  des focales élevées. Vérifiez l'alignement polaire.")
-            else:
-                lines.append("  Suivi insuffisant. Étoiles probablement allongées.")
-                lines.append("  Vérifiez : alignement polaire, serrage, équilibrage.")
+        if rating == 'excellent':
+            lines.append("  Your tracking is excellent! Stars will be perfectly round.")
+            lines.append("  Votre suivi est excellent ! Étoiles parfaitement ponctuelles.")
+        elif rating == 'good':
+            lines.append("  Good tracking. Satisfactory for most focal lengths.")
+            lines.append("  Bon suivi. Résultats satisfaisants pour la plupart des focales.")
+        elif rating == 'fair':
+            lines.append("  Fair tracking. Visible on long exposures at high focal lengths.")
+            lines.append("  Suivi moyen. Visible sur les longues poses à haute focale.")
+            lines.append("  Check polar alignment. / Vérifiez l'alignement polaire.")
         else:
-            if rating == 'excellent':
-                lines.append("  Your tracking is excellent! Stars will be")
-                lines.append("  perfectly round in your images.")
-            elif rating == 'good':
-                lines.append("  Good tracking. Satisfactory for most focal lengths.")
-                lines.append("  Some improvements possible.")
-            elif rating == 'fair':
-                lines.append("  Fair tracking. Visible on long exposures at high")
-                lines.append("  focal lengths. Check polar alignment.")
-            else:
-                lines.append("  Poor tracking. Stars likely elongated.")
-                lines.append("  Check: polar alignment, tightness, balance.")
+            lines.append("  Poor tracking. Stars likely elongated.")
+            lines.append("  Suivi insuffisant. Étoiles probablement allongées.")
+            lines.append("  Check: polar alignment, tightness, balance.")
+            lines.append("  Vérifiez : alignement polaire, serrage, équilibrage.")
         lines.append("")
 
         # ═══════════════════════════════════════════════════════════
-        # 3. RIGHT ASCENSION ANALYSIS
+        # 3. PER-TARGET ANALYSIS
         # ═══════════════════════════════════════════════════════════
-        lines.append("=" * 70)
-        lines.append("  RIGHT ASCENSION (RA) / ASCENSION DROITE (AD)")
-        lines.append("=" * 70)
-        lines.append("")
-
-        if len(s.ra_deviations) > 0:
-            ra = s.ra_deviations
-            lines.append(f"  Mean deviation     : {np.mean(ra):+.4f}\"")
-            lines.append(f"  Median deviation   : {np.median(ra):+.4f}\"")
-            lines.append(f"  RMS (std dev)      : {ra_rms:.4f}\"")
-            lines.append(f"  Peak-to-peak       : {np.ptp(ra):.4f}\"")
-            lines.append(f"  Min deviation      : {np.min(ra):+.4f}\"")
-            lines.append(f"  Max deviation      : {np.max(ra):+.4f}\"")
-            lines.append(f"  95th percentile    : {np.percentile(np.abs(ra), 95):.4f}\"")
-            lines.append(f"  99th percentile    : {np.percentile(np.abs(ra), 99):.4f}\"")
+        for seg_idx, seg in enumerate(s.target_segments):
+            lines.append("=" * 70)
+            ra_str = format_ra(seg.ra_median_hours)
+            dec_str = format_dec(seg.dec_median_degrees)
+            lines.append(f"  TARGET / CIBLE #{seg_idx + 1}  —  RA {ra_str}  DEC {dec_str}  "
+                         f"({seg.sample_count:,} samples / échantillons)")
+            lines.append("=" * 70)
             lines.append("")
 
-            # RA STDEV statistics
-            if len(s.ra_stdevs) > 0 and np.any(s.ra_stdevs > 0):
-                valid_stdevs = s.ra_stdevs[s.ra_stdevs > 0]
-                lines.append(f"  Running STDEV avg  : {np.mean(valid_stdevs):.4f}\"")
-                lines.append(f"  Running STDEV max  : {np.max(valid_stdevs):.4f}\"")
-                lines.append(f"  Running STDEV med  : {np.median(valid_stdevs):.4f}\"")
-                lines.append("")
+            self._write_axis_stats(lines, "RA", seg.ra_deviations,
+                                   seg.timestamps, seg.ra_stdevs, fr)
+            self._write_axis_stats(lines, "DEC", seg.dec_deviations,
+                                   seg.timestamps, seg.dec_stdevs, fr)
 
-            # Drift analysis
-            if len(ra) > 100:
-                t_rel = s.timestamps - s.timestamps[0]
-                coeffs = np.polyfit(t_rel, ra, 1)
-                drift_per_min = coeffs[0] * 60.0
-                drift_per_hour = coeffs[0] * 3600.0
-                lines.append(f"  Drift rate         : {drift_per_min:+.4f}\"/min ({drift_per_hour:+.2f}\"/h)")
+            # FFT for this segment
+            if len(seg.ra_deviations) > 64:
+                freq = len(seg.ra_deviations) / max(1.0, seg.timestamps[-1] - seg.timestamps[0])
+                self._write_fft(lines, "RA", seg.ra_deviations, freq, fr, top_n=5)
+            if len(seg.dec_deviations) > 64:
+                freq = len(seg.dec_deviations) / max(1.0, seg.timestamps[-1] - seg.timestamps[0])
+                self._write_fft(lines, "DEC", seg.dec_deviations, freq, fr, top_n=3)
 
-                if abs(drift_per_hour) > 5.0:
-                    if fr:
-                        lines.append("  [!] Dérive RA significative — vérifiez l'alignement polaire (azimut)")
-                    else:
-                        lines.append("  [!] Significant RA drift — check polar alignment (azimuth)")
-                elif abs(drift_per_hour) > 1.0:
-                    if fr:
-                        lines.append("  [i] Légère dérive RA détectée")
-                    else:
-                        lines.append("  [i] Slight RA drift detected")
-                else:
-                    if fr:
-                        lines.append("  [OK] Pas de dérive RA significative")
-                    else:
-                        lines.append("  [OK] No significant RA drift")
-                lines.append("")
-        lines.append("")
-
-        # ═══════════════════════════════════════════════════════════
-        # 4. DECLINATION ANALYSIS
-        # ═══════════════════════════════════════════════════════════
-        lines.append("=" * 70)
-        lines.append("  DECLINATION (DEC) / DECLINAISON (DEC)")
-        lines.append("=" * 70)
-        lines.append("")
-
-        if len(s.dec_deviations) > 0:
-            dec = s.dec_deviations
-            lines.append(f"  Mean deviation     : {np.mean(dec):+.4f}\"")
-            lines.append(f"  Median deviation   : {np.median(dec):+.4f}\"")
-            lines.append(f"  RMS (std dev)      : {dec_rms:.4f}\"")
-            lines.append(f"  Peak-to-peak       : {np.ptp(dec):.4f}\"")
-            lines.append(f"  Min deviation      : {np.min(dec):+.4f}\"")
-            lines.append(f"  Max deviation      : {np.max(dec):+.4f}\"")
-            lines.append(f"  95th percentile    : {np.percentile(np.abs(dec), 95):.4f}\"")
-            lines.append(f"  99th percentile    : {np.percentile(np.abs(dec), 99):.4f}\"")
-            lines.append("")
-
-            # DEC STDEV statistics
-            if len(s.dec_stdevs) > 0 and np.any(s.dec_stdevs > 0):
-                valid_stdevs = s.dec_stdevs[s.dec_stdevs > 0]
-                lines.append(f"  Running STDEV avg  : {np.mean(valid_stdevs):.4f}\"")
-                lines.append(f"  Running STDEV max  : {np.max(valid_stdevs):.4f}\"")
-                lines.append(f"  Running STDEV med  : {np.median(valid_stdevs):.4f}\"")
-                lines.append("")
-
-            # DEC Drift
-            if len(dec) > 100:
-                t_rel = s.timestamps - s.timestamps[0]
-                coeffs = np.polyfit(t_rel, dec, 1)
-                drift_per_min = coeffs[0] * 60.0
-                drift_per_hour = coeffs[0] * 3600.0
-                lines.append(f"  Drift rate         : {drift_per_min:+.4f}\"/min ({drift_per_hour:+.2f}\"/h)")
-
-                if abs(drift_per_hour) > 5.0:
-                    if fr:
-                        lines.append("  [!] Dérive DEC significative — vérifiez l'alignement polaire (altitude)")
-                    else:
-                        lines.append("  [!] Significant DEC drift — check polar alignment (altitude)")
-                elif abs(drift_per_hour) > 1.0:
-                    if fr:
-                        lines.append("  [i] Légère dérive DEC détectée")
-                    else:
-                        lines.append("  [i] Slight DEC drift detected")
-                else:
-                    if fr:
-                        lines.append("  [OK] Pas de dérive DEC significative")
-                    else:
-                        lines.append("  [OK] No significant DEC drift")
-                lines.append("")
-        lines.append("")
-
-        # ═══════════════════════════════════════════════════════════
-        # 5. FFT / PERIODIC ERROR ANALYSIS
-        # ═══════════════════════════════════════════════════════════
-        lines.append("=" * 70)
-        lines.append("  FFT / PERIODIC ERROR / ERREUR PERIODIQUE")
-        lines.append("=" * 70)
-        lines.append("")
-
-        if len(s.ra_deviations) > 64 and s.effective_frequency > 0:
-            ra_data = s.ra_deviations - np.mean(s.ra_deviations)
-            window = np.hanning(len(ra_data))
-            windowed = ra_data * window
-            n = len(windowed)
-            fft_result = np.fft.rfft(windowed)
-            magnitudes = 2.0 / n * np.abs(fft_result)
-            frequencies = np.fft.rfftfreq(n, d=1.0 / s.effective_frequency)
-
-            # Skip DC component
-            freqs = frequencies[1:]
-            mags = magnitudes[1:]
-
-            if len(mags) > 0:
-                # Find top 5 peaks
-                peak_indices = np.argsort(mags)[::-1][:5]
-
-                lines.append("  RA FFT — Top 5 peaks / 5 pics dominants :")
-                lines.append(f"  {'Rank':>4}  {'Frequency':>12}  {'Period':>12}  {'Amplitude':>12}")
-                lines.append(f"  {'----':>4}  {'----------':>12}  {'------':>12}  {'---------':>12}")
-
-                for rank, idx in enumerate(peak_indices, 1):
-                    freq = freqs[idx]
-                    period = 1.0 / freq if freq > 0 else float('inf')
-                    amp = mags[idx]
-
-                    if period > 3600:
-                        period_str = f"{period/3600:.1f} h"
-                    elif period > 60:
-                        period_str = f"{period/60:.1f} min"
-                    else:
-                        period_str = f"{period:.1f} s"
-
-                    lines.append(f"  #{rank:>3}  {freq:>10.5f} Hz  {period_str:>12}  {amp:>10.4f}\"")
-
-                lines.append("")
-
-                # Identify PE
-                dominant_idx = peak_indices[0]
-                dominant_freq = freqs[dominant_idx]
-                dominant_period = 1.0 / dominant_freq if dominant_freq > 0 else 0
-                dominant_amp = mags[dominant_idx]
-
-                if 120 < dominant_period < 900:
-                    if fr:
-                        lines.append(f"  [PE] Erreur périodique détectée !")
-                        lines.append(f"        Période : {dominant_period:.1f} s ({dominant_period/60:.1f} min)")
-                        lines.append(f"        Amplitude : {dominant_amp:.4f}\"")
-                        if dominant_amp < 0.5:
-                            lines.append("        => PE très faible, excellent !")
-                        elif dominant_amp < 1.5:
-                            lines.append("        => PE acceptable")
-                        else:
-                            lines.append("        => PE élevée — considérez la calibration PEC")
-                    else:
-                        lines.append(f"  [PE] Periodic Error detected!")
-                        lines.append(f"        Period: {dominant_period:.1f} s ({dominant_period/60:.1f} min)")
-                        lines.append(f"        Amplitude: {dominant_amp:.4f}\"")
-                        if dominant_amp < 0.5:
-                            lines.append("        => Very low PE, excellent!")
-                        elif dominant_amp < 1.5:
-                            lines.append("        => Acceptable PE")
-                        else:
-                            lines.append("        => High PE — consider PEC calibration")
-                else:
-                    if fr:
-                        lines.append("  [i] Pas d'erreur périodique typique détectée dans la plage 2-15 min")
-                    else:
-                        lines.append("  [i] No typical periodic error detected in 2-15 min range")
-                lines.append("")
-
-            # DEC FFT
-            if len(s.dec_deviations) > 64:
-                dec_data = s.dec_deviations - np.mean(s.dec_deviations)
-                window = np.hanning(len(dec_data))
-                windowed = dec_data * window
-                n = len(windowed)
-                fft_result = np.fft.rfft(windowed)
-                mags = 2.0 / n * np.abs(fft_result)
-                freqs = np.fft.rfftfreq(n, d=1.0 / s.effective_frequency)
-                freqs = freqs[1:]
-                mags = mags[1:]
-
-                if len(mags) > 0:
-                    peak_indices = np.argsort(mags)[::-1][:3]
-                    lines.append("  DEC FFT — Top 3 peaks / 3 pics dominants :")
-                    lines.append(f"  {'Rank':>4}  {'Frequency':>12}  {'Period':>12}  {'Amplitude':>12}")
-                    lines.append(f"  {'----':>4}  {'----------':>12}  {'------':>12}  {'---------':>12}")
-                    for rank, idx in enumerate(peak_indices, 1):
-                        freq = freqs[idx]
-                        period = 1.0 / freq if freq > 0 else float('inf')
-                        amp = mags[idx]
-                        if period > 3600:
-                            period_str = f"{period/3600:.1f} h"
-                        elif period > 60:
-                            period_str = f"{period/60:.1f} min"
-                        else:
-                            period_str = f"{period:.1f} s"
-                        lines.append(f"  #{rank:>3}  {freq:>10.5f} Hz  {period_str:>12}  {amp:>10.4f}\"")
-                    lines.append("")
-
-        else:
-            if fr:
-                lines.append("  Pas assez de données pour l'analyse FFT (minimum 64 échantillons)")
-            else:
-                lines.append("  Not enough data for FFT analysis (minimum 64 samples)")
             lines.append("")
 
         # ═══════════════════════════════════════════════════════════
-        # 6. AXIAL DATA ANALYSIS
+        # If no segments but we have combined data, show combined stats
+        # ═══════════════════════════════════════════════════════════
+        if not s.target_segments and len(s.ra_deviations) > 0:
+            lines.append("=" * 70)
+            lines.append("  RIGHT ASCENSION (RA) / ASCENSION DROITE (AD)")
+            lines.append("=" * 70)
+            lines.append("")
+            self._write_axis_stats(lines, "RA", s.ra_deviations,
+                                   s.tracking_timestamps, s.tracking_ra_stdevs, fr)
+            lines.append("=" * 70)
+            lines.append("  DECLINATION (DEC) / DECLINAISON (DEC)")
+            lines.append("=" * 70)
+            lines.append("")
+            self._write_axis_stats(lines, "DEC", s.dec_deviations,
+                                   s.tracking_timestamps, s.tracking_dec_stdevs, fr)
+
+        # ═══════════════════════════════════════════════════════════
+        # 4. AXIAL DATA
         # ═══════════════════════════════════════════════════════════
         if len(s.ra_axis) > 10 and np.any(s.ra_axis != 0):
             lines.append("=" * 70)
@@ -439,19 +269,16 @@ class AnalysisDialog(QDialog):
             lines.append("=" * 70)
             lines.append("")
 
-            # RA axis
             ra_axis = s.ra_axis[s.ra_axis != 0] if np.any(s.ra_axis != 0) else s.ra_axis
             if len(ra_axis) > 1:
                 lines.append(f"  RA Axis range      : {np.min(ra_axis):.4f} — {np.max(ra_axis):.4f}")
                 lines.append(f"  RA Axis excursion  : {np.ptp(ra_axis):.4f} deg")
 
-            # DEC axis
             dec_axis = s.dec_axis[s.dec_axis != 0] if np.any(s.dec_axis != 0) else s.dec_axis
             if len(dec_axis) > 1:
                 lines.append(f"  DEC Axis range     : {np.min(dec_axis):.4f} — {np.max(dec_axis):.4f}")
                 lines.append(f"  DEC Axis excursion : {np.ptp(dec_axis):.4f} deg")
 
-            # Compute speeds
             if len(ra_axis) > 2 and len(s.timestamps) > 2:
                 t_rel = s.timestamps[:len(ra_axis)] - s.timestamps[0]
                 dt = np.diff(t_rel)
@@ -462,7 +289,7 @@ class AnalysisDialog(QDialog):
             lines.append("")
 
         # ═══════════════════════════════════════════════════════════
-        # 7. TIME SYNCHRONIZATION ANALYSIS
+        # 5. TIME SYNCHRONIZATION
         # ═══════════════════════════════════════════════════════════
         if len(s.time_pc_mount_diff) > 0:
             lines.append("=" * 70)
@@ -476,61 +303,43 @@ class AnalysisDialog(QDialog):
             lines.append(f"  PC-Mount diff max  : {np.max(np.abs(td)):.1f} ms")
             lines.append(f"  PC-Mount diff std  : {np.std(td):.1f} ms")
 
-            # Drift
             if len(td) > 100:
                 t_rel = s.time_timestamps - s.time_timestamps[0]
                 coeffs = np.polyfit(t_rel, td, 1)
                 drift_per_min = coeffs[0] * 60.0
-                lines.append(f"  Clock drift rate   : {drift_per_min:+.3f} ms/min")
-
+                lines.append(f"  Clock drift rate / Dérive horloge : {drift_per_min:+.3f} ms/min")
                 if abs(drift_per_min) > 1.0:
-                    if fr:
-                        lines.append("  [!] Dérive d'horloge significative détectée")
-                    else:
-                        lines.append("  [!] Significant clock drift detected")
+                    lines.append("  [!] Significant clock drift detected / Dérive d'horloge significative détectée")
                 else:
-                    if fr:
-                        lines.append("  [OK] Horloge stable")
-                    else:
-                        lines.append("  [OK] Stable clock")
+                    lines.append("  [OK] Stable clock / Horloge stable")
             lines.append("")
 
-            # PC loop time
             if len(s.time_pc_loop) > 0:
                 pl = s.time_pc_loop
                 lines.append(f"  PC loop avg        : {np.mean(pl):.1f} ms")
                 lines.append(f"  PC loop max        : {np.max(pl):.1f} ms")
                 lines.append(f"  PC loop std        : {np.std(pl):.1f} ms")
-
                 if np.mean(pl) > 1000:
-                    if fr:
-                        lines.append("  [!] Boucle PC lente — le PC a du mal à maintenir la cadence")
-                    else:
-                        lines.append("  [!] Slow PC loop — PC struggling to maintain polling rate")
+                    lines.append("  [!] Slow PC loop / Boucle PC lente — PC struggling / Le PC a du mal")
             lines.append("")
 
-            # Mount loop time
             if len(s.time_mount_loop) > 0:
                 ml = s.time_mount_loop
                 lines.append(f"  Mount loop avg     : {np.mean(ml):.1f} ms")
                 lines.append(f"  Mount loop max     : {np.max(ml):.1f} ms")
             lines.append("")
 
-            # NTP
             if len(s.time_ntp_diff) > 0 and np.any(s.time_ntp_diff != 0):
                 ntp = s.time_ntp_diff[s.time_ntp_diff != 0]
                 if len(ntp) > 0:
                     lines.append(f"  PC-NTP offset avg  : {np.mean(ntp):+.1f} ms")
                     lines.append(f"  PC-NTP offset max  : {np.max(np.abs(ntp)):.1f} ms")
                     if np.max(np.abs(ntp)) > 1000:
-                        if fr:
-                            lines.append("  [!] Décalage NTP important — synchronisez l'horloge PC")
-                        else:
-                            lines.append("  [!] Large NTP offset — synchronize PC clock")
+                        lines.append("  [!] Large NTP offset / Décalage NTP important — synchronize PC clock / synchronisez l'horloge PC")
                     lines.append("")
 
         # ═══════════════════════════════════════════════════════════
-        # 8. TRACKING STATUS ANALYSIS
+        # 6. TRACKING STATUS
         # ═══════════════════════════════════════════════════════════
         if s.statuses:
             lines.append("=" * 70)
@@ -548,25 +357,20 @@ class AnalysisDialog(QDialog):
 
             tracking_pct = status_counts.get('TRACKING', 0) / total * 100
             if tracking_pct < 90:
-                if fr:
-                    lines.append(f"  [!] Seulement {tracking_pct:.0f}% du temps en suivi")
-                    lines.append("      La monture a passé beaucoup de temps hors suivi")
-                else:
-                    lines.append(f"  [!] Only {tracking_pct:.0f}% of time tracking")
-                    lines.append("      Mount spent significant time not tracking")
+                lines.append(f"  [!] Only {tracking_pct:.0f}% tracking / Seulement {tracking_pct:.0f}% en suivi")
+                lines.append("      Mount spent significant time not tracking.")
+                lines.append("      La monture a passé beaucoup de temps hors suivi.")
             else:
-                if fr:
-                    lines.append(f"  [OK] {tracking_pct:.0f}% du temps en suivi — normal")
-                else:
-                    lines.append(f"  [OK] {tracking_pct:.0f}% of time tracking — normal")
+                lines.append(f"  [OK] {tracking_pct:.0f}% tracking / en suivi — normal")
             lines.append("")
 
         # ═══════════════════════════════════════════════════════════
-        # 9. TOLERANCE EVENTS
+        # 7. TOLERANCE ANALYSIS (TRACKING data only)
         # ═══════════════════════════════════════════════════════════
         if len(s.ra_deviations) > 0:
             lines.append("=" * 70)
             lines.append("  TOLERANCE ANALYSIS / ANALYSE DES TOLERANCES")
+            lines.append("  (TRACKING data only / Données de suivi uniquement)")
             lines.append("=" * 70)
             lines.append("")
 
@@ -582,7 +386,7 @@ class AnalysisDialog(QDialog):
             lines.append("")
 
         # ═══════════════════════════════════════════════════════════
-        # 10. DATA CONTINUITY / GAPS
+        # 8. DATA CONTINUITY / GAPS
         # ═══════════════════════════════════════════════════════════
         if len(s.timestamps) > 10:
             lines.append("=" * 70)
@@ -593,27 +397,21 @@ class AnalysisDialog(QDialog):
             dt = np.diff(s.timestamps)
             expected_dt = 1.0 / s.effective_frequency if s.effective_frequency > 0 else 0.5
 
-            gaps = dt[dt > expected_dt * 5]  # Gaps > 5x expected interval
+            gaps = dt[dt > expected_dt * 5]
             if len(gaps) > 0:
-                lines.append(f"  Gaps detected      : {len(gaps)}")
-                lines.append(f"  Largest gap        : {np.max(gaps):.1f} s")
-                lines.append(f"  Total gap time     : {np.sum(gaps):.1f} s")
-
-                if fr:
-                    lines.append("  [i] Des interruptions d'acquisition ont été détectées")
-                    lines.append("      (slewing, reconnexion, problème réseau...)")
-                else:
-                    lines.append("  [i] Data acquisition interruptions detected")
-                    lines.append("      (slewing, reconnection, network issue...)")
+                lines.append(f"  Gaps detected / Coupures détectées : {len(gaps)}")
+                lines.append(f"  Largest gap / Plus grande coupure  : {np.max(gaps):.1f} s")
+                lines.append(f"  Total gap time / Temps total perdu : {np.sum(gaps):.1f} s")
+                lines.append("  [i] Data acquisition interruptions detected")
+                lines.append("      Des interruptions d'acquisition ont été détectées")
+                lines.append("      (slewing, reconnection, network issue / réseau...)")
             else:
-                if fr:
-                    lines.append("  [OK] Acquisition continue, pas de coupure détectée")
-                else:
-                    lines.append("  [OK] Continuous acquisition, no gaps detected")
+                lines.append("  [OK] Continuous acquisition, no gaps detected")
+                lines.append("       Acquisition continue, pas de coupure détectée")
             lines.append("")
 
         # ═══════════════════════════════════════════════════════════
-        # 10b. ENVIRONMENT / DIAGNOSTICS
+        # 9. ENVIRONMENT & DIAGNOSTICS
         # ═══════════════════════════════════════════════════════════
         has_env = len(s.env_timestamps) > 0
         if has_env:
@@ -622,91 +420,68 @@ class AnalysisDialog(QDialog):
             lines.append("=" * 70)
             lines.append("")
 
-            # Temperature
             temp = s.env_temperature_ext
             valid_temp = temp[~np.isnan(temp)] if len(temp) > 0 else np.array([])
             if len(valid_temp) > 0:
-                lines.append(f"  Temperature (ext)  : {valid_temp[0]:.1f}°C → {valid_temp[-1]:.1f}°C")
+                lines.append(f"  Temperature (ext)  : {valid_temp[0]:.1f}°C -> {valid_temp[-1]:.1f}°C")
                 lines.append(f"  Temp range         : {np.min(valid_temp):.1f}°C — {np.max(valid_temp):.1f}°C")
                 temp_delta = valid_temp[-1] - valid_temp[0]
-                lines.append(f"  Temp change        : {temp_delta:+.1f}°C over session")
+                lines.append(f"  Temp change        : {temp_delta:+.1f}°C over session / pendant la session")
                 if abs(temp_delta) > 5.0:
-                    if fr:
-                        lines.append("  [!] Variation thermique importante — peut affecter la mise au point et le suivi")
-                    else:
-                        lines.append("  [!] Large temperature change — may affect focus and tracking")
+                    lines.append("  [!] Large temperature change — may affect focus and tracking")
+                    lines.append("      Variation thermique importante — peut affecter la mise au point et le suivi")
                 elif abs(temp_delta) > 2.0:
-                    if fr:
-                        lines.append("  [i] Variation thermique modérée — surveillez la mise au point")
-                    else:
-                        lines.append("  [i] Moderate temperature change — monitor focus")
+                    lines.append("  [i] Moderate temperature change — monitor focus")
+                    lines.append("      Variation thermique modérée — surveillez la mise au point")
                 else:
-                    if fr:
-                        lines.append("  [OK] Température stable")
-                    else:
-                        lines.append("  [OK] Stable temperature")
+                    lines.append("  [OK] Stable temperature / Température stable")
                 lines.append("")
 
-            # Internal temperature
             temp_int = s.env_temperature_int
             valid_int = temp_int[~np.isnan(temp_int)] if len(temp_int) > 0 else np.array([])
             if len(valid_int) > 0:
-                lines.append(f"  Internal temp      : {valid_int[0]:.1f}°C → {valid_int[-1]:.1f}°C")
+                lines.append(f"  Internal temp      : {valid_int[0]:.1f}°C -> {valid_int[-1]:.1f}°C")
                 lines.append(f"  Internal range     : {np.min(valid_int):.1f}°C — {np.max(valid_int):.1f}°C")
                 int_delta = valid_int[-1] - valid_int[0]
                 if int_delta > 10.0:
-                    if fr:
-                        lines.append("  [!] La monture chauffe significativement — vérifiez la ventilation")
-                    else:
-                        lines.append("  [!] Mount heating significantly — check ventilation")
+                    lines.append("  [!] Mount heating significantly — check ventilation")
+                    lines.append("      La monture chauffe significativement — vérifiez la ventilation")
                 lines.append("")
 
-            # Pressure
             pres = s.env_pressure
             valid_pres = pres[~np.isnan(pres)] if len(pres) > 0 else np.array([])
             if len(valid_pres) > 0:
-                lines.append(f"  Pressure           : {valid_pres[0]:.1f} → {valid_pres[-1]:.1f} mbar")
-                lines.append(f"  Pressure range     : {np.min(valid_pres):.1f} — {np.max(valid_pres):.1f} mbar")
+                lines.append(f"  Pressure / Pression : {valid_pres[0]:.1f} -> {valid_pres[-1]:.1f} mbar")
+                lines.append(f"  Pressure range      : {np.min(valid_pres):.1f} — {np.max(valid_pres):.1f} mbar")
                 pres_delta = valid_pres[-1] - valid_pres[0]
-                lines.append(f"  Pressure change    : {pres_delta:+.1f} mbar")
+                lines.append(f"  Pressure change     : {pres_delta:+.1f} mbar")
                 if abs(pres_delta) > 5.0:
-                    if fr:
-                        lines.append("  [i] Changement barométrique notable — conditions météo changeantes")
-                    else:
-                        lines.append("  [i] Notable barometric change — weather conditions changing")
+                    lines.append("  [i] Notable barometric change — weather conditions changing")
+                    lines.append("      Changement barométrique notable — conditions météo changeantes")
                 lines.append("")
 
-            # Alignment model
             valid_rms = s.env_alignment_rms[~np.isnan(s.env_alignment_rms)] if len(s.env_alignment_rms) > 0 else np.array([])
             if len(valid_rms) > 0:
                 stars = s.env_alignment_stars
                 valid_stars = [st for st in stars if st > 0]
                 if valid_stars:
-                    lines.append(f"  Alignment stars    : {valid_stars[0]}")
+                    lines.append(f"  Alignment stars / Étoiles d'alignement : {valid_stars[0]}")
                 lines.append(f"  Alignment RMS      : {valid_rms[0]:.1f}\"")
 
                 valid_polar = s.env_polar_error[~np.isnan(s.env_polar_error)] if len(s.env_polar_error) > 0 else np.array([])
                 if len(valid_polar) > 0:
                     polar_arcmin = valid_polar[0] * 60.0
-                    lines.append(f"  Polar error        : {valid_polar[0]:.4f}° ({polar_arcmin:.1f}')")
+                    lines.append(f"  Polar error / Erreur polaire : {valid_polar[0]:.4f}° ({polar_arcmin:.1f}')")
                     if polar_arcmin > 5.0:
-                        if fr:
-                            lines.append("  [!] Erreur polaire élevée — refaites l'alignement polaire")
-                        else:
-                            lines.append("  [!] High polar error — redo polar alignment")
+                        lines.append("  [!] High polar error — redo polar alignment")
+                        lines.append("      Erreur polaire élevée — refaites l'alignement polaire")
                     elif polar_arcmin > 1.0:
-                        if fr:
-                            lines.append("  [i] Erreur polaire modérée — acceptable pour la plupart des usages")
-                        else:
-                            lines.append("  [i] Moderate polar error — acceptable for most use cases")
+                        lines.append("  [i] Moderate polar error — acceptable for most use cases")
+                        lines.append("      Erreur polaire modérée — acceptable pour la plupart des usages")
                     else:
-                        if fr:
-                            lines.append("  [OK] Alignement polaire excellent")
-                        else:
-                            lines.append("  [OK] Excellent polar alignment")
+                        lines.append("  [OK] Excellent polar alignment / Alignement polaire excellent")
                 lines.append("")
 
-            # Tracking rate stability
             rates = s.env_tracking_rates
             valid_rates = rates[~np.isnan(rates)] if len(rates) > 0 else np.array([])
             if len(valid_rates) > 1:
@@ -714,18 +489,13 @@ class AnalysisDialog(QDialog):
                 lines.append(f"  Tracking rate avg  : {np.mean(valid_rates):.2f}")
                 lines.append(f"  Tracking rate std  : {rate_std:.4f}")
                 if rate_std > 0.1:
-                    if fr:
-                        lines.append("  [i] Variation du taux de suivi détectée")
-                    else:
-                        lines.append("  [i] Tracking rate variation detected")
+                    lines.append("  [i] Tracking rate variation detected / Variation du taux de suivi détectée")
                 lines.append("")
 
-            # Mount status codes history
             valid_codes = [c for c in s.env_status_codes if c >= 0]
             if valid_codes:
                 from collections import Counter
                 code_counts = Counter(valid_codes)
-                # 10Micron status codes
                 status_names = {
                     0: "Tracking",
                     1: "Stopped (no tracking)",
@@ -742,14 +512,14 @@ class AnalysisDialog(QDialog):
                     98: "Unknown",
                     99: "Error",
                 }
-                lines.append("  Mount status codes (10Micron :Gstat#) :")
+                lines.append("  Mount status codes / Codes statut monture (10Micron :Gstat#) :")
                 for code, count in code_counts.most_common():
                     name = status_names.get(code, f"Code {code}")
                     lines.append(f"    {code} = {name:<30} : {count}x")
                 lines.append("")
 
         # ═══════════════════════════════════════════════════════════
-        # 11. EVENTS SUMMARY
+        # 10. EVENTS
         # ═══════════════════════════════════════════════════════════
         if s.events:
             lines.append("=" * 70)
@@ -761,133 +531,91 @@ class AnalysisDialog(QDialog):
             warning_events = [e for e in s.events if 'WARNING' in e[1] or 'Check WARNING' in e[1]]
             status_events = [e for e in s.events if 'Mount status' in e[1]]
 
-            lines.append(f"  Total events       : {len(s.events)}")
-            lines.append(f"  Tolerance alerts   : {len(tolerance_events)}")
-            lines.append(f"  Warnings           : {len(warning_events)}")
-            lines.append(f"  Status changes     : {len(status_events)}")
+            lines.append(f"  Total events / Événements totaux : {len(s.events)}")
+            lines.append(f"  Tolerance alerts / Alertes tolérance : {len(tolerance_events)}")
+            lines.append(f"  Warnings / Avertissements : {len(warning_events)}")
+            lines.append(f"  Status changes / Changements de statut : {len(status_events)}")
             lines.append("")
 
             if tolerance_events:
-                lines.append("  Tolerance events (first 10):")
+                lines.append("  Tolerance events (first 10) / Événements de tolérance (10 premiers) :")
                 for ts, msg in tolerance_events[:10]:
                     lines.append(f"    {ts}  {msg}")
                 if len(tolerance_events) > 10:
-                    lines.append(f"    ... and {len(tolerance_events) - 10} more")
+                    lines.append(f"    ... and {len(tolerance_events) - 10} more / et {len(tolerance_events) - 10} de plus")
                 lines.append("")
 
             if warning_events:
-                lines.append("  Warnings:")
+                lines.append("  Warnings / Avertissements :")
                 for ts, msg in warning_events[:10]:
                     lines.append(f"    {ts}  {msg}")
                 lines.append("")
 
         # ═══════════════════════════════════════════════════════════
-        # 12. RECOMMENDATIONS / RECOMMANDATIONS
+        # 11. RECOMMENDATIONS
         # ═══════════════════════════════════════════════════════════
         lines.append("=" * 70)
-        if fr:
-            lines.append("  RECOMMANDATIONS")
-        else:
-            lines.append("  RECOMMENDATIONS")
+        lines.append("  RECOMMENDATIONS / RECOMMANDATIONS")
         lines.append("=" * 70)
         lines.append("")
 
         recommendations = []
 
         if ra_rms > 2.0:
-            if fr:
-                recommendations.append(
-                    "- RA instable (RMS > 2\") : vérifiez l'équilibrage RA, "
-                    "le serrage des fixations, les câbles qui tirent"
-                )
-            else:
-                recommendations.append(
-                    "- RA unstable (RMS > 2\"): check RA balance, "
-                    "clamp tightness, cable drag"
-                )
+            recommendations.append(
+                "- RA unstable (RMS > 2\"): check RA balance, clamp tightness, cable drag\n"
+                "  RA instable (RMS > 2\") : vérifiez l'équilibrage RA, le serrage, les câbles"
+            )
 
         if dec_rms > 2.0:
-            if fr:
-                recommendations.append(
-                    "- DEC instable (RMS > 2\") : vérifiez l'équilibrage DEC, "
-                    "le jeu dans l'axe DEC"
-                )
-            else:
-                recommendations.append(
-                    "- DEC unstable (RMS > 2\"): check DEC balance, "
-                    "DEC axis backlash"
-                )
+            recommendations.append(
+                "- DEC unstable (RMS > 2\"): check DEC balance, DEC axis backlash\n"
+                "  DEC instable (RMS > 2\") : vérifiez l'équilibrage DEC, le jeu dans l'axe DEC"
+            )
 
-        # Check for drift
-        if len(s.ra_deviations) > 100:
-            t_rel = s.timestamps - s.timestamps[0]
-            ra_coeffs = np.polyfit(t_rel, s.ra_deviations, 1)
-            ra_drift_h = ra_coeffs[0] * 3600.0
-            if abs(ra_drift_h) > 5.0:
-                if fr:
+        # Check drift per segment
+        for seg_idx, seg in enumerate(s.target_segments):
+            if len(seg.ra_deviations) > 100:
+                t_rel = seg.timestamps - seg.timestamps[0]
+                ra_coeffs = np.polyfit(t_rel, seg.ra_deviations, 1)
+                ra_drift_h = ra_coeffs[0] * 3600.0
+                if abs(ra_drift_h) > 5.0:
                     recommendations.append(
-                        f"- Dérive RA de {ra_drift_h:+.1f}\"/h : ajustez l'azimut "
-                        "de l'alignement polaire"
-                    )
-                else:
-                    recommendations.append(
-                        f"- RA drift of {ra_drift_h:+.1f}\"/h: adjust azimuth "
-                        "of polar alignment"
+                        f"- Target #{seg_idx + 1}: RA drift {ra_drift_h:+.1f}\"/h — adjust azimuth of polar alignment\n"
+                        f"  Cible #{seg_idx + 1} : dérive RA {ra_drift_h:+.1f}\"/h — ajustez l'azimut de l'alignement polaire"
                     )
 
-        if len(s.dec_deviations) > 100:
-            t_rel = s.timestamps - s.timestamps[0]
-            dec_coeffs = np.polyfit(t_rel, s.dec_deviations, 1)
-            dec_drift_h = dec_coeffs[0] * 3600.0
-            if abs(dec_drift_h) > 5.0:
-                if fr:
+            if len(seg.dec_deviations) > 100:
+                t_rel = seg.timestamps - seg.timestamps[0]
+                dec_coeffs = np.polyfit(t_rel, seg.dec_deviations, 1)
+                dec_drift_h = dec_coeffs[0] * 3600.0
+                if abs(dec_drift_h) > 5.0:
                     recommendations.append(
-                        f"- Dérive DEC de {dec_drift_h:+.1f}\"/h : ajustez l'altitude "
-                        "de l'alignement polaire"
-                    )
-                else:
-                    recommendations.append(
-                        f"- DEC drift of {dec_drift_h:+.1f}\"/h: adjust altitude "
-                        "of polar alignment"
+                        f"- Target #{seg_idx + 1}: DEC drift {dec_drift_h:+.1f}\"/h — adjust altitude of polar alignment\n"
+                        f"  Cible #{seg_idx + 1} : dérive DEC {dec_drift_h:+.1f}\"/h — ajustez l'altitude de l'alignement polaire"
                     )
 
         # Environment-based recommendations
         if has_env:
             valid_temp = s.env_temperature_ext[~np.isnan(s.env_temperature_ext)] if len(s.env_temperature_ext) > 0 else np.array([])
             if len(valid_temp) > 1 and abs(valid_temp[-1] - valid_temp[0]) > 5.0:
-                if fr:
-                    recommendations.append(
-                        f"- Chute de température de {abs(valid_temp[-1] - valid_temp[0]):.1f}°C : "
-                        "utilisez un focuser motorisé avec compensation thermique"
-                    )
-                else:
-                    recommendations.append(
-                        f"- Temperature drop of {abs(valid_temp[-1] - valid_temp[0]):.1f}°C: "
-                        "use a motorized focuser with temperature compensation"
-                    )
+                recommendations.append(
+                    f"- Temperature drop of {abs(valid_temp[-1] - valid_temp[0]):.1f}°C: use motorized focuser with temp compensation\n"
+                    f"  Chute de température de {abs(valid_temp[-1] - valid_temp[0]):.1f}°C : utilisez un focuser avec compensation thermique"
+                )
 
             valid_polar = s.env_polar_error[~np.isnan(s.env_polar_error)] if len(s.env_polar_error) > 0 else np.array([])
             if len(valid_polar) > 0 and valid_polar[0] * 60.0 > 5.0:
-                if fr:
-                    recommendations.append(
-                        f"- Erreur polaire de {valid_polar[0]*60:.1f}' : "
-                        "refaites l'alignement polaire avec PoleMaster ou SharpCap"
-                    )
-                else:
-                    recommendations.append(
-                        f"- Polar error of {valid_polar[0]*60:.1f}': "
-                        "redo polar alignment with PoleMaster or SharpCap"
-                    )
+                recommendations.append(
+                    f"- Polar error of {valid_polar[0]*60:.1f}': redo polar alignment with PoleMaster or SharpCap\n"
+                    f"  Erreur polaire de {valid_polar[0]*60:.1f}' : refaites l'alignement polaire"
+                )
 
         if not recommendations:
-            if fr:
-                recommendations.append(
-                    "- Aucun problème majeur détecté. Continuez avec ces réglages !"
-                )
-            else:
-                recommendations.append(
-                    "- No major issues detected. Continue with these settings!"
-                )
+            recommendations.append(
+                "- No major issues detected. Continue with these settings!\n"
+                "  Aucun problème majeur détecté. Continuez avec ces réglages !"
+            )
 
         for r in recommendations:
             lines.append(f"  {r}")
@@ -895,22 +623,130 @@ class AnalysisDialog(QDialog):
 
         # Final separator
         lines.append("=" * 70)
-        if fr:
-            lines.append(f"  Rapport généré le {datetime.now().strftime('%d/%m/%Y à %H:%M:%S')}")
-        else:
-            lines.append(f"  Report generated on {datetime.now().strftime('%Y-%m-%d at %H:%M:%S')}")
+        lines.append(f"  Report generated on / Rapport généré le {datetime.now().strftime('%d/%m/%Y')} "
+                     f"at / à {datetime.now().strftime('%H:%M:%S')}")
         lines.append("=" * 70)
 
         self._report_text = "\n".join(lines)
         self._report.setPlainText(self._report_text)
         self._report.moveCursor(QTextCursor.MoveOperation.Start)
 
+    def _write_axis_stats(self, lines: list, axis_name: str,
+                          deviations: np.ndarray, timestamps: np.ndarray,
+                          stdevs: np.ndarray, fr: bool):
+        """Write statistics for one axis (RA or DEC)."""
+        if len(deviations) == 0:
+            return
+
+        rms = float(np.std(deviations))
+        lines.append(f"  --- {axis_name} ---")
+        lines.append(f"  Mean deviation / Déviation moyenne   : {np.mean(deviations):+.4f}\"")
+        lines.append(f"  Median deviation / Déviation médiane : {np.median(deviations):+.4f}\"")
+        lines.append(f"  RMS (std dev)                        : {rms:.4f}\"")
+        lines.append(f"  Peak-to-peak / Pic-à-pic             : {np.ptp(deviations):.4f}\"")
+        lines.append(f"  Min deviation                        : {np.min(deviations):+.4f}\"")
+        lines.append(f"  Max deviation                        : {np.max(deviations):+.4f}\"")
+        lines.append(f"  95th percentile                      : {np.percentile(np.abs(deviations), 95):.4f}\"")
+        lines.append(f"  99th percentile                      : {np.percentile(np.abs(deviations), 99):.4f}\"")
+        lines.append("")
+
+        # Running STDEV statistics
+        if len(stdevs) > 0 and np.any(stdevs > 0):
+            valid_stdevs = stdevs[stdevs > 0]
+            lines.append(f"  Running STDEV avg  : {np.mean(valid_stdevs):.4f}\"")
+            lines.append(f"  Running STDEV max  : {np.max(valid_stdevs):.4f}\"")
+            lines.append(f"  Running STDEV med  : {np.median(valid_stdevs):.4f}\"")
+            lines.append("")
+
+        # Drift analysis
+        if len(deviations) > 100 and len(timestamps) == len(deviations):
+            t_rel = timestamps - timestamps[0]
+            coeffs = np.polyfit(t_rel, deviations, 1)
+            drift_per_min = coeffs[0] * 60.0
+            drift_per_hour = coeffs[0] * 3600.0
+            lines.append(f"  Drift rate / Taux de dérive : {drift_per_min:+.4f}\"/min ({drift_per_hour:+.2f}\"/h)")
+
+            if abs(drift_per_hour) > 5.0:
+                if axis_name == "RA":
+                    lines.append("  [!] Significant RA drift — check polar alignment (azimuth)")
+                    lines.append("      Dérive RA significative — vérifiez l'alignement polaire (azimut)")
+                else:
+                    lines.append("  [!] Significant DEC drift — check polar alignment (altitude)")
+                    lines.append("      Dérive DEC significative — vérifiez l'alignement polaire (altitude)")
+            elif abs(drift_per_hour) > 1.0:
+                lines.append(f"  [i] Slight {axis_name} drift detected / Légère dérive {axis_name} détectée")
+            else:
+                lines.append(f"  [OK] No significant {axis_name} drift / Pas de dérive {axis_name} significative")
+            lines.append("")
+        lines.append("")
+
+    def _write_fft(self, lines: list, axis_name: str,
+                   deviations: np.ndarray, sample_rate: float,
+                   fr: bool, top_n: int = 5):
+        """Write FFT analysis for one axis."""
+        if len(deviations) < 64 or sample_rate <= 0:
+            return
+
+        data = deviations - np.mean(deviations)
+        window = np.hanning(len(data))
+        windowed = data * window
+        n = len(windowed)
+        fft_result = np.fft.rfft(windowed)
+        magnitudes = 2.0 / n * np.abs(fft_result)
+        frequencies = np.fft.rfftfreq(n, d=1.0 / sample_rate)
+
+        freqs = frequencies[1:]
+        mags = magnitudes[1:]
+
+        if len(mags) == 0:
+            return
+
+        peak_indices = np.argsort(mags)[::-1][:top_n]
+
+        lines.append(f"  {axis_name} FFT — Top {top_n} peaks / pics dominants :")
+        lines.append(f"  {'Rank':>4}  {'Frequency':>12}  {'Period':>12}  {'Amplitude':>12}")
+        lines.append(f"  {'----':>4}  {'----------':>12}  {'------':>12}  {'---------':>12}")
+
+        for rank, idx in enumerate(peak_indices, 1):
+            freq = freqs[idx]
+            period = 1.0 / freq if freq > 0 else float('inf')
+            amp = mags[idx]
+
+            if period > 3600:
+                period_str = f"{period/3600:.1f} h"
+            elif period > 60:
+                period_str = f"{period/60:.1f} min"
+            else:
+                period_str = f"{period:.1f} s"
+
+            lines.append(f"  #{rank:>3}  {freq:>10.5f} Hz  {period_str:>12}  {amp:>10.4f}\"")
+
+        lines.append("")
+
+        # Identify PE in typical 2-15 min range
+        dominant_idx = peak_indices[0]
+        dominant_freq = freqs[dominant_idx]
+        dominant_period = 1.0 / dominant_freq if dominant_freq > 0 else 0
+        dominant_amp = mags[dominant_idx]
+
+        if 120 < dominant_period < 900:
+            lines.append(f"  [PE] Periodic Error detected! / Erreur périodique détectée !")
+            lines.append(f"        Period / Période : {dominant_period:.1f} s ({dominant_period/60:.1f} min)")
+            lines.append(f"        Amplitude : {dominant_amp:.4f}\"")
+            if dominant_amp < 0.5:
+                lines.append("        => Very low PE, excellent! / PE très faible, excellent !")
+            elif dominant_amp < 1.5:
+                lines.append("        => Acceptable PE / PE acceptable")
+            else:
+                lines.append("        => High PE — consider PEC calibration / PE élevée — considérez la calibration PEC")
+        else:
+            lines.append("  [i] No typical periodic error in 2-15 min range")
+            lines.append("      Pas d'erreur périodique typique dans la plage 2-15 min")
+        lines.append("")
+
     def _export_report(self):
         """Export analysis report to a text file."""
-        if self._lang == 'fr':
-            title = "Exporter le rapport"
-        else:
-            title = "Export Report"
+        title = _bi("Export Report", "Exporter le rapport", self._lang)
 
         default_name = "MountMonitor_Analysis"
         if self._session.start_time:

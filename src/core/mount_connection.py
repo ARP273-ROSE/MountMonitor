@@ -51,8 +51,21 @@ class MountConnection(ABC):
 
     @abstractmethod
     def get_mount_time(self) -> Optional[str]:
-        """Get mount internal time string."""
+        """Get mount internal time string (HH:MM:SS).
+
+        The time zone depends on the protocol:
+        - LX200: local time (via :GL# command)
+        - ASCOM: UTC time (via UTCDate property)
+        - Simulation: UTC time
+
+        Check mount_time_is_utc to know which timezone.
+        """
         ...
+
+    @property
+    def mount_time_is_utc(self) -> bool:
+        """Whether get_mount_time() returns UTC (True) or local time (False)."""
+        return self._protocol in (ConnectionProtocol.ASCOM, ConnectionProtocol.SIMULATION)
 
     @abstractmethod
     def get_firmware_version(self) -> str:
@@ -146,6 +159,15 @@ class MountConnection(ABC):
     def send_raw_command(self, command: str) -> Optional[str]:
         """Send a raw command and get the response. For advanced/10Micron commands."""
         return None
+
+    def check_mount_settings(self) -> list[str]:
+        """Verify mount configuration is correct for monitoring.
+
+        Returns list of warning messages for incorrect settings.
+        Empty list means all settings are OK.
+        Default implementation returns no warnings.
+        """
+        return []
 
     def get_environment(self) -> EnvironmentSample:
         """Get environmental and diagnostic data from the mount.
