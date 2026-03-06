@@ -51,8 +51,8 @@ class FFTWindow(QWidget):
         self._freq_plot = pg.PlotWidget(title=T("frequency_domain"))
         self._freq_plot.setBackground(Colors.BG_GRAPH)
         self._freq_plot.showGrid(x=True, y=True, alpha=0.15)
-        self._freq_plot.setLabel('bottom', 'Frequency', units='Hz')
-        self._freq_plot.setLabel('left', 'Amplitude')
+        self._freq_plot.setLabel('bottom', T('frequency_label'), units='Hz')
+        self._freq_plot.setLabel('left', T('amplitude'))
         self._freq_plot.addLegend(offset=(10, 10))
 
         self._freq_ra = self._freq_plot.plot(
@@ -69,8 +69,8 @@ class FFTWindow(QWidget):
         self._period_plot = pg.PlotWidget(title=T("period_domain"))
         self._period_plot.setBackground(Colors.BG_GRAPH)
         self._period_plot.showGrid(x=True, y=True, alpha=0.15)
-        self._period_plot.setLabel('bottom', 'Period', units='s')
-        self._period_plot.setLabel('left', 'Amplitude')
+        self._period_plot.setLabel('bottom', T('period_label'), units='s')
+        self._period_plot.setLabel('left', T('amplitude'))
 
         self._period_ra = self._period_plot.plot(
             pen=pg.mkPen(Colors.GRAPH_RA, width=1.5)

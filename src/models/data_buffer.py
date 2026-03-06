@@ -27,6 +27,12 @@ class DataBuffer:
         self._max_stdev = 0.0
         self._running_stdevs: deque[float] = deque(maxlen=max_size)
 
+        # Cached median (recomputed periodically, not on every call)
+        self._cached_median: float = 0.0
+        self._median_valid: bool = False
+        self._median_sample_count: int = 0
+        self._MEDIAN_RECOMPUTE_INTERVAL: int = 50  # Recompute every N appends
+
     @property
     def size(self) -> int:
         with self._lock:
@@ -56,6 +62,9 @@ class DataBuffer:
                 self._min_value = value
             if value > self._max_value:
                 self._max_value = value
+            self._median_sample_count += 1
+            if self._median_sample_count >= self._MEDIAN_RECOMPUTE_INTERVAL:
+                self._median_valid = False
 
     def get_arrays(self) -> tuple[np.ndarray, np.ndarray]:
         """Get timestamps and values as numpy arrays. Thread-safe copy."""
@@ -121,11 +130,15 @@ class DataBuffer:
             self._running_stdevs = deque(stdevs, maxlen=self._max_size)
 
     def get_median(self) -> float:
-        """Get the median of all values in the buffer."""
+        """Get the median of all values in the buffer (cached for performance)."""
         with self._lock:
             if not self._values:
                 return 0.0
-            return float(np.median(list(self._values)))
+            if not self._median_valid:
+                self._cached_median = float(np.median(np.array(self._values)))
+                self._median_valid = True
+                self._median_sample_count = 0
+            return self._cached_median
 
     def get_visible_data(self, visible_seconds: float) -> tuple[np.ndarray, np.ndarray]:
         """Get only the data visible in the current time window."""
@@ -159,6 +172,9 @@ class DataBuffer:
             self._min_value = float('inf')
             self._max_value = float('-inf')
             self._max_stdev = 0.0
+            self._cached_median = 0.0
+            self._median_valid = False
+            self._median_sample_count = 0
 
     def get_last_n(self, n: int) -> tuple[np.ndarray, np.ndarray]:
         """Get the last N samples."""

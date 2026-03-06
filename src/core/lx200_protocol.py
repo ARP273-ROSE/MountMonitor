@@ -117,9 +117,21 @@ class LX200Connection(MountConnection):
     def get_status(self) -> MountStatus:
         """Get mount status via :Gstat# command (10Micron specific).
 
-        Returns:
-        0 = tracking, 1 = stopped, 2 = slewing, 3-5 = various states,
-        6 = parked, 7 = slewing to home, 98 = unknown, 99 = error
+        10Micron Gstat# status codes:
+        0  = Tracking
+        1  = Stopped (STOP key pressed)
+        2  = Slewing to park position
+        3  = Unparking
+        4  = Slewing to home position
+        5  = Parked
+        6  = Slewing (goto/moving)
+        7  = Tracking but not moving (coasting/stiction)
+        8  = Motors inhibited (low temp, etc.)
+        9  = Beyond limits
+        10 = Object below minimum altitude
+        11 = Pointing model alignment in progress
+        98 = Status not available
+        99 = Error
         """
         response = self._send_command(':Gstat#')
         if response is None:
@@ -131,14 +143,24 @@ class LX200Connection(MountConnection):
                 return MountStatus.TRACKING
             elif status_code == 1:
                 return MountStatus.IDLE
-            elif status_code in (2, 7):
+            elif status_code in (2, 4, 6):
                 return MountStatus.SLEWING
-            elif status_code == 6:
+            elif status_code == 3:
+                return MountStatus.IDLE
+            elif status_code == 5:
                 return MountStatus.PARKED
+            elif status_code == 7:
+                return MountStatus.TRACKING
+            elif status_code in (8, 9):
+                return MountStatus.ERROR
+            elif status_code in (10, 11):
+                return MountStatus.IDLE
+            elif status_code == 98:
+                return MountStatus.UNKNOWN
             elif status_code == 99:
                 return MountStatus.ERROR
             else:
-                return MountStatus.IDLE
+                return MountStatus.UNKNOWN
         except ValueError:
             return MountStatus.UNKNOWN
 
@@ -295,6 +317,69 @@ class LX200Connection(MountConnection):
         if result is None:
             return None
         return result.strip() == '1'
+
+    def check_mount_settings(self) -> list[str]:
+        """Verify 10Micron mount configuration for monitoring.
+
+        Checks (like Java checkMountSettings):
+        - Tracking speed should be sidereal (0)
+        - Tracking correction should be 0.000%
+        - Follow object should be OFF (0)
+
+        Uses :PRlist# command to iterate settings, then :PRnext# to read them.
+        Returns list of warning messages.
+        """
+        warnings = []
+        product = getattr(self, '_product_name', '') or ''
+        if '10micron' not in product.lower():
+            return warnings
+
+        try:
+            # Start listing preferences
+            response = self._send_command(':PRlist#')
+            if response is None:
+                return warnings
+
+            # Read through preference entries
+            while True:
+                entry = self._send_command(':PRnext#')
+                if entry is None or entry.strip() == 'c':
+                    break
+
+                # Each entry may contain multiple settings separated by ';'
+                for setting in entry.split(';'):
+                    parts = setting.split(',')
+                    if len(parts) < 4:
+                        continue
+
+                    name = parts[0] if parts else ''
+
+                    if 'Follow object' in name:
+                        if parts[3] != '0':
+                            warnings.append(f"Follow object is ON (should be OFF)")
+                            logger.warning("WRONG SET-UP: Follow object is ON!")
+                        else:
+                            logger.info("Verified: Follow object is OFF")
+
+                    elif 'Tracking correction' in name:
+                        if parts[3] != '0.000':
+                            warnings.append(f"Tracking correction is {parts[3]}% (should be 0.000%)")
+                            logger.warning(f"WRONG SET-UP: Tracking correction is {parts[3]}%!")
+                        else:
+                            logger.info(f"Verified: Tracking correction is {parts[3]}%")
+
+                    elif 'Tracking speed' in name:
+                        if parts[3] != '0':
+                            speed_name = parts[5 + int(parts[3])] if len(parts) > 5 + int(parts[3]) else parts[3]
+                            warnings.append(f"Tracking speed is {speed_name} (should be Sidereal)")
+                            logger.warning(f"WRONG SET-UP: Tracking speed is {speed_name}!")
+                        else:
+                            logger.info(f"Verified: Tracking speed is Sidereal")
+
+        except Exception as e:
+            logger.debug(f"checkMountSettings error: {e}")
+
+        return warnings
 
     def set_high_precision(self) -> bool:
         """Set high precision output mode: :U#
