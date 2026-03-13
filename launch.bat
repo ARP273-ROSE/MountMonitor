@@ -39,7 +39,7 @@ pushd "%~dp0" || (
 
 :: Use absolute paths (critical for UNC and mapped drives)
 set "SCRIPT_DIR=%CD%"
-set "VENV_DIR=%SCRIPT_DIR%\venv"
+set "VENV_DIR=%LOCALAPPDATA%\MountMonitor\venv"
 set "REQ_FILE=%SCRIPT_DIR%\requirements.txt"
 set "MAIN_SCRIPT=%SCRIPT_DIR%\main.py"
 
@@ -239,6 +239,7 @@ if exist "!VENV_DIR!\Scripts\python.exe" (
 
 if "!VENV_OK!"=="0" (
     echo             Creating... / Creation...
+    if not exist "%LOCALAPPDATA%\MountMonitor" mkdir "%LOCALAPPDATA%\MountMonitor" 2>nul
     %PYTHON_CMD% -m venv "!VENV_DIR!"
     if !errorlevel! neq 0 (
         echo  [!] Venv creation failed / Echec creation venv
