@@ -163,6 +163,9 @@ class TrackingGraph(QWidget):
         self._time_fixes = []
         self._time_fix_labels = []
         self._MAX_TIME_FIXES = 40  # Max visible at once; recycle pool
+        # Cache pen/font objects — avoid recreating every refresh
+        self._fix_pen = pg.mkPen(Colors.TEXT_MUTED, width=1, style=Qt.PenStyle.DotLine)
+        self._fix_label_font = QFont('Consolas', 7)
 
         layout.addWidget(self._plot)
 
@@ -308,14 +311,11 @@ class TrackingGraph(QWidget):
         if len(visible_marks) > self._MAX_TIME_FIXES:
             visible_marks = visible_marks[-self._MAX_TIME_FIXES:]
 
-        fix_pen = pg.mkPen(Colors.TEXT_MUTED, width=1, style=Qt.PenStyle.DotLine)
-        label_font = QFont('Consolas', 7)
-
-        # Grow pool up to max if needed
+        # Grow pool up to max if needed (using cached pen/font)
         while len(self._time_fixes) < min(len(visible_marks), self._MAX_TIME_FIXES):
-            line = pg.InfiniteLine(pos=0, angle=90, pen=fix_pen)
+            line = pg.InfiniteLine(pos=0, angle=90, pen=self._fix_pen)
             label = pg.TextItem(text='', color=Colors.TEXT_MUTED, anchor=(0.5, 1))
-            label.setFont(label_font)
+            label.setFont(self._fix_label_font)
             self._plot.addItem(line)
             self._plot.addItem(label)
             self._time_fixes.append(line)

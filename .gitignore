@@ -62,6 +62,7 @@ cours_fourier_mountmonitor.tex
 # Secrets
 CLAUDE.md
 .claude/
+.claudeignore
 
 # PyInstaller
 *.spec

@@ -49,6 +49,7 @@ class ParsedSession:
     observatory: str = ""
     mount_name: str = ""
     mount_id: str = ""
+    mount_driver: str = ""
     firmware: str = ""
     start_time: Optional[datetime] = None
 
@@ -294,6 +295,8 @@ def parse_dat_file(dat_path: Path) -> ParsedSession:
                         session.mount_name = line.split('\t', 1)[1].strip() if '\t' in line else ""
                     elif line.startswith("Mount ID:"):
                         session.mount_id = line.split('\t', 1)[1].strip() if '\t' in line else ""
+                    elif line.startswith("Mount driver:"):
+                        session.mount_driver = line.split('\t', 1)[1].strip() if '\t' in line else ""
                     elif line.startswith("Firmware:"):
                         session.firmware = line.split('\t', 1)[1].strip() if '\t' in line else ""
 

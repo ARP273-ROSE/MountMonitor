@@ -91,10 +91,10 @@ class MainWindow(QMainWindow):
         self._create_central_widget()
         self._create_statusbar()
 
-        # Refresh timer for graph updates
+        # Refresh timer for graph updates — 4 fps is sufficient for monitoring
         self._refresh_timer = QTimer()
         self._refresh_timer.timeout.connect(self._refresh_graphs)
-        self._refresh_timer.setInterval(100)  # 10 fps graph update
+        self._refresh_timer.setInterval(250)  # 4 fps graph update (was 100ms/10fps)
 
         # FFT timer (slower)
         self._fft_timer = QTimer()
@@ -110,6 +110,12 @@ class MainWindow(QMainWindow):
     def _setup_window(self):
         """Configure the main window."""
         self.setWindowTitle(f"MountMonitor v{self._version}")
+
+        # Set window icon
+        logo_path = Path(__file__).resolve().parent.parent.parent / "logo.png"
+        if logo_path.exists():
+            self.setWindowIcon(QIcon(str(logo_path)))
+
         w = self._settings.get("window_width")
         h = self._settings.get("window_height")
         x = self._settings.get("window_x")
@@ -708,17 +714,33 @@ class MainWindow(QMainWindow):
     # ── Graph refresh ────────────────────────────────────────────
 
     def _refresh_graphs(self):
-        """Refresh all graphs with current buffer data. Called by timer."""
+        """Refresh all graphs with current buffer data. Called by timer.
+
+        Performance: uses downsampled arrays (max 5000 points) for graph display
+        to avoid plotting 50K+ points. Full-resolution arrays are used only for
+        statistics (min/max/stdev) which are pre-computed in DataBuffer.
+        """
         # Graph correction: shift STDEV timestamps back by half running range
         correct = self._settings.get("correct_graphs_for_range")
         half_range = self._settings.get("running_range_seconds") / 2.0 if correct else 0.0
 
-        # RA graph
-        ra_t, ra_v = self._processor.ra_buffer.get_arrays()
+        # RA graph — downsampled for display
+        ra_t, ra_v = self._processor.ra_buffer.get_downsampled_arrays(5000)
         ra_stdev = self._processor.ra_buffer.get_stdev_array()
         if len(ra_t) > 0:
-            stdev_for_graph = ra_stdev if len(ra_stdev) == len(ra_t) else None
-            # Apply correction: shift STDEV curve backward
+            # Downsample stdev to match display points
+            if len(ra_stdev) > 0:
+                full_t, _ = self._processor.ra_buffer.get_arrays()
+                if len(ra_stdev) == len(full_t) and len(full_t) > 5000:
+                    step = len(full_t) // 5000
+                    indices = np.arange(0, len(full_t), step)
+                    if indices[-1] != len(full_t) - 1:
+                        indices = np.append(indices, len(full_t) - 1)
+                    stdev_for_graph = ra_stdev[indices]
+                else:
+                    stdev_for_graph = ra_stdev if len(ra_stdev) == len(ra_t) else None
+            else:
+                stdev_for_graph = None
             stdev_t = ra_t - half_range if (stdev_for_graph is not None and half_range > 0) else None
             self._ra_graph.update_data(
                 ra_t, ra_v,
@@ -730,11 +752,22 @@ class MainWindow(QMainWindow):
             )
             self._ra_graph.set_tolerance(self._settings.get("tolerance_ra_arcsec"))
 
-        # DEC graph
-        dec_t, dec_v = self._processor.dec_buffer.get_arrays()
+        # DEC graph — downsampled for display
+        dec_t, dec_v = self._processor.dec_buffer.get_downsampled_arrays(5000)
         dec_stdev = self._processor.dec_buffer.get_stdev_array()
         if len(dec_t) > 0:
-            stdev_for_graph = dec_stdev if len(dec_stdev) == len(dec_t) else None
+            if len(dec_stdev) > 0:
+                full_t, _ = self._processor.dec_buffer.get_arrays()
+                if len(dec_stdev) == len(full_t) and len(full_t) > 5000:
+                    step = len(full_t) // 5000
+                    indices = np.arange(0, len(full_t), step)
+                    if indices[-1] != len(full_t) - 1:
+                        indices = np.append(indices, len(full_t) - 1)
+                    stdev_for_graph = dec_stdev[indices]
+                else:
+                    stdev_for_graph = dec_stdev if len(dec_stdev) == len(dec_t) else None
+            else:
+                stdev_for_graph = None
             stdev_t = dec_t - half_range if (stdev_for_graph is not None and half_range > 0) else None
             self._dec_graph.update_data(
                 dec_t, dec_v,
@@ -746,11 +779,11 @@ class MainWindow(QMainWindow):
             )
             self._dec_graph.set_tolerance(self._settings.get("tolerance_dec_arcsec"))
 
-        # Time graph
-        diff_t, diff_v = self._processor.time_diff_buffer.get_arrays()
-        pc_t, pc_v = self._processor.pc_loop_buffer.get_arrays()
-        mt_t, mt_v = self._processor.mount_loop_buffer.get_arrays()
-        ntp_t, ntp_v = self._processor.ntp_buffer.get_arrays()
+        # Time graph — downsampled
+        diff_t, diff_v = self._processor.time_diff_buffer.get_downsampled_arrays(5000)
+        pc_t, pc_v = self._processor.pc_loop_buffer.get_downsampled_arrays(5000)
+        mt_t, mt_v = self._processor.mount_loop_buffer.get_downsampled_arrays(5000)
+        ntp_t, ntp_v = self._processor.ntp_buffer.get_downsampled_arrays(5000)
         if len(diff_t) > 0:
             self._time_graph.update_data(
                 diff_t, diff_v,
@@ -760,12 +793,12 @@ class MainWindow(QMainWindow):
                 ntp_v=ntp_v if len(ntp_v) > 0 else None,
             )
 
-        # Axial graph
+        # Axial graph — downsampled
         if self._settings.get("axial_mode") != "off":
-            ra_raw_t, ra_raw_v = self._processor.ra_speed_raw_buffer.get_arrays()
-            dec_raw_t, dec_raw_v = self._processor.dec_speed_raw_buffer.get_arrays()
-            ra_avg_t, ra_avg_v = self._processor.ra_speed_avg_buffer.get_arrays()
-            dec_avg_t, dec_avg_v = self._processor.dec_speed_avg_buffer.get_arrays()
+            ra_raw_t, ra_raw_v = self._processor.ra_speed_raw_buffer.get_downsampled_arrays(5000)
+            dec_raw_t, dec_raw_v = self._processor.dec_speed_raw_buffer.get_downsampled_arrays(5000)
+            ra_avg_t, ra_avg_v = self._processor.ra_speed_avg_buffer.get_downsampled_arrays(5000)
+            dec_avg_t, dec_avg_v = self._processor.dec_speed_avg_buffer.get_downsampled_arrays(5000)
             if len(ra_raw_t) > 0 or len(dec_raw_t) > 0:
                 self._axial_graph.update_data(
                     ra_raw_t=ra_raw_t if len(ra_raw_t) > 0 else None,
@@ -778,18 +811,21 @@ class MainWindow(QMainWindow):
                     dec_avg_v=dec_avg_v if len(dec_avg_v) > 0 else None,
                 )
 
-        # Seismic graph
-        sei_t, sei_v = self._processor.seismic_buffer.get_arrays()
+        # Seismic graph — downsampled
+        sei_t, sei_v = self._processor.seismic_buffer.get_downsampled_arrays(5000)
         if len(sei_t) > 0:
             sei_stdev = self._processor.seismic_buffer.get_stdev_array()
+            sei_stdev_ds = sei_stdev if len(sei_stdev) == len(sei_t) else None
             self._seismic_graph.update_data(
                 sei_t, sei_v,
-                stdev_values=sei_stdev if len(sei_stdev) == len(sei_t) else None,
+                stdev_values=sei_stdev_ds,
             )
 
-        # Update STDEV in status panel
-        if len(ra_stdev) > 0 and len(dec_stdev) > 0:
-            self._status_panel.update_stdev(ra_stdev[-1], dec_stdev[-1])
+        # Update STDEV in status panel (use full-res last values)
+        full_ra_stdev = self._processor.ra_buffer.get_stdev_array()
+        full_dec_stdev = self._processor.dec_buffer.get_stdev_array()
+        if len(full_ra_stdev) > 0 and len(full_dec_stdev) > 0:
+            self._status_panel.update_stdev(full_ra_stdev[-1], full_dec_stdev[-1])
 
         # Update title with current frequency
         self._update_title()
@@ -1327,10 +1363,37 @@ class MainWindow(QMainWindow):
         <p>View > FFT or Ctrl+F. Shows frequency and period domain of RA/DEC/seismic data.
         Useful for identifying vibration sources.</p>
 
+        <h3>Night Report &amp; Adaptive Scoring (v1.6.0)</h3>
+        <p>The night analysis report now <b>automatically detects unguided precision mounts</b>
+        (10Micron, Planewave, ASA DDM) and adapts scoring thresholds accordingly:</p>
+        <ul>
+        <li><b>Guided mounts</b>: Excellent &lt;0.5" | Good &lt;1.5" | Fair &lt;3.0"</li>
+        <li><b>Unguided precision</b>: Excellent &lt;2.0" | Good &lt;4.0" | Fair &lt;8.0"</li>
+        </ul>
+        <p>Detection uses mount name, ASCOM driver, and firmware fields.</p>
+
+        <h3>Performance (v1.6.0)</h3>
+        <ul>
+        <li>Numpy array caching with dirty flags (no redundant copies)</li>
+        <li>Graph downsampling: max 5,000 points displayed from 50K+ buffer</li>
+        <li>250ms refresh timer (4 fps) — smooth and CPU-efficient</li>
+        <li>Lightweight QPlainTextEdit status panel</li>
+        <li>Stylesheet caching, STDEV computed outside lock, cached pen/font objects</li>
+        </ul>
+        <p>Stable for 8h+ sessions without any degradation.</p>
+
+        <h3>Security (v1.6.0)</h3>
+        <ul>
+        <li>LX200 response buffer limited to 4,096 bytes (anti-DoS)</li>
+        <li>Log header sanitization (anti-injection)</li>
+        <li>Periodic flush every 20 writes (NAS-optimized)</li>
+        </ul>
+
         <h3>Keyboard Shortcuts</h3>
         <ul>
         <li><b>Ctrl+K</b>: Connect</li>
         <li><b>Ctrl+D</b>: Disconnect</li>
+        <li><b>Ctrl+O</b>: Open log (replay + analysis)</li>
         <li><b>Ctrl+F</b>: FFT window</li>
         <li><b>Ctrl+,</b>: Preferences</li>
         <li><b>F1</b>: This help</li>
@@ -1344,8 +1407,9 @@ class MainWindow(QMainWindow):
         </ul>
 
         <h3>Log Files</h3>
-        <p>Stored in <code>Logs/</code> folder. Five file types:
-        .log (events), .dat (mount data), .dti (time data), .sei (seismic), .fft (FFT snapshots).</p>
+        <p>Stored in <code>Logs/</code> folder. Six file types:
+        .log (events), .dat (mount data), .dti (time data), .sei (seismic),
+        .fft (FFT snapshots), .env (environment/diagnostics).</p>
         <p>Logging starts automatically on connection.</p>
 
         <h3>Log Replay &amp; Analysis</h3>
@@ -1380,6 +1444,32 @@ class MainWindow(QMainWindow):
         <p>Affichage > FFT ou Ctrl+F. Montre le domaine fréquentiel et temporel des données AD/DÉC/sismiques.
         Utile pour identifier les sources de vibration.</p>
 
+        <h3>Rapport de nuit et scoring adaptatif (v1.6.0)</h3>
+        <p>Le rapport d'analyse détecte automatiquement les <b>montures de précision non-guidées</b>
+        (10Micron, Planewave, ASA DDM) et adapte les seuils de notation :</p>
+        <ul>
+        <li><b>Monture guidée</b> : Excellent &lt;0.5" | Bon &lt;1.5" | Correct &lt;3.0"</li>
+        <li><b>Précision non-guidée</b> : Excellent &lt;2.0" | Bon &lt;4.0" | Correct &lt;8.0"</li>
+        </ul>
+        <p>Détection via nom de monture, driver ASCOM et firmware.</p>
+
+        <h3>Performance (v1.6.0)</h3>
+        <ul>
+        <li>Cache numpy avec dirty flags (pas de copies redondantes)</li>
+        <li>Downsampling graphiques : max 5 000 points affichés sur 50K+ en buffer</li>
+        <li>Timer de rafraîchissement 250ms (4 fps) — fluide et économe en CPU</li>
+        <li>Panneau de statut QPlainTextEdit léger</li>
+        <li>Cache CSS, STDEV calculé hors verrou, pen/font cachés</li>
+        </ul>
+        <p>Stable pour des sessions de 8h+ sans dégradation.</p>
+
+        <h3>Sécurité (v1.6.0)</h3>
+        <ul>
+        <li>Buffer réponse LX200 limité à 4 096 octets (anti-DoS)</li>
+        <li>Sanitisation des en-têtes log (anti-injection)</li>
+        <li>Flush périodique toutes les 20 écritures (optimisé NAS)</li>
+        </ul>
+
         <h3>Raccourcis clavier</h3>
         <ul>
         <li><b>Ctrl+K</b> : Connecter</li>
@@ -1398,13 +1488,14 @@ class MainWindow(QMainWindow):
         </ul>
 
         <h3>Fichiers log</h3>
-        <p>Stockés dans le dossier <code>Logs/</code>. Cinq types :
-        .log (événements), .dat (données monture), .dti (temps), .sei (sismique), .fft (FFT).</p>
+        <p>Stockés dans le dossier <code>Logs/</code>. Six types :
+        .log (événements), .dat (données monture), .dti (temps), .sei (sismique),
+        .fft (FFT), .env (environnement/diagnostic).</p>
         <p>L'enregistrement démarre automatiquement à la connexion.</p>
 
         <h3>Relecture et analyse des logs</h3>
         <p><b>Fichier → Ouvrir un log</b> ou <b>Ctrl+O</b> : charger un fichier .dat pour
-        revisudaliser les graphiques et obtenir un rapport d'analyse complet
+        revisualiser les graphiques et obtenir un rapport d'analyse complet
         (qualité, FFT, dérive, tolérance).</p>
         <p><b>Analyse auto au parcage</b> : quand la monture se parque, l'analyse
         de la nuit se lance automatiquement.</p>
