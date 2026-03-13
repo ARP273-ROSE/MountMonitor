@@ -245,6 +245,11 @@ if "!VENV_OK!"=="0" (
         echo  [!] Venv creation failed / Echec creation venv
         goto :skip_venv
     )
+    if not exist "!VENV_DIR!\Scripts\python.exe" (
+        echo  [!] Venv created but python.exe not found / Venv cree mais python.exe introuvable
+        echo      Check / Verifiez : !VENV_DIR!\Scripts\
+        goto :skip_venv
+    )
     echo             Created / Cree
 )
 
