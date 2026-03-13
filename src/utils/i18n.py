@@ -19,6 +19,7 @@ TX = {
     "menu_help_contents": {"en": "Help Contents", "fr": "Contenu de l'aide"},
     "menu_online_help": {"en": "Online Help", "fr": "Aide en ligne"},
     "menu_report_bug": {"en": "Report a Bug", "fr": "Signaler un bug"},
+    "menu_create_shortcut": {"en": "Create Desktop Shortcut", "fr": "Créer raccourci bureau"},
 
     # Connection
     "connecting": {"en": "Connecting...", "fr": "Connexion..."},

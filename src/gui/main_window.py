@@ -252,6 +252,12 @@ class MainWindow(QMainWindow):
         bug_action.triggered.connect(self._report_bug)
         help_menu.addAction(bug_action)
 
+        help_menu.addSeparator()
+
+        shortcut_action = QAction(T("menu_create_shortcut"), self)
+        shortcut_action.triggered.connect(self._create_desktop_shortcut)
+        help_menu.addAction(shortcut_action)
+
     def _create_toolbar(self):
         """Create toolbar with main action buttons."""
         toolbar = QToolBar()
@@ -1531,6 +1537,16 @@ class MainWindow(QMainWindow):
         """Open bug report dialog."""
         import webbrowser
         webbrowser.open("https://github.com/ARP273-ROSE/MountMonitor/issues/new")
+
+    def _create_desktop_shortcut(self):
+        """Create a desktop shortcut for MountMonitor."""
+        try:
+            from shortcut_helper import create_shortcut_force
+            create_shortcut_force("MountMonitor", "mountmonitor.py", "logo.ico")
+        except Exception as e:
+            QMessageBox.warning(self,
+                T("menu_create_shortcut"),
+                f"Error: {e}")
 
     # ── Window lifecycle ─────────────────────────────────────────
 
