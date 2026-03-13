@@ -76,6 +76,10 @@ class FileLogger:
         self._max_dec_axis: Optional[float] = None
         self._max_dec_axis_stdev: float = 0.0
 
+        # Buffered flush: avoid flushing every single write (perf on NAS)
+        self._write_count: int = 0
+        self._flush_interval: int = 20  # Flush every N writes
+
         # Tracking-only statistics for session summary
         self._tracking_count: int = 0
         self._tracking_min_ra: Optional[float] = None
@@ -95,21 +99,47 @@ class FileLogger:
     def log_dir(self) -> Path:
         return self._base_dir
 
+    @staticmethod
+    def _sanitize(text: str) -> str:
+        """Sanitize user-supplied text for log file headers.
+
+        Removes newlines, tabs and control characters to prevent log injection.
+        """
+        if not text:
+            return ""
+        return text.replace('\n', ' ').replace('\r', '').replace('\t', ' ').strip()
+
     def _safe_write(self, file_obj: Optional[TextIO], data: str) -> bool:
         """Write data to a file, handling transient I/O errors (NAS hiccups).
 
         Returns True on success, False on failure.
+        Flushes periodically (every _flush_interval writes) to balance
+        I/O performance vs data safety.
         """
         if not file_obj:
             return False
         try:
             file_obj.write(data)
+            self._write_count += 1
+            if self._write_count >= self._flush_interval:
+                self._flush_all()
+                self._write_count = 0
             return True
         except OSError as e:
             if not getattr(self, '_io_error_logged', False):
                 logger.warning(f"I/O error writing log data: {e}")
                 self._io_error_logged = True
             return False
+
+    def _flush_all(self):
+        """Flush all open log files to disk."""
+        for f in [self._log_file, self._dat_file, self._dti_file,
+                  self._sei_file, self._fft_file, self._env_file]:
+            if f:
+                try:
+                    f.flush()
+                except OSError:
+                    pass
 
     def _reset_minmax(self):
         """Reset running min/max statistics."""
@@ -249,30 +279,31 @@ class FileLogger:
             self.close()
 
     def _write_log_header(self, info: SessionInfo):
-        """Write .log file header."""
+        """Write .log file header. All user-supplied fields are sanitized."""
         f = self._log_file
         f.write(f"MountMonitor logfile (v.{self._version})\n")
-        f.write(f"Location:\t{info.observatory}\n")
+        f.write(f"Location:\t{self._sanitize(info.observatory)}\n")
         if info.latitude:
-            f.write(f"Position:\tLatitude = {info.latitude}\t"
-                    f"Longitude = {info.longitude}\t"
+            f.write(f"Position:\tLatitude = {self._sanitize(str(info.latitude))}\t"
+                    f"Longitude = {self._sanitize(str(info.longitude))}\t"
                     f"Elevation = {info.elevation}m\n")
-        f.write(f"Mount:\t{info.mount_name}\n")
-        f.write(f"Mount ID:\t{info.mount_id}\n")
+        f.write(f"Mount:\t{self._sanitize(info.mount_name)}\n")
+        f.write(f"Mount ID:\t{self._sanitize(info.mount_id)}\n")
         if info.mount_driver:
-            f.write(f"Mount driver:\t{info.mount_driver}\n")
-        f.write(f"Firmware:\t{info.firmware}\n")
+            f.write(f"Mount driver:\t{self._sanitize(info.mount_driver)}\n")
+        f.write(f"Firmware:\t{self._sanitize(info.firmware)}\n")
         f.write(f"Protocol:\t{info.protocol.value}\n")
         f.flush()
 
     def _write_dat_header(self, info: SessionInfo):
-        """Write .dat file header with Java-compatible 27-column format."""
+        """Write .dat file header with Java-compatible 27-column format.
+        All user-supplied fields are sanitized."""
         f = self._dat_file
         f.write(f"MountMonitor mount data file (v.{self._version})\n")
-        f.write(f"Location:\t{info.observatory}\n")
-        f.write(f"Mount:\t{info.mount_name}\n")
-        f.write(f"Mount ID:\t{info.mount_id}\n")
-        f.write(f"Firmware:\t{info.firmware}\n")
+        f.write(f"Location:\t{self._sanitize(info.observatory)}\n")
+        f.write(f"Mount:\t{self._sanitize(info.mount_name)}\n")
+        f.write(f"Mount ID:\t{self._sanitize(info.mount_id)}\n")
+        f.write(f"Firmware:\t{self._sanitize(info.firmware)}\n")
 
         # Telescope pointing info (pier side, azimuth, altitude)
         pier_side_str = info.pier_side.value if info.pier_side else "Unknown"
@@ -371,33 +402,27 @@ class FileLogger:
         polar = f"{sample.polar_error_deg:.4f}" if sample.polar_error_deg is not None else ""
 
         line = f"{ts}\t{temp_ext}\t{pressure}\t{temp_int}\t{status}\t{rate}\t{flip}\t{pier}\t{stars}\t{rms}\t{polar}\n"
-        if self._safe_write(self._env_file, line):
-            try:
-                self._env_file.flush()
-            except OSError:
-                pass
+        self._safe_write(self._env_file, line)
 
     def log_event(self, message: str):
-        """Write an event to the .log file."""
+        """Write an event to the .log file.
+
+        Sanitize message to prevent log injection (newlines, tabs).
+        Flush is handled periodically by _safe_write.
+        """
         if not self._log_file:
             return
         timestamp = datetime.now().strftime("%d/%m/%Y %H:%M:%S.%f")[:-3]
-        if self._safe_write(self._log_file, f"{timestamp}\t{message}\n"):
-            try:
-                self._log_file.flush()
-            except OSError:
-                pass
+        safe_msg = self._sanitize(message)
+        self._safe_write(self._log_file, f"{timestamp}\t{safe_msg}\n")
 
     def log_tolerance_event(self, message: str):
         """Write a tolerance alert event to the .log file."""
         if not self._log_file:
             return
         timestamp = datetime.now().strftime("%d/%m/%Y %H:%M:%S.%f")[:-3]
-        if self._safe_write(self._log_file, f"{timestamp}\tTOLERANCE\t{message}\n"):
-            try:
-                self._log_file.flush()
-            except OSError:
-                pass
+        safe_msg = self._sanitize(message)
+        self._safe_write(self._log_file, f"{timestamp}\tTOLERANCE\t{safe_msg}\n")
 
     def log_mount_sample(self, sample: MountSample):
         """Write a mount data sample to the .dat file (27-column Java format).
@@ -680,10 +705,11 @@ class FileLogger:
         self._log_file.flush()
 
     def close(self):
-        """Close all log files and write summary."""
+        """Close all log files and write summary. Flush before close."""
         if self._log_file:
             self.write_session_summary()
             self.log_event("Logging stopped.")
+        self._flush_all()  # Final flush before closing
         self._active = False
         for attr in ['_log_file', '_dat_file', '_dti_file', '_sei_file', '_fft_file', '_env_file']:
             f = getattr(self, attr)

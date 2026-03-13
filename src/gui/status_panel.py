@@ -2,10 +2,14 @@
 
 Displays scrolling log messages, current values, connection state,
 and tolerance alerts. Equivalent to the text boxes in the original Java version.
+
+Performance: uses QPlainTextEdit instead of QTextEdit to avoid costly HTML
+reflow on every message insertion. Caches stylesheet strings to avoid
+redundant Qt style recalculations.
 """
 
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTextEdit, QFrame, QGridLayout
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPlainTextEdit, QFrame, QGridLayout
 )
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont, QColor, QTextCursor
@@ -26,6 +30,14 @@ class StatusPanel(QWidget):
         self._tolerance_dec_arcsec = 1.5
         self._tolerance_as_ha_seconds = False
         self._declination_deg = 0.0
+
+        # Cache stylesheet strings to avoid redundant setStyleSheet calls
+        self._style_ra_normal = f"color: {Colors.TEXT_PRIMARY.name()};"
+        self._style_ra_exceeded = f"color: {Colors.ACCENT_RED.name()};"
+        self._style_dec_normal = f"color: {Colors.TEXT_PRIMARY.name()};"
+        self._style_dec_exceeded = f"color: {Colors.ACCENT_RED.name()};"
+        self._last_ra_exceeded = False
+        self._last_dec_exceeded = False
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
@@ -102,13 +114,21 @@ class StatusPanel(QWidget):
 
         layout.addWidget(values_frame)
 
-        # Scrolling message log
-        self._log_text = QTextEdit()
+        # Scrolling message log — QPlainTextEdit is FAR more performant than QTextEdit
+        self._log_text = QPlainTextEdit()
         self._log_text.setReadOnly(True)
         self._log_text.setFont(QFont("Consolas", 9))
         self._log_text.setMaximumHeight(200)
         self._log_text.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+        self._log_text.setStyleSheet(
+            f"QPlainTextEdit {{ background-color: {Colors.BG_GRAPH.name()}; "
+            f"color: {Colors.TEXT_SECONDARY.name()}; "
+            f"border: 1px solid {Colors.BORDER.name()}; }}"
+        )
         layout.addWidget(self._log_text)
+
+        # Message buffer for efficient batch insertion
+        self._message_lines: list[str] = []
 
     def set_tolerances(self, ra_arcsec: float, dec_arcsec: float,
                        as_ha_seconds: bool = False, declination_deg: float = 0.0):
@@ -138,11 +158,16 @@ class StatusPanel(QWidget):
             self._ra_dev.setText(f"\u0394 {ra_dev:+.2f}\"")
         self._dec_dev.setText(f"\u0394 {sample.dec_deviation_arcsec:+.2f}\"")
 
-        # Color deviation text based on tolerance
-        ra_color = Colors.ACCENT_RED.name() if abs(ra_dev) > self._tolerance_ra_arcsec else Colors.TEXT_PRIMARY.name()
-        dec_color = Colors.ACCENT_RED.name() if abs(sample.dec_deviation_arcsec) > self._tolerance_dec_arcsec else Colors.TEXT_PRIMARY.name()
-        self._ra_dev.setStyleSheet(f"color: {ra_color};")
-        self._dec_dev.setStyleSheet(f"color: {dec_color};")
+        # Color deviation text based on tolerance — only update if changed
+        ra_exceeded = abs(ra_dev) > self._tolerance_ra_arcsec
+        if ra_exceeded != self._last_ra_exceeded:
+            self._last_ra_exceeded = ra_exceeded
+            self._ra_dev.setStyleSheet(self._style_ra_exceeded if ra_exceeded else self._style_ra_normal)
+
+        dec_exceeded = abs(sample.dec_deviation_arcsec) > self._tolerance_dec_arcsec
+        if dec_exceeded != self._last_dec_exceeded:
+            self._last_dec_exceeded = dec_exceeded
+            self._dec_dev.setStyleSheet(self._style_dec_exceeded if dec_exceeded else self._style_dec_normal)
 
     def update_status(self, status: MountStatus):
         """Update connection/tracking status."""
@@ -168,24 +193,29 @@ class StatusPanel(QWidget):
         self._dec_stdev.setText(f"σ {dec_stdev:.2f}\"")
 
     def add_message(self, message: str, color: QColor = None):
-        """Add a message to the scrolling log (newest on top)."""
-        if color is None:
-            color = Colors.TEXT_SECONDARY
+        """Add a message to the scrolling log (newest on top).
+
+        Uses QPlainTextEdit with plain text prepend — much faster than
+        QTextEdit HTML insertion which triggers full document reflow.
+        """
         from datetime import datetime
         ts = datetime.now().strftime("%H:%M:%S")
-        html = f'<span style="color:{color.name()}">{ts} {message}</span>'
+        line = f"{ts} {message}"
 
+        # Prepend to internal buffer
+        self._message_lines.insert(0, line)
+
+        # Trim buffer
+        if len(self._message_lines) > self._max_lines:
+            self._message_lines = self._message_lines[:self._max_lines]
+
+        # Rebuild plain text (cheap for 50 lines)
+        self._log_text.setPlainText("\n".join(self._message_lines))
+
+        # Scroll to top (newest messages)
         cursor = self._log_text.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.Start)
-        cursor.insertHtml(html + "<br>")
-
-        # Limit lines
-        doc = self._log_text.document()
-        if doc.blockCount() > self._max_lines:
-            cursor.movePosition(QTextCursor.MoveOperation.End)
-            cursor.movePosition(QTextCursor.MoveOperation.StartOfBlock, QTextCursor.MoveMode.KeepAnchor)
-            cursor.movePosition(QTextCursor.MoveOperation.PreviousBlock, QTextCursor.MoveMode.KeepAnchor)
-            cursor.removeSelectedText()
+        self._log_text.setTextCursor(cursor)
 
     def set_connected(self, connected: bool):
         """Update connection state display."""
@@ -206,3 +236,4 @@ class StatusPanel(QWidget):
         self._dec_stdev.setText("σ --.--\"")
         self._freq_label.setText(f"0.0 Hz | 0 {T('samples')}")
         self._log_text.clear()
+        self._message_lines.clear()

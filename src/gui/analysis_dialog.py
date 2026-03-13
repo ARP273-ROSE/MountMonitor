@@ -58,6 +58,40 @@ def _bi(en: str, fr: str, lang: str) -> str:
     return f"{en} / {fr}"
 
 
+def _is_precision_unguided_mount(session) -> bool:
+    """Detect whether the mount is a high-precision unguided type (e.g. 10Micron).
+
+    These mounts use internal pointing models instead of external guiding,
+    so their coordinate-reported deviations are naturally larger than guided mounts.
+    The quality thresholds must be adapted accordingly.
+
+    Checks mount_name, firmware, and mount_driver fields from the session.
+    """
+    # Collect all identifying strings
+    fields = []
+    for attr in ('mount_name', 'firmware', 'mount_driver'):
+        val = getattr(session, attr, '') or ''
+        if val:
+            fields.append(val.lower())
+    combined = ' '.join(fields)
+
+    if not combined:
+        return False
+
+    # 10Micron mounts (GM1000, GM2000, GM3000, GM4000)
+    if '10micron' in combined or '10 micron' in combined or 'tenmicron' in combined:
+        return True
+    if any(m in combined for m in ('gm1000', 'gm2000', 'gm3000', 'gm4000')):
+        return True
+    # Planewave mounts
+    if 'planewave' in combined:
+        return True
+    # ASA DDM mounts (direct drive, often unguided)
+    if 'asa' in combined and 'ddm' in combined:
+        return True
+    return False
+
+
 class AnalysisDialog(QDialog):
     """Comprehensive session analysis dialog."""
 
@@ -178,14 +212,31 @@ class AnalysisDialog(QDialog):
         dec_rms = float(np.std(s.dec_deviations)) if len(s.dec_deviations) > 0 else 999
         combined_rms = np.sqrt(ra_rms**2 + dec_rms**2)
 
-        if combined_rms < 0.5:
-            rating = 'excellent'
-        elif combined_rms < 1.5:
-            rating = 'good'
-        elif combined_rms < 3.0:
-            rating = 'fair'
+        # Detect mount type and adapt scoring thresholds
+        # Unguided precision mounts (10Micron, Planewave) report coordinate-level
+        # deviations that are naturally larger than guided mounts. Their tracking
+        # quality is excellent even at 2-4" RMS as measured by MountMonitor.
+        precision_unguided = _is_precision_unguided_mount(s)
+        if precision_unguided:
+            # Adapted thresholds for unguided precision mounts
+            if combined_rms < 2.0:
+                rating = 'excellent'
+            elif combined_rms < 4.0:
+                rating = 'good'
+            elif combined_rms < 8.0:
+                rating = 'fair'
+            else:
+                rating = 'poor'
         else:
-            rating = 'poor'
+            # Standard thresholds for guided mounts
+            if combined_rms < 0.5:
+                rating = 'excellent'
+            elif combined_rms < 1.5:
+                rating = 'good'
+            elif combined_rms < 3.0:
+                rating = 'fair'
+            else:
+                rating = 'poor'
 
         rating_text = _rating_emoji(rating)
 
@@ -197,23 +248,46 @@ class AnalysisDialog(QDialog):
         lines.append(f"  Combined RMS       : {combined_rms:.3f}\"")
         lines.append(f"  RA RMS             : {ra_rms:.3f}\"")
         lines.append(f"  DEC RMS            : {dec_rms:.3f}\"")
+        if precision_unguided:
+            lines.append(f"  Mount type         : Precision unguided / Précision non-guidée")
+            lines.append(f"  Thresholds adapted / Seuils adaptés : Exc <2.0\" | Good <4.0\" | Fair <8.0\"")
+        else:
+            lines.append(f"  Thresholds / Seuils : Exc <0.5\" | Good <1.5\" | Fair <3.0\"")
         lines.append("")
 
         if rating == 'excellent':
-            lines.append("  Your tracking is excellent! Stars will be perfectly round.")
-            lines.append("  Votre suivi est excellent ! Étoiles parfaitement ponctuelles.")
+            if precision_unguided:
+                lines.append("  Excellent tracking for unguided mount! Model-corrected pointing is precise.")
+                lines.append("  Suivi excellent pour monture non-guidée ! Le pointage corrigé par modèle est précis.")
+            else:
+                lines.append("  Your tracking is excellent! Stars will be perfectly round.")
+                lines.append("  Votre suivi est excellent ! Étoiles parfaitement ponctuelles.")
         elif rating == 'good':
-            lines.append("  Good tracking. Satisfactory for most focal lengths.")
-            lines.append("  Bon suivi. Résultats satisfaisants pour la plupart des focales.")
+            if precision_unguided:
+                lines.append("  Good tracking. Normal performance for unguided precision mount.")
+                lines.append("  Bon suivi. Performance normale pour monture de précision non-guidée.")
+            else:
+                lines.append("  Good tracking. Satisfactory for most focal lengths.")
+                lines.append("  Bon suivi. Résultats satisfaisants pour la plupart des focales.")
         elif rating == 'fair':
-            lines.append("  Fair tracking. Visible on long exposures at high focal lengths.")
-            lines.append("  Suivi moyen. Visible sur les longues poses à haute focale.")
-            lines.append("  Check polar alignment. / Vérifiez l'alignement polaire.")
+            if precision_unguided:
+                lines.append("  Fair tracking. Consider re-running alignment model or checking balance.")
+                lines.append("  Suivi moyen. Refaites le modèle d'alignement ou vérifiez l'équilibrage.")
+            else:
+                lines.append("  Fair tracking. Visible on long exposures at high focal lengths.")
+                lines.append("  Suivi moyen. Visible sur les longues poses à haute focale.")
+                lines.append("  Check polar alignment. / Vérifiez l'alignement polaire.")
         else:
-            lines.append("  Poor tracking. Stars likely elongated.")
-            lines.append("  Suivi insuffisant. Étoiles probablement allongées.")
-            lines.append("  Check: polar alignment, tightness, balance.")
-            lines.append("  Vérifiez : alignement polaire, serrage, équilibrage.")
+            if precision_unguided:
+                lines.append("  Poor tracking for precision mount. Rebuild alignment model.")
+                lines.append("  Suivi insuffisant pour monture de précision. Refaites le modèle d'alignement.")
+                lines.append("  Check: model quality, balance, axis play, temperature changes.")
+                lines.append("  Vérifiez : qualité du modèle, équilibrage, jeu d'axes, variations thermiques.")
+            else:
+                lines.append("  Poor tracking. Stars likely elongated.")
+                lines.append("  Suivi insuffisant. Étoiles probablement allongées.")
+                lines.append("  Check: polar alignment, tightness, balance.")
+                lines.append("  Vérifiez : alignement polaire, serrage, équilibrage.")
         lines.append("")
 
         # ═══════════════════════════════════════════════════════════
@@ -561,17 +635,33 @@ class AnalysisDialog(QDialog):
 
         recommendations = []
 
-        if ra_rms > 2.0:
-            recommendations.append(
-                "- RA unstable (RMS > 2\"): check RA balance, clamp tightness, cable drag\n"
-                "  RA instable (RMS > 2\") : vérifiez l'équilibrage RA, le serrage, les câbles"
-            )
+        # Adapt recommendation thresholds for mount type
+        ra_threshold = 5.0 if precision_unguided else 2.0
+        dec_threshold = 5.0 if precision_unguided else 2.0
 
-        if dec_rms > 2.0:
-            recommendations.append(
-                "- DEC unstable (RMS > 2\"): check DEC balance, DEC axis backlash\n"
-                "  DEC instable (RMS > 2\") : vérifiez l'équilibrage DEC, le jeu dans l'axe DEC"
-            )
+        if ra_rms > ra_threshold:
+            if precision_unguided:
+                recommendations.append(
+                    f"- RA unstable (RMS > {ra_threshold}\"): rebuild alignment model, check RA balance\n"
+                    f"  RA instable (RMS > {ra_threshold}\") : refaites le modèle d'alignement, vérifiez l'équilibrage RA"
+                )
+            else:
+                recommendations.append(
+                    "- RA unstable (RMS > 2\"): check RA balance, clamp tightness, cable drag\n"
+                    "  RA instable (RMS > 2\") : vérifiez l'équilibrage RA, le serrage, les câbles"
+                )
+
+        if dec_rms > dec_threshold:
+            if precision_unguided:
+                recommendations.append(
+                    f"- DEC unstable (RMS > {dec_threshold}\"): rebuild alignment model, check DEC balance\n"
+                    f"  DEC instable (RMS > {dec_threshold}\") : refaites le modèle d'alignement, vérifiez l'équilibrage DEC"
+                )
+            else:
+                recommendations.append(
+                    "- DEC unstable (RMS > 2\"): check DEC balance, DEC axis backlash\n"
+                    "  DEC instable (RMS > 2\") : vérifiez l'équilibrage DEC, le jeu dans l'axe DEC"
+                )
 
         # Check drift per segment
         for seg_idx, seg in enumerate(s.target_segments):

@@ -11,6 +11,8 @@ class DataBuffer:
 
     Stores up to `max_size` samples. Provides efficient running STDEV,
     min/max tracking, and median computation.
+
+    Performance: numpy array copies are cached and only rebuilt when data changes.
     """
 
     def __init__(self, max_size: int = 50000):
@@ -26,6 +28,13 @@ class DataBuffer:
         self._max_value = float('-inf')
         self._max_stdev = 0.0
         self._running_stdevs: deque[float] = deque(maxlen=max_size)
+
+        # Cached numpy arrays — rebuilt only when dirty
+        self._cached_t: np.ndarray = np.array([], dtype=np.float64)
+        self._cached_v: np.ndarray = np.array([], dtype=np.float64)
+        self._cached_stdev: np.ndarray = np.array([], dtype=np.float64)
+        self._arrays_dirty: bool = True
+        self._stdev_dirty: bool = True
 
         # Cached median (recomputed periodically, not on every call)
         self._cached_median: float = 0.0
@@ -65,69 +74,90 @@ class DataBuffer:
             self._median_sample_count += 1
             if self._median_sample_count >= self._MEDIAN_RECOMPUTE_INTERVAL:
                 self._median_valid = False
+            self._arrays_dirty = True
 
     def get_arrays(self) -> tuple[np.ndarray, np.ndarray]:
-        """Get timestamps and values as numpy arrays. Thread-safe copy."""
+        """Get timestamps and values as numpy arrays. Thread-safe, cached."""
         with self._lock:
-            return (
-                np.array(self._timestamps, dtype=np.float64),
-                np.array(self._values, dtype=np.float64),
-            )
+            if self._arrays_dirty:
+                self._cached_t = np.array(self._timestamps, dtype=np.float64)
+                self._cached_v = np.array(self._values, dtype=np.float64)
+                self._arrays_dirty = False
+            return self._cached_t, self._cached_v
+
+    def get_downsampled_arrays(self, max_points: int = 5000) -> tuple[np.ndarray, np.ndarray]:
+        """Get arrays downsampled for graph display. Avoids plotting 50K points."""
+        t, v = self.get_arrays()
+        n = len(t)
+        if n <= max_points:
+            return t, v
+        # Decimate: keep every Nth point, always include last point
+        step = n // max_points
+        indices = np.arange(0, n, step)
+        if indices[-1] != n - 1:
+            indices = np.append(indices, n - 1)
+        return t[indices], v[indices]
 
     def get_stdev_array(self) -> np.ndarray:
-        """Get running STDEV values as numpy array."""
+        """Get running STDEV values as numpy array. Cached."""
         with self._lock:
-            return np.array(self._running_stdevs, dtype=np.float64)
+            if self._stdev_dirty:
+                self._cached_stdev = np.array(self._running_stdevs, dtype=np.float64)
+                self._stdev_dirty = False
+            return self._cached_stdev
 
     def compute_running_stdev(self, window_seconds: float):
         """Compute running standard deviation over a time window.
 
         Uses an O(n) sliding window approach instead of O(n²) per-sample masking.
         This should be called periodically from the processing thread.
+        Copies data under lock, then computes outside the lock to minimize blocking.
         """
+        # Step 1: copy data under lock
         with self._lock:
             n = len(self._values)
             if n < 2:
                 self._running_stdevs.clear()
+                self._stdev_dirty = True
                 return
-
             timestamps = np.array(self._timestamps)
             values = np.array(self._values)
-            stdevs = np.zeros(n)
 
-            # Sliding window with two pointers
-            left = 0
-            win_sum = 0.0
-            win_sum2 = 0.0
-            win_count = 0
+        # Step 2: compute outside lock (no blocking)
+        stdevs = np.zeros(n)
+        max_sd = 0.0
+        left = 0
+        win_sum = 0.0
+        win_sum2 = 0.0
+        win_count = 0
 
-            for right in range(n):
-                # Expand window: add current sample
-                v = values[right]
-                win_sum += v
-                win_sum2 += v * v
-                win_count += 1
+        for right in range(n):
+            v = values[right]
+            win_sum += v
+            win_sum2 += v * v
+            win_count += 1
 
-                # Shrink window: remove samples outside the time window
-                while left < right and timestamps[left] < timestamps[right] - window_seconds:
-                    vl = values[left]
-                    win_sum -= vl
-                    win_sum2 -= vl * vl
-                    win_count -= 1
-                    left += 1
+            while left < right and timestamps[left] < timestamps[right] - window_seconds:
+                vl = values[left]
+                win_sum -= vl
+                win_sum2 -= vl * vl
+                win_count -= 1
+                left += 1
 
-                if win_count > 1:
-                    # Welford-style variance from running sums
-                    mean = win_sum / win_count
-                    variance = (win_sum2 / win_count) - (mean * mean)
-                    # Bessel correction: multiply by n/(n-1)
-                    variance = variance * win_count / (win_count - 1)
-                    sd = float(np.sqrt(max(0.0, variance)))
-                    stdevs[right] = sd
-                    if sd > self._max_stdev:
-                        self._max_stdev = sd
+            if win_count > 1:
+                mean = win_sum / win_count
+                variance = (win_sum2 / win_count) - (mean * mean)
+                variance = variance * win_count / (win_count - 1)
+                sd = float(np.sqrt(max(0.0, variance)))
+                stdevs[right] = sd
+                if sd > max_sd:
+                    max_sd = sd
 
+        # Step 3: store result under lock
+        with self._lock:
             self._running_stdevs = deque(stdevs, maxlen=self._max_size)
+            self._max_stdev = max(self._max_stdev, max_sd)
+            self._stdev_dirty = True
 
     def get_median(self) -> float:
         """Get the median of all values in the buffer (cached for performance)."""
