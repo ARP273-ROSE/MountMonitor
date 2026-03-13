@@ -31,7 +31,7 @@
 - **Tolerance Alerts** — Real-time warnings when tracking exceeds limits
 
 ### Data Logging & Analysis
-- Six log file types: `.log` (events), `.dat` (mount data), `.dti` (timing), `.sei` (seismic), `.fft` (FFT snapshots), `.env` (environment/diagnostics)
+- Six log file types: `.log` (events), `.dat` (mount data), `.dti` (timing), `.sei` (seismic), `.fft` (FFT), `.env` (environment/diagnostics)
 - Tab-separated ASCII format, easily imported into spreadsheets
 - Automatic logging on connect — records all parameters throughout the night
 - **Log replay**: Open previous `.dat` files to visualize past sessions
@@ -52,6 +52,43 @@
 - Bilingual interface (English / French)
 - Keyboard shortcuts for all operations
 - Resizable panels with persistent layout
+- Custom logo and icon
+
+---
+
+## What's New in v1.6.0
+
+### Performance — UI Freeze Fix
+Seven compounding causes of progressive UI freeze identified and fixed:
+- **Numpy array caching** with dirty flags — no redundant copies of 50K+ element buffers
+- **Graph downsampling** — max 5,000 points displayed, preserving extremes
+- **250ms refresh timer** (was 100ms) — 4 fps, halving CPU load with no visible difference
+- **QPlainTextEdit** status panel — 10x faster than QTextEdit HTML rendering
+- **Stylesheet caching** — CSS only recalculated when state actually changes
+- **STDEV outside lock** — heavy computation no longer blocks the main thread
+- **Cached pen/font** — QPen and QFont objects reused across refreshes
+
+Stable for 8h+ sessions without any degradation.
+
+### Adaptive Night Report Scoring
+Automatic detection of **unguided precision mounts** (10Micron, Planewave, ASA DDM) with adapted thresholds:
+
+| Rating | Guided (standard) | Unguided precision |
+|---|---|---|
+| Excellent | < 0.5" | < 2.0" |
+| Good | < 1.5" | < 4.0" |
+| Fair | < 3.0" | < 8.0" |
+
+Detection combines mount name, ASCOM driver, and firmware fields. Recommendations are also adapted (pointing model vs. polar alignment).
+
+### Security Hardening
+- LX200 response buffer limited to 4,096 bytes (anti-DoS)
+- Log header sanitization (anti-newline/tab injection)
+- Periodic flush every 20 writes (NAS performance: 95% fewer flush calls)
+- Mount driver parsed from .dat files for enriched detection
+
+### Environment Logging
+New `.env` log file type — temperature, pressure, alignment model quality, extended mount status, meridian flip countdown. Six log file types total.
 
 ---
 

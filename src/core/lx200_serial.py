@@ -87,10 +87,14 @@ class LX200SerialConnection(LX200Connection):
         )
         return self.connect()
 
+    # Maximum response size to prevent unbounded buffer growth (security)
+    _MAX_RESPONSE_BYTES = 4096
+
     def _send_command(self, command: str) -> Optional[str]:
         """Send a command via serial and receive the response.
 
         Commands start with : and responses end with #.
+        Security: response buffer is bounded to _MAX_RESPONSE_BYTES.
         """
         if not self._serial or not self._connected:
             return None
@@ -99,7 +103,7 @@ class LX200SerialConnection(LX200Connection):
             self._serial.reset_input_buffer()
             self._serial.write(command.encode('ascii'))
 
-            # Read until # terminator
+            # Read until # terminator (with size limit)
             response = b''
             while True:
                 byte = self._serial.read(1)
@@ -112,6 +116,9 @@ class LX200SerialConnection(LX200Connection):
                 response += byte
                 if byte == b'#':
                     break
+                if len(response) > self._MAX_RESPONSE_BYTES:
+                    logger.warning(f"Serial response exceeded {self._MAX_RESPONSE_BYTES} bytes")
+                    return None
 
             decoded = response.decode('ascii').rstrip('#')
             return decoded

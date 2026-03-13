@@ -75,11 +75,15 @@ class LX200Connection(MountConnection):
         logger.info(f"Reconnection attempt {self._reconnect_attempts}/{self._max_reconnect_attempts}")
         return self.connect()
 
+    # Maximum response size to prevent unbounded buffer growth (security)
+    _MAX_RESPONSE_BYTES = 4096
+
     def _send_command(self, command: str) -> Optional[str]:
         """Send a command and receive the response.
 
         Commands start with : and responses end with #.
         Returns None on failure.
+        Security: response buffer is bounded to _MAX_RESPONSE_BYTES.
         """
         if not self._socket or not self._connected:
             return None
@@ -88,7 +92,7 @@ class LX200Connection(MountConnection):
             # Send command
             self._socket.sendall(command.encode('ascii'))
 
-            # Receive response (read until #)
+            # Receive response (read until # or buffer limit)
             response = b''
             while True:
                 chunk = self._socket.recv(1024)
@@ -97,6 +101,9 @@ class LX200Connection(MountConnection):
                 response += chunk
                 if b'#' in chunk:
                     break
+                if len(response) > self._MAX_RESPONSE_BYTES:
+                    logger.warning(f"Response exceeded {self._MAX_RESPONSE_BYTES} bytes, aborting")
+                    raise ConnectionError("Response too large")
 
             decoded = response.decode('ascii').rstrip('#')
             return decoded
