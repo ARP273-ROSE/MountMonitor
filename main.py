@@ -139,6 +139,14 @@ def main():
     window = MainWindow(sim_mode=sim_mode)
     window.show()
 
+    # Offer desktop shortcut on first launch
+    from src.config.settings import Settings
+    _settings = Settings()
+    from shortcut_helper import offer_shortcut
+    offer_shortcut("MountMonitor", "main.py", "logo.ico",
+                   get_config=lambda k: _settings.get(k),
+                   set_config=lambda k, v: (_settings.set(k, v), _settings.save()))
+
     logger.info("MountMonitor ready")
     sys.exit(app.exec())
 
