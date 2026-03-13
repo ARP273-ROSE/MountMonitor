@@ -56,6 +56,17 @@
 
 ---
 
+## What's New in v1.6.1
+
+### NAS / Multi-PC Portability
+MountMonitor can now be stored on a **NAS or synced folder** and used from multiple PCs without conflict:
+- **Local venv**: The virtual environment is stored locally (`%LOCALAPPDATA%\MountMonitor\venv` on Windows, `~/.local/share/MountMonitor/venv` on Linux) instead of inside the project folder
+- **Portable shortcut**: Desktop shortcut targets `launch.bat`/`launch.sh` instead of a specific Python path — works on any PC regardless of Python install location
+- **Auto-detect stale paths**: If the project folder moves, the shortcut detects the old path and offers to update itself
+- **Local icon copy**: The icon is copied to local storage so it displays correctly even from network/UNC paths
+
+---
+
 ## What's New in v1.6.0
 
 ### Performance — UI Freeze Fix

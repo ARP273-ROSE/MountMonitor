@@ -9,7 +9,7 @@ set -e
 
 MIN_MAJOR=3
 MIN_MINOR=10
-VENV_DIR="venv"
+VENV_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/MountMonitor/venv"
 REQ_FILE="requirements.txt"
 MAIN_SCRIPT="main.py"
 REPAIR_MODE=0
@@ -189,6 +189,7 @@ fi
 
 if [ "$VENV_OK" -eq 0 ]; then
     echo "            Creating... / Creation..."
+    mkdir -p "$(dirname "$VENV_DIR")"
     if ! "$PYTHON_CMD" -m venv "$VENV_DIR" 2>/dev/null; then
         echo " [!] Venv creation failed. Trying to install python3-venv..."
         echo "     Echec. Tentative d'installation de python3-venv..."

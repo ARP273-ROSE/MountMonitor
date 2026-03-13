@@ -1423,6 +1423,20 @@ class MainWindow(QMainWindow):
         and get a comprehensive analysis report (quality rating, FFT, drift, tolerance stats).</p>
         <p><b>Auto-analysis on park</b>: When the mount parks, an automatic analysis of the
         night session is generated.</p>
+
+        <h3>NAS / Multi-PC Portability (v1.6.1)</h3>
+        <p>MountMonitor can be stored on a <b>NAS or synced folder</b> and used from
+        multiple PCs without conflict:</p>
+        <ul>
+        <li>The <b>virtual environment</b> is stored locally
+        (<code>%LOCALAPPDATA%\\MountMonitor\\venv</code> on Windows,
+        <code>~/.local/share/MountMonitor/venv</code> on Linux)</li>
+        <li>The <b>desktop shortcut</b> targets <code>launch.bat</code> (not a specific Python path),
+        so it works on any PC</li>
+        <li>If the project folder moves, the shortcut <b>auto-detects</b> the stale path
+        and offers to update itself</li>
+        <li>The icon is <b>copied locally</b> so it displays correctly even from network paths</li>
+        </ul>
         """.format(version=self._version)
 
     def _get_help_text_fr(self) -> str:
@@ -1505,6 +1519,20 @@ class MainWindow(QMainWindow):
         (qualité, FFT, dérive, tolérance).</p>
         <p><b>Analyse auto au parcage</b> : quand la monture se parque, l'analyse
         de la nuit se lance automatiquement.</p>
+
+        <h3>Portabilité NAS / Multi-PC (v1.6.1)</h3>
+        <p>MountMonitor peut être stocké sur un <b>NAS ou dossier synchronisé</b> et utilisé
+        depuis plusieurs PC sans conflit :</p>
+        <ul>
+        <li>L'<b>environnement virtuel</b> est stocké localement
+        (<code>%LOCALAPPDATA%\\MountMonitor\\venv</code> sous Windows,
+        <code>~/.local/share/MountMonitor/venv</code> sous Linux)</li>
+        <li>Le <b>raccourci bureau</b> cible <code>launch.bat</code> (pas un chemin Python spécifique),
+        donc il fonctionne sur n'importe quel PC</li>
+        <li>Si le dossier du projet est déplacé, le raccourci <b>détecte automatiquement</b>
+        l'ancien chemin et propose de se mettre à jour</li>
+        <li>L'icône est <b>copiée localement</b> pour s'afficher correctement même depuis un chemin réseau</li>
+        </ul>
         """.format(version=self._version)
 
     def _show_about(self):
@@ -1542,7 +1570,7 @@ class MainWindow(QMainWindow):
         """Create a desktop shortcut for MountMonitor."""
         try:
             from shortcut_helper import create_shortcut_force
-            create_shortcut_force("MountMonitor", "mountmonitor.py", "logo.ico")
+            create_shortcut_force("MountMonitor", "main.py", "logo.ico")
         except Exception as e:
             QMessageBox.warning(self,
                 T("menu_create_shortcut"),

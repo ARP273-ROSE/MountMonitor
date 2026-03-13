@@ -123,35 +123,45 @@ def _shortcut_paths_valid(app_name: str, project: Path, main_script: str) -> boo
     return False
 
 
-def _find_pythonw(project: Path) -> Path:
-    """Find the best pythonw.exe (Windows) or python (Linux)."""
-    if sys.platform == "win32":
-        # Prefer venv pythonw, then system pythonw, then python.exe
-        venv_pw = project / "venv" / "Scripts" / "pythonw.exe"
-        if venv_pw.exists():
-            return venv_pw
-        sys_pw = Path(sys.executable).parent / "pythonw.exe"
-        if sys_pw.exists():
-            return sys_pw
-        return Path(sys.executable)
-    else:
-        venv_py = project / "venv" / "bin" / "python"
-        if venv_py.exists():
-            return venv_py
-        return Path(sys.executable)
+def _copy_icon_locally(icon_source: Path) -> Path:
+    """Copy icon to local storage so .lnk shortcuts display it reliably.
+
+    Network/NAS paths may not resolve for shortcut icons on Windows.
+    Returns the local copy path, or the original if copy fails.
+    """
+    if not icon_source.exists():
+        return icon_source
+    local_dir = Path(os.environ.get("LOCALAPPDATA", "")) / "MountMonitor"
+    if not local_dir.parent.exists():
+        return icon_source
+    try:
+        local_dir.mkdir(parents=True, exist_ok=True)
+        local_icon = local_dir / icon_source.name
+        # Only copy if source is newer or local doesn't exist
+        if not local_icon.exists() or icon_source.stat().st_mtime > local_icon.stat().st_mtime:
+            import shutil
+            shutil.copy2(icon_source, local_icon)
+            logger.info("Icon copied locally: %s", local_icon)
+        return local_icon
+    except Exception as e:
+        logger.debug("Could not copy icon locally: %s", e)
+        return icon_source
 
 
 def _create_windows_shortcut(app_name: str, main_script: str, icon_file: str,
                              project: Path) -> bool:
-    """Create .lnk shortcut on Windows desktop."""
+    """Create .lnk shortcut on Windows desktop.
+
+    Targets launch.bat instead of a specific pythonw.exe so the shortcut
+    works on any PC (NAS / synced folder) regardless of Python install path.
+    The batch file detects Python locally, creates venv if needed, and launches
+    with pythonw (no console).
+    """
     import subprocess
     desktop = _desktop_path()
-    pythonw = _find_pythonw(project)
-    icon_path = project / icon_file
+    launch_bat = project / "launch.bat"
+    icon_path = _copy_icon_locally(project / icon_file)
     shortcut_path = desktop / f"{app_name}.lnk"
-
-    # Use FULL absolute path for the main script
-    script_full_path = project / main_script
 
     # Sanitize all values for PowerShell string interpolation
     def _ps_escape(val):
@@ -160,11 +170,12 @@ def _create_windows_shortcut(app_name: str, main_script: str, icon_file: str,
     ps_script = (
         f'$s = (New-Object -ComObject WScript.Shell)'
         f'.CreateShortcut("{_ps_escape(shortcut_path)}");'
-        f'$s.TargetPath = "{_ps_escape(pythonw)}";'
-        f'$s.Arguments = """{_ps_escape(script_full_path)}""";'
+        f'$s.TargetPath = "{_ps_escape(launch_bat)}";'
+        f'$s.Arguments = "";'
         f'$s.WorkingDirectory = "{_ps_escape(project)}";'
         f'$s.IconLocation = "{_ps_escape(icon_path)},0";'
         f'$s.Description = "{_ps_escape(app_name)}";'
+        f'$s.WindowStyle = 7;'
         f'$s.Save()'
     )
 
@@ -174,7 +185,7 @@ def _create_windows_shortcut(app_name: str, main_script: str, icon_file: str,
             capture_output=True, timeout=10
         )
         if result.returncode == 0:
-            logger.info("Shortcut created: %s -> %s %s", shortcut_path, pythonw, script_full_path)
+            logger.info("Shortcut created: %s -> %s", shortcut_path, launch_bat)
             return True
         logger.warning("PowerShell shortcut failed: %s", result.stderr)
         return False
@@ -185,17 +196,17 @@ def _create_windows_shortcut(app_name: str, main_script: str, icon_file: str,
 
 def _create_linux_shortcut(app_name: str, main_script: str, icon_file: str,
                            project: Path) -> bool:
-    """Create .desktop file on Linux desktop."""
+    """Create .desktop file on Linux desktop.
+
+    Uses launch.sh for portability across PCs (NAS/synced folder).
+    """
     desktop = _desktop_path()
     desktop.mkdir(parents=True, exist_ok=True)
 
-    python_exe = _find_pythonw(project)
+    launch_sh = project / "launch.sh"
     icon_path = project / icon_file.replace(".ico", ".png")
     safe = app_name.lower().replace(" ", "-").replace("è", "e").replace("é", "e")
     shortcut_path = desktop / f"{safe}.desktop"
-
-    # Full absolute path for the script
-    script_full_path = project / main_script
 
     # Sanitize values to prevent .desktop injection via newlines
     def _desktop_escape(val):
@@ -206,7 +217,7 @@ def _create_linux_shortcut(app_name: str, main_script: str, icon_file: str,
         f"Version=1.0\n"
         f"Type=Application\n"
         f"Name={_desktop_escape(app_name)}\n"
-        f"Exec={_desktop_escape(python_exe)} {_desktop_escape(script_full_path)}\n"
+        f"Exec={_desktop_escape(launch_sh)}\n"
         f"Icon={_desktop_escape(icon_path)}\n"
         f"Path={_desktop_escape(project)}\n"
         f"Terminal=false\n"
@@ -230,9 +241,9 @@ def offer_shortcut(app_name: str, main_script: str, icon_file: str,
     If not, or if paths are stale, offer to create/update it.
 
     Parameters:
-        app_name: Display name (e.g. "BiblioThèque")
-        main_script: Main .py file (e.g. "bibliotheque.py")
-        icon_file: Icon file (e.g. "icon.ico" or "logo.ico")
+        app_name: Display name (e.g. "MountMonitor")
+        main_script: Main .py file (e.g. "main.py")
+        icon_file: Icon file (e.g. "logo.ico")
         get_config: callable(key) -> value or None, to read config
         set_config: callable(key, value), to save config
     """
