@@ -4,7 +4,7 @@
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)]()
 
-**Real-time telescope mount monitoring for astrophotography. Tracks RA/DEC deviations, timing accuracy, seismic vibrations, and provides FFT analysis — all with a modern dark astronomy-friendly interface.**
+**Real-time telescope mount monitoring for astrophotography. Tracks RA/DEC deviations, timing accuracy, seismic vibrations, and provides FFT analysis — all with a modern dark astronomy-friendly interface. Includes automatic GitHub updates, crash detection, and anonymized bug reporting.**
 
 ---
 
@@ -46,6 +46,18 @@
 - Meridian flip countdown
 - All data included in the morning analysis report
 
+### Auto-Update & Bug Reports
+- **Automatic update check** at startup (silent, background, threaded)
+- Manual check via **Help → Check for Updates**
+- Compares local version with latest GitHub Release
+- Shows changelog, offers to download & install with one click
+- Secure download with size limits, zip validation, anti-path-traversal
+- File whitelist: never overwrites user data (settings, logs, graphs)
+- Automatic restart after successful update
+- **Crash detection**: if MountMonitor crashes, the next startup offers to report it on GitHub
+- **Bug report dialog**: Help → Report a Bug, pre-fills a GitHub Issue with anonymized system info and recent errors
+- All file paths in reports are **completely anonymized** (home dir → ~)
+
 ### Modern Interface
 - Dark astronomy-friendly theme (preserves night vision)
 - High-performance real-time graphs (pyqtgraph with OpenGL)
@@ -53,6 +65,36 @@
 - Keyboard shortcuts for all operations
 - Resizable panels with persistent layout
 - Custom logo and icon
+
+---
+
+## What's New in v1.7.0
+
+### Auto-Update from GitHub
+MountMonitor now checks for updates **automatically at startup** (silent, background, non-blocking):
+- Compares local `VERSION` with latest GitHub Release tag
+- Shows changelog and offers to **download & install** with one click
+- Manual check via **Help → Check for Updates**
+- Secure download: size limits (100 MB), zip validation, anti-path-traversal, anti-symlink, anti-zip-bomb
+- **File whitelist**: only updates `.py`, `.md`, `.bat`, `.sh`, `.png`, `.ico`, `.pdf` etc. — never overwrites user data (settings, logs, graphs, venv, .git)
+- Atomic writes (temp file + fsync + replace) for safe file replacement
+- Automatic restart after successful update
+
+### Crash Detection & Reporting
+- **Automatic crash capture**: `sys.excepthook` saves a JSON crash report with anonymized traceback
+- On next startup, MountMonitor detects the crash report and offers to **report it on GitHub** (pre-filled Issue with system info)
+- All file paths are **completely anonymized** — home directory replaced with `~`, username patterns removed
+
+### Bug Report Dialog
+- **Help → Report a Bug**: opens a dialog to describe the issue
+- Submits a **pre-filled GitHub Issue** with anonymized system info, Python version, architecture, and recent error log entries
+- No telemetry — everything is offline, only sent voluntarily via GitHub Issues
+
+### Privacy & Anonymization
+- New `anonymize_path()` function strips home directory, username, and drive-letter patterns from all reports
+- Works cross-platform (Windows case-insensitive path matching, Unix home detection)
+- OS version details removed from crash reports (only OS name kept)
+- Recent error log entries included in bug reports are also anonymized
 
 ---
 

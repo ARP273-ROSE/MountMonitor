@@ -39,10 +39,11 @@ from ..simulation.sim_mount import SimulatedMount
 from ..simulation.sim_seismometer import SimulatedSeismometer
 from ..logging_module.file_logger import FileLogger
 from ..logging_module.log_parser import parse_session, list_log_sessions
-from ..logging_module.crash_reporter import CrashReporter
+from ..logging_module.crash_reporter import CrashReporter, anonymize_path, GITHUB_REPO
 from ..models.mount_data import MountSample, MountStatus, SessionInfo, ConnectionProtocol
 from ..utils.i18n import T, set_language, get_language
 from ..utils.coordinates import format_ra, format_dec
+from ..utils.updater import UpdateChecker, download_and_apply, restart_application
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +101,13 @@ class MainWindow(QMainWindow):
         self._fft_timer = QTimer()
         self._fft_timer.timeout.connect(self._update_fft)
         self._fft_timer.setInterval(2000)  # Every 2 seconds
+
+        # Auto-update checker
+        self._update_checker = UpdateChecker()
+        self._update_poll_timer = QTimer()
+        self._update_poll_timer.timeout.connect(self._poll_update_result)
+        # Silent startup check after 3s delay
+        QTimer.singleShot(3000, self._check_updates_silent)
 
         # Auto-connect in simulation mode
         if sim_mode != "none":
@@ -249,8 +257,20 @@ class MainWindow(QMainWindow):
         help_menu.addAction(about_action)
 
         bug_action = QAction(T("menu_report_bug"), self)
+        bug_action.setToolTip(
+            "EN: Report a bug via GitHub Issues\n"
+            "FR: Signaler un bug via GitHub Issues"
+        )
         bug_action.triggered.connect(self._report_bug)
         help_menu.addAction(bug_action)
+
+        update_action = QAction(T("menu_check_updates"), self)
+        update_action.setToolTip(
+            "EN: Check for new versions on GitHub\n"
+            "FR: Vérifier les nouvelles versions sur GitHub"
+        )
+        update_action.triggered.connect(self._check_updates_manual)
+        help_menu.addAction(update_action)
 
         help_menu.addSeparator()
 
@@ -1437,6 +1457,26 @@ class MainWindow(QMainWindow):
         and offers to update itself</li>
         <li>The icon is <b>copied locally</b> so it displays correctly even from network paths</li>
         </ul>
+
+        <h3>Auto-Update (v1.7.0)</h3>
+        <p>MountMonitor checks for updates automatically at startup (silent, background).
+        You can also check manually via <b>Help → Check for Updates</b>.</p>
+        <ul>
+        <li>Compares local version with latest GitHub Release</li>
+        <li>Shows changelog and offers to download &amp; install</li>
+        <li>Secure download with size limits and zip validation</li>
+        <li>Never overwrites user data (settings, logs, graphs)</li>
+        <li>Automatic restart after successful update</li>
+        </ul>
+
+        <h3>Bug Reports &amp; Crash Reports (v1.7.0)</h3>
+        <ul>
+        <li><b>Help → Report a Bug</b>: Opens a dialog to describe the issue, then opens
+        a pre-filled GitHub Issue with anonymized system info and recent errors</li>
+        <li><b>Crash detection</b>: If MountMonitor crashes, the next startup offers
+        to report it on GitHub with full anonymized traceback</li>
+        <li>All file paths in reports are <b>completely anonymized</b> (home dir → ~)</li>
+        </ul>
         """.format(version=self._version)
 
     def _get_help_text_fr(self) -> str:
@@ -1533,6 +1573,26 @@ class MainWindow(QMainWindow):
         l'ancien chemin et propose de se mettre à jour</li>
         <li>L'icône est <b>copiée localement</b> pour s'afficher correctement même depuis un chemin réseau</li>
         </ul>
+
+        <h3>Mise à jour automatique (v1.7.0)</h3>
+        <p>MountMonitor vérifie les mises à jour automatiquement au démarrage (silencieux, en arrière-plan).
+        Vous pouvez aussi vérifier manuellement via <b>Aide → Vérifier les mises à jour</b>.</p>
+        <ul>
+        <li>Compare la version locale avec la dernière Release GitHub</li>
+        <li>Affiche le changelog et propose de télécharger &amp; installer</li>
+        <li>Téléchargement sécurisé avec limites de taille et validation zip</li>
+        <li>Ne remplace jamais les données utilisateur (paramètres, logs, graphes)</li>
+        <li>Redémarrage automatique après mise à jour réussie</li>
+        </ul>
+
+        <h3>Rapports de bugs et de crash (v1.7.0)</h3>
+        <ul>
+        <li><b>Aide → Signaler un bug</b> : ouvre un dialogue pour décrire le problème, puis
+        ouvre un GitHub Issue pré-rempli avec infos système anonymisées et erreurs récentes</li>
+        <li><b>Détection de crash</b> : si MountMonitor plante, le prochain démarrage propose
+        de signaler le crash sur GitHub avec le traceback anonymisé complet</li>
+        <li>Tous les chemins de fichiers sont <b>complètement anonymisés</b> (répertoire home → ~)</li>
+        </ul>
         """.format(version=self._version)
 
     def _show_about(self):
@@ -1562,9 +1622,189 @@ class MainWindow(QMainWindow):
         webbrowser.open("https://github.com/ARP273-ROSE/MountMonitor")
 
     def _report_bug(self):
-        """Open bug report dialog."""
+        """Open bug report dialog with pre-filled template and system info."""
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QDialogButtonBox
         import webbrowser
-        webbrowser.open("https://github.com/ARP273-ROSE/MountMonitor/issues/new")
+        from urllib.parse import quote
+
+        lang = get_language()
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle(T("bug_report_title"))
+        dlg.setMinimumSize(500, 350)
+        layout = QVBoxLayout(dlg)
+
+        # Info label
+        info = QLabel(T("bug_report_info"))
+        info.setWordWrap(True)
+        layout.addWidget(info)
+
+        # Description label
+        desc_label = QLabel(T("bug_report_description"))
+        layout.addWidget(desc_label)
+
+        # Description text edit
+        desc_edit = QTextEdit()
+        desc_edit.setPlaceholderText(
+            "EN: Describe the issue here...\n"
+            "FR: Décrivez le problème ici..."
+        )
+        layout.addWidget(desc_edit)
+
+        # Buttons
+        buttons = QDialogButtonBox()
+        send_btn = buttons.addButton(
+            T("bug_report_send"), QDialogButtonBox.ButtonRole.AcceptRole
+        )
+        send_btn.setToolTip(
+            "EN: Open GitHub with pre-filled bug report\n"
+            "FR: Ouvrir GitHub avec le rapport pré-rempli"
+        )
+        cancel_btn = buttons.addButton(
+            T("bug_report_cancel"), QDialogButtonBox.ButtonRole.RejectRole
+        )
+        cancel_btn.setToolTip(
+            "EN: Cancel bug report\nFR: Annuler le rapport"
+        )
+        layout.addWidget(buttons)
+
+        def on_accept():
+            dlg.accept()
+            crash_reporter = CrashReporter()
+            body = crash_reporter.format_bug_report(desc_edit.toPlainText().strip())
+            # URL-encode and open in browser
+            encoded_body = quote(body, safe='')
+            title = quote("Bug Report", safe='')
+            url = (
+                f"https://github.com/{GITHUB_REPO}/issues/new"
+                f"?title={title}&body={encoded_body}"
+            )
+            webbrowser.open(url)
+
+        buttons.accepted.connect(on_accept)
+        buttons.rejected.connect(dlg.reject)
+        dlg.exec()
+
+    # ── Auto-update ──────────────────────────────────────────────
+
+    def _check_updates_silent(self):
+        """Silent startup check for updates (background, no error shown)."""
+        self._update_is_manual = False
+        self._update_checker.check_async()
+        # Poll for result every 500ms
+        self._update_poll_timer.start(500)
+
+    def _check_updates_manual(self):
+        """Manual check for updates from Help menu (shows feedback)."""
+        if self._update_checker.is_checking:
+            return
+        self._update_is_manual = True
+        self.statusBar().showMessage(T("update_checking"), 5000)
+        self._update_checker.check_async()
+        self._update_poll_timer.start(500)
+
+    def _poll_update_result(self):
+        """Poll the update checker thread for completion."""
+        if self._update_checker.is_checking:
+            return  # Still running
+
+        self._update_poll_timer.stop()
+        result = self._update_checker.result
+
+        if result is None:
+            # No update available (or error)
+            if self._update_is_manual:
+                QMessageBox.information(
+                    self,
+                    T("menu_check_updates"),
+                    T("update_up_to_date").format(version=self._version),
+                )
+            return
+
+        # Update available — show dialog
+        self._show_update_dialog(result)
+
+    def _show_update_dialog(self, release_info: dict):
+        """Show update available dialog with changelog."""
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QDialogButtonBox
+
+        tag = release_info.get("tag_name", "?")
+        name = release_info.get("name", tag)
+        body = release_info.get("body", "")
+        zipball_url = release_info.get("zipball_url", "")
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle(T("update_available"))
+        dlg.setMinimumSize(500, 400)
+        layout = QVBoxLayout(dlg)
+
+        # Version info
+        info_text = (
+            f"<h3>{T('update_available')}</h3>"
+            f"<p><b>{T('update_current')}:</b> {self._version}<br>"
+            f"<b>{T('update_new')}:</b> {tag}</p>"
+        )
+        info_label = QLabel(info_text)
+        info_label.setTextFormat(Qt.TextFormat.RichText)
+        layout.addWidget(info_label)
+
+        # Changelog
+        if body:
+            changelog_label = QLabel(f"<b>{T('update_changelog')}:</b>")
+            layout.addWidget(changelog_label)
+            changelog = QTextEdit()
+            changelog.setReadOnly(True)
+            changelog.setPlainText(body)
+            layout.addWidget(changelog)
+
+        # Buttons
+        buttons = QDialogButtonBox()
+        download_btn = buttons.addButton(
+            T("update_download"), QDialogButtonBox.ButtonRole.AcceptRole
+        )
+        download_btn.setToolTip(
+            "EN: Download and install the update\n"
+            "FR: Télécharger et installer la mise à jour"
+        )
+        skip_btn = buttons.addButton(
+            T("update_skip"), QDialogButtonBox.ButtonRole.RejectRole
+        )
+        skip_btn.setToolTip(
+            "EN: Skip this update\nFR: Ignorer cette mise à jour"
+        )
+        layout.addWidget(buttons)
+
+        def on_download():
+            dlg.accept()
+            if zipball_url:
+                self._apply_update(zipball_url)
+
+        buttons.accepted.connect(on_download)
+        buttons.rejected.connect(dlg.reject)
+        dlg.exec()
+
+    def _apply_update(self, zipball_url: str):
+        """Download and apply the update, then restart."""
+        self.statusBar().showMessage(T("update_downloading"), 0)
+        QApplication.processEvents()
+
+        app_dir = Path(__file__).resolve().parent.parent.parent
+        success = download_and_apply(zipball_url, app_dir)
+
+        if success:
+            QMessageBox.information(
+                self,
+                T("update_available"),
+                T("update_success"),
+            )
+            restart_application()
+        else:
+            self.statusBar().clearMessage()
+            QMessageBox.warning(
+                self,
+                T("update_available"),
+                T("update_failed"),
+            )
 
     def _create_desktop_shortcut(self):
         """Create a desktop shortcut for MountMonitor."""
