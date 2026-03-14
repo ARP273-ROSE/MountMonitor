@@ -131,7 +131,7 @@ def _copy_icon_locally(icon_source: Path) -> Path:
     """
     if not icon_source.exists():
         return icon_source
-    local_dir = Path(os.environ.get("LOCALAPPDATA", "")) / "MountMonitor"
+    local_dir = Path(os.environ.get("APPDATA", "")) / "MountMonitor"
     if not local_dir.parent.exists():
         return icon_source
     try:
