@@ -108,24 +108,52 @@ def main():
     crash_reporter = CrashReporter(project_root)
     crash_reporter.install()
 
-    # Check for previous crash
+    # Check for previous crash — offer to report on GitHub
     if crash_reporter.has_crash_report():
         report = crash_reporter.get_crash_report()
         if report:
             from PyQt6.QtWidgets import QMessageBox
+            from src.logging_module.crash_reporter import anonymize_path, GITHUB_REPO
+
+            exc_type = report.get('exception_type', 'Unknown')
+            exc_msg = anonymize_path(report.get('exception_message', ''))
+
             msg = QMessageBox()
             msg.setWindowTitle("Crash Report / Rapport de crash")
             msg.setIcon(QMessageBox.Icon.Warning)
             msg.setText(
                 "MountMonitor crashed during the last session.\n"
                 "MountMonitor a planté lors de la dernière session.\n\n"
-                f"Error: {report.get('exception_type', 'Unknown')}\n"
-                f"{report.get('exception_message', '')}"
+                f"Error: {exc_type}\n{exc_msg}"
             )
-            msg.setStandardButtons(
-                QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Ignore
+            msg.setInformativeText(
+                "Would you like to report this crash on GitHub?\n"
+                "Voulez-vous signaler ce crash sur GitHub ?\n\n"
+                "(All paths are anonymized / Tous les chemins sont anonymisés)"
+            )
+
+            send_btn = msg.addButton(
+                "Report on GitHub / Signaler",
+                QMessageBox.ButtonRole.AcceptRole,
+            )
+            dismiss_btn = msg.addButton(
+                "Dismiss / Ignorer",
+                QMessageBox.ButtonRole.RejectRole,
             )
             msg.exec()
+
+            if msg.clickedButton() == send_btn:
+                import webbrowser
+                from urllib.parse import quote
+                body = crash_reporter.format_github_issue(report)
+                title = quote(f"Crash: {exc_type}", safe='')
+                encoded_body = quote(body, safe='')
+                url = (
+                    f"https://github.com/{GITHUB_REPO}/issues/new"
+                    f"?title={title}&body={encoded_body}"
+                )
+                webbrowser.open(url)
+
         crash_reporter.clear_crash_report()
 
     # Detect hardware for optimization

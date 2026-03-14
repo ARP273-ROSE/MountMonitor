@@ -146,13 +146,57 @@ TX = {
     "sim_all": {"en": "Full simulation mode", "fr": "Mode simulation complète"},
 
     # Auto-update
-    "update_available": {"en": "Update available", "fr": "Mise à jour disponible"},
+    "update_available": {"en": "Update Available", "fr": "Mise à jour disponible"},
     "update_current": {"en": "Current version", "fr": "Version actuelle"},
     "update_new": {"en": "New version", "fr": "Nouvelle version"},
-    "update_download": {"en": "Download", "fr": "Télécharger"},
+    "update_download": {"en": "Download && Install", "fr": "Télécharger && installer"},
     "update_skip": {"en": "Skip", "fr": "Ignorer"},
     "update_checking": {"en": "Checking for updates...", "fr": "Vérification des mises à jour..."},
-    "update_up_to_date": {"en": "You are up to date", "fr": "Vous êtes à jour"},
+    "update_up_to_date": {
+        "en": "You are running the latest version ({version}).",
+        "fr": "Vous utilisez la dernière version ({version}).",
+    },
+    "update_changelog": {"en": "Changelog", "fr": "Notes de version"},
+    "update_failed": {
+        "en": "Update failed. Please try again or download manually.",
+        "fr": "La mise à jour a échoué. Réessayez ou téléchargez manuellement.",
+    },
+    "update_success": {
+        "en": "Update installed successfully. MountMonitor will restart.",
+        "fr": "Mise à jour installée. MountMonitor va redémarrer.",
+    },
+    "update_downloading": {"en": "Downloading update...", "fr": "Téléchargement en cours..."},
+    "update_applying": {"en": "Applying update...", "fr": "Application de la mise à jour..."},
+    "update_error": {
+        "en": "Could not check for updates.\nPlease check your internet connection.",
+        "fr": "Impossible de vérifier les mises à jour.\nVérifiez votre connexion internet.",
+    },
+    "menu_check_updates": {"en": "Check for Updates...", "fr": "Vérifier les mises à jour..."},
+
+    # Bug report (enhanced)
+    "bug_report_title": {"en": "Report a Bug", "fr": "Signaler un bug"},
+    "bug_report_send": {"en": "Open on GitHub", "fr": "Ouvrir sur GitHub"},
+    "bug_report_cancel": {"en": "Cancel", "fr": "Annuler"},
+    "bug_report_description": {
+        "en": "Describe the problem:",
+        "fr": "Décrivez le problème :",
+    },
+    "bug_report_info": {
+        "en": "System information will be included automatically (anonymized).",
+        "fr": "Les informations système seront incluses automatiquement (anonymisées).",
+    },
+
+    # Crash report dialog (improved)
+    "crash_title": {
+        "en": "Crash Report",
+        "fr": "Rapport de crash",
+    },
+    "crash_detected": {
+        "en": "MountMonitor crashed during the last session.",
+        "fr": "MountMonitor a planté lors de la dernière session.",
+    },
+    "crash_send": {"en": "Report on GitHub", "fr": "Signaler sur GitHub"},
+    "crash_dismiss": {"en": "Dismiss", "fr": "Ignorer"},
 
     # Status panel labels
     "label_ra": {"en": "RA:", "fr": "AD :"},
