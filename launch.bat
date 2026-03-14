@@ -39,7 +39,7 @@ pushd "%~dp0" || (
 
 :: Use absolute paths (critical for UNC and mapped drives)
 set "SCRIPT_DIR=%CD%"
-set "VENV_DIR=%LOCALAPPDATA%\MountMonitor\venv"
+set "VENV_DIR=%APPDATA%\MountMonitor\venv"
 set "REQ_FILE=%SCRIPT_DIR%\requirements.txt"
 set "MAIN_SCRIPT=%SCRIPT_DIR%\main.py"
 
@@ -76,10 +76,10 @@ set "PYTHON_CMD="
 
 :: 1a. Try common install locations first (most reliable, avoids Store alias)
 for %%p in (
-    "%LOCALAPPDATA%\Programs\Python\Python313\python.exe"
-    "%LOCALAPPDATA%\Programs\Python\Python312\python.exe"
-    "%LOCALAPPDATA%\Programs\Python\Python311\python.exe"
-    "%LOCALAPPDATA%\Programs\Python\Python310\python.exe"
+    "%APPDATA%\Programs\Python\Python313\python.exe"
+    "%APPDATA%\Programs\Python\Python312\python.exe"
+    "%APPDATA%\Programs\Python\Python311\python.exe"
+    "%APPDATA%\Programs\Python\Python310\python.exe"
     "C:\Python313\python.exe"
     "C:\Python312\python.exe"
     "C:\Python311\python.exe"
@@ -196,10 +196,10 @@ start /wait "" "%PY_INSTALLER%" /passive InstallAllUsers=0 PrependPath=1 Include
 del "%PY_INSTALLER%" 2>nul
 
 :: Refresh PATH and find the newly installed Python
-set "PATH=%LOCALAPPDATA%\Programs\Python\Python312\;%LOCALAPPDATA%\Programs\Python\Python312\Scripts\;%PATH%"
+set "PATH=%APPDATA%\Programs\Python\Python312\;%APPDATA%\Programs\Python\Python312\Scripts\;%PATH%"
 
-if exist "%LOCALAPPDATA%\Programs\Python\Python312\python.exe" (
-    set "PYTHON_CMD=%LOCALAPPDATA%\Programs\Python\Python312\python.exe"
+if exist "%APPDATA%\Programs\Python\Python312\python.exe" (
+    set "PYTHON_CMD=%APPDATA%\Programs\Python\Python312\python.exe"
     echo  [OK] Python installed! / Python installe !
     goto :python_found
 )
@@ -239,7 +239,7 @@ if exist "!VENV_DIR!\Scripts\python.exe" (
 
 if "!VENV_OK!"=="0" (
     echo             Creating... / Creation...
-    if not exist "%LOCALAPPDATA%\MountMonitor" mkdir "%LOCALAPPDATA%\MountMonitor" 2>nul
+    if not exist "%APPDATA%\MountMonitor" mkdir "%APPDATA%\MountMonitor" 2>nul
     %PYTHON_CMD% -m venv "!VENV_DIR!"
     if !errorlevel! neq 0 (
         echo  [!] Venv creation failed / Echec creation venv
