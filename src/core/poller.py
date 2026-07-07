@@ -121,6 +121,10 @@ class MountPoller(QThread):
                     if self._slew_delay_active:
                         elapsed = time.time() - self._slew_delay_start
                         if elapsed < self._delay_after_slew:
+                            # continue sauterait le sleep de cadencement en
+                            # fin de boucle → polling à vitesse max contre la
+                            # monture. Dormir le reliquat d'abord.
+                            self._sleep_remainder(loop_start, interval)
                             continue
                         else:
                             self._slew_delay_active = False
@@ -129,6 +133,7 @@ class MountPoller(QThread):
 
                     # Skip if only logging tracking and mount isn't tracking
                     if self._log_tracking_only and sample.status != MountStatus.TRACKING:
+                        self._sleep_remainder(loop_start, interval)
                         continue
 
                     # Process sample
@@ -163,6 +168,13 @@ class MountPoller(QThread):
                 time.sleep(sleep_time)
 
         logger.info("Poller stopped")
+
+    @staticmethod
+    def _sleep_remainder(loop_start: float, interval: float) -> None:
+        """Dort ce qui reste de l'intervalle de polling courant."""
+        sleep_time = interval - (time.perf_counter() - loop_start)
+        if sleep_time > 0:
+            time.sleep(sleep_time)
 
     @staticmethod
     def _parse_mount_time_to_seconds(time_str: str) -> Optional[float]:

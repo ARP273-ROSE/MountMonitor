@@ -10,6 +10,7 @@ Features:
   - Automatic restart after update
 """
 
+import hashlib
 import io
 import json
 import logging
@@ -23,6 +24,7 @@ import threading
 import zipfile
 from pathlib import Path
 from typing import Optional, Tuple, Dict, Any
+from urllib.parse import urlparse
 from urllib.request import urlopen, Request
 from urllib.error import URLError, HTTPError
 
@@ -36,6 +38,22 @@ GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 MAX_DOWNLOAD_SIZE = 100 * 1024 * 1024  # 100 MB max download
 MAX_ZIP_ENTRIES = 500  # Max files in zip
 MAX_SINGLE_FILE = 50 * 1024 * 1024  # 50 MB max single file
+
+# La zipball ne doit venir que de GitHub — l'URL est fournie par la réponse
+# de l'API, mais on ne la suit pas aveuglément (défense en profondeur).
+_ALLOWED_DOWNLOAD_HOSTS = {"api.github.com", "github.com", "codeload.github.com"}
+
+# Digest publié dans le corps de la release ("sha256: <64 hex>"). L'update
+# remplace des .py et launch.bat : TLS seul ne prouve pas que l'archive est
+# celle voulue par l'auteur (CI compromise, MITM à cert valide). On refuse
+# d'appliquer sans digest correspondant.
+_SHA256_RE = re.compile(r"sha-?256\s*[:=]\s*([0-9a-fA-F]{64})", re.IGNORECASE)
+
+
+def parse_expected_sha256(release_body: str) -> str:
+    """Extrait le digest ``sha256: <hex>`` des notes de release ('' si absent)."""
+    m = _SHA256_RE.search(release_body or "")
+    return m.group(1).lower() if m else ""
 
 # Files/dirs that should NEVER be overwritten (user data, config, secrets)
 _PROTECTED = {
@@ -192,18 +210,36 @@ def _should_update_file(rel_path: str) -> bool:
     return True
 
 
-def download_and_apply(zipball_url: str, app_dir: Optional[Path] = None) -> bool:
+def download_and_apply(
+    zipball_url: str,
+    app_dir: Optional[Path] = None,
+    expected_sha256: str = "",
+) -> bool:
     """Download and apply an update from GitHub zipball.
 
     Args:
         zipball_url: URL to the GitHub zipball
         app_dir: Application root directory
+        expected_sha256: digest publié dans les notes de release ; obligatoire
+            (refus d'appliquer si absent ou différent)
 
     Returns:
         True if update was applied successfully
     """
     if app_dir is None:
         app_dir = Path(__file__).resolve().parent.parent.parent
+
+    parsed = urlparse(zipball_url)
+    if parsed.scheme != "https" or parsed.hostname not in _ALLOWED_DOWNLOAD_HOSTS:
+        logger.error("Refusing zipball URL outside GitHub: %s", zipball_url)
+        return False
+
+    if not expected_sha256:
+        logger.error(
+            "Release notes carry no 'sha256: <hex>' line — refusing to apply "
+            "an unverifiable update."
+        )
+        return False
 
     logger.info("Downloading update from %s", zipball_url)
 
@@ -227,6 +263,15 @@ def download_and_apply(zipball_url: str, app_dir: Optional[Path] = None) -> bool
             if len(data) > MAX_DOWNLOAD_SIZE:
                 logger.error("Download exceeded size limit")
                 return False
+
+        # Integrity gate — vérifié AVANT même d'ouvrir l'archive.
+        digest = hashlib.sha256(data).hexdigest()
+        if digest != expected_sha256.lower():
+            logger.error(
+                "Update checksum mismatch (got %s, expected %s) — refusing.",
+                digest, expected_sha256,
+            )
+            return False
 
         # Validate zip
         zip_buffer = io.BytesIO(data)
