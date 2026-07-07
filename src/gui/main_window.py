@@ -747,6 +747,19 @@ class MainWindow(QMainWindow):
     def _on_seismic_data(self, timestamp: float, values: list[float]):
         """Handle seismometer data callback."""
         self._processor.process_seismic_data(timestamp, values)
+        # Parité avec le MountMonitor Java : chaque échantillon est journalisé
+        # dans le .sei (temps, brut, valeur recentrée par l'offset, stdev
+        # glissant courant). Sans cet appel le fichier restait vide.
+        if self._logging_active and values:
+            # Le module sismomètre livre des valeurs déjà recentrées
+            # (raw - offset) : on reconstruit le brut pour la 1re colonne.
+            offset = float(self._settings.get("seismometer_offset") or 0.0)
+            stdev_arr = self._processor.seismic_buffer.get_stdev_array()
+            stdev = float(stdev_arr[-1]) if len(stdev_arr) else 0.0
+            for v in values:
+                self._file_logger.log_seismic_data(
+                    timestamp, v + offset, v, stdev
+                )
 
     # ── Graph refresh ────────────────────────────────────────────
 
