@@ -242,11 +242,13 @@ class DataProcessor:
                     self._dec_speed_history.append(dec_speed)
 
                 # 6-sample running average
+                # Les deques sont bornées à maxlen=6 : pas de slice (une deque
+                # ne se slice pas — TypeError), np.mean sur l'itérable suffit.
                 if len(self._ra_speed_history) >= 6:
-                    avg_ra = np.mean(self._ra_speed_history[-6:])
+                    avg_ra = np.mean(self._ra_speed_history)
                     self.ra_speed_avg_buffer.append(now, float(avg_ra))
                 if len(self._dec_speed_history) >= 6:
-                    avg_dec = np.mean(self._dec_speed_history[-6:])
+                    avg_dec = np.mean(self._dec_speed_history)
                     self.dec_speed_avg_buffer.append(now, float(avg_dec))
 
         self._prev_ra_axis = ra_pos

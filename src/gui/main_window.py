@@ -727,10 +727,21 @@ class MainWindow(QMainWindow):
         # Log to event file
         if self._logging_active:
             if sample.temperature_ext is not None:
+                # Chaque champ peut être None indépendamment (la monture ne
+                # renvoie pas toujours pression/température interne) — et un
+                # format spec conditionnel dans une f-string est un ValueError.
+                press = (
+                    f"{sample.pressure:.1f}" if sample.pressure is not None else "?"
+                )
+                int_temp = (
+                    f"{sample.temperature_int:.1f}"
+                    if sample.temperature_int is not None
+                    else "?"
+                )
                 self._file_logger.log_event(
                     f"ENV\tTemp={sample.temperature_ext:.1f}°C "
-                    f"Press={sample.pressure:.1f}mbar "
-                    f"IntTemp={sample.temperature_int:.1f if sample.temperature_int is not None else '?'}°C"
+                    f"Press={press}mbar "
+                    f"IntTemp={int_temp}°C"
                 )
 
     def _on_seismic_data(self, timestamp: float, values: list[float]):
@@ -1777,19 +1788,33 @@ class MainWindow(QMainWindow):
         def on_download():
             dlg.accept()
             if zipball_url:
-                self._apply_update(zipball_url)
+                self._apply_update(zipball_url, release_body=body)
 
         buttons.accepted.connect(on_download)
         buttons.rejected.connect(dlg.reject)
         dlg.exec()
 
-    def _apply_update(self, zipball_url: str):
+    def _apply_update(self, zipball_url: str, release_body: str = ""):
         """Download and apply the update, then restart."""
+        from ..utils.updater import parse_expected_sha256
+
+        expected = parse_expected_sha256(release_body)
+        if not expected:
+            QMessageBox.warning(
+                self,
+                T("update_available"),
+                "EN: This release has no 'sha256:' checksum in its notes — "
+                "update refused for safety.\n"
+                "FR : Cette release n'a pas de somme « sha256: » dans ses "
+                "notes — mise à jour refusée par sécurité.",
+            )
+            return
+
         self.statusBar().showMessage(T("update_downloading"), 0)
         QApplication.processEvents()
 
         app_dir = Path(__file__).resolve().parent.parent.parent
-        success = download_and_apply(zipball_url, app_dir)
+        success = download_and_apply(zipball_url, app_dir, expected_sha256=expected)
 
         if success:
             QMessageBox.information(
@@ -1797,6 +1822,13 @@ class MainWindow(QMainWindow):
                 T("update_available"),
                 T("update_success"),
             )
+            # os.execv ne repasse pas par closeEvent : arrêter proprement le
+            # poller et fermer les fichiers de log avant de remplacer le
+            # process, sinon les .dat de la session ne sont pas flushés.
+            try:
+                self._disconnect()
+            except Exception:
+                pass
             restart_application()
         else:
             self.statusBar().clearMessage()

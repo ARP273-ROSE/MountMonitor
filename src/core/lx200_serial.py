@@ -5,6 +5,7 @@ over a serial (COM) port instead of TCP/IP.
 """
 
 import logging
+import threading
 from typing import Optional
 
 import serial
@@ -32,6 +33,9 @@ class LX200SerialConnection(LX200Connection):
         self._protocol = ConnectionProtocol.LX200
         self._reconnect_attempts = 0
         self._max_reconnect_attempts = 5
+        # __init__ de LX200Connection sauté (super(LX200Connection, ...)) :
+        # le verrou d'E/S partagé poller/GUI doit être recréé ici.
+        self._io_lock = threading.Lock()
 
     @property
     def host(self) -> str:
@@ -99,6 +103,10 @@ class LX200SerialConnection(LX200Connection):
         if not self._serial or not self._connected:
             return None
 
+        with self._io_lock:
+            return self._send_command_locked(command)
+
+    def _send_command_locked(self, command: str) -> Optional[str]:
         try:
             self._serial.reset_input_buffer()
             self._serial.write(command.encode('ascii'))
