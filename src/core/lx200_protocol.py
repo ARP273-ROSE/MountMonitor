@@ -5,6 +5,7 @@ Compatible with 10Micron, Meade, and other LX200-compatible mounts.
 """
 
 import socket
+import threading
 import time
 import logging
 from typing import Optional
@@ -27,6 +28,11 @@ class LX200Connection(MountConnection):
         self._protocol = ConnectionProtocol.LX200
         self._reconnect_attempts = 0
         self._max_reconnect_attempts = 5
+        # Le socket est partagé entre le QThread du poller et le thread GUI
+        # (checks post-slew, get_target_ra/dec) : sans verrou, deux commandes
+        # entrelacées se volent leurs réponses (une RA lue comme réponse d'un
+        # Gstat). Toute paire envoi/réception doit être atomique.
+        self._io_lock = threading.Lock()
 
     @property
     def host(self) -> str:
@@ -88,30 +94,31 @@ class LX200Connection(MountConnection):
         if not self._socket or not self._connected:
             return None
 
-        try:
-            # Send command
-            self._socket.sendall(command.encode('ascii'))
+        with self._io_lock:
+            try:
+                # Send command
+                self._socket.sendall(command.encode('ascii'))
 
-            # Receive response (read until # or buffer limit)
-            response = b''
-            while True:
-                chunk = self._socket.recv(1024)
-                if not chunk:
-                    raise ConnectionError("Connection closed by mount")
-                response += chunk
-                if b'#' in chunk:
-                    break
-                if len(response) > self._MAX_RESPONSE_BYTES:
-                    logger.warning(f"Response exceeded {self._MAX_RESPONSE_BYTES} bytes, aborting")
-                    raise ConnectionError("Response too large")
+                # Receive response (read until # or buffer limit)
+                response = b''
+                while True:
+                    chunk = self._socket.recv(1024)
+                    if not chunk:
+                        raise ConnectionError("Connection closed by mount")
+                    response += chunk
+                    if b'#' in chunk:
+                        break
+                    if len(response) > self._MAX_RESPONSE_BYTES:
+                        logger.warning(f"Response exceeded {self._MAX_RESPONSE_BYTES} bytes, aborting")
+                        raise ConnectionError("Response too large")
 
-            decoded = response.decode('ascii').rstrip('#')
-            return decoded
+                decoded = response.decode('ascii').rstrip('#')
+                return decoded
 
-        except (socket.error, socket.timeout, OSError, ConnectionError) as e:
-            logger.warning(f"Communication error: {e}")
-            self._connected = False
-            return None
+            except (socket.error, socket.timeout, OSError, ConnectionError) as e:
+                logger.warning(f"Communication error: {e}")
+                self._connected = False
+                return None
 
     def get_ra(self) -> Optional[str]:
         """Get Right Ascension: :GR# -> HH:MM:SS.dd"""
@@ -183,7 +190,10 @@ class LX200Connection(MountConnection):
     def get_product_name(self) -> str:
         """Get product name: :GVP# -> product string"""
         result = self._send_command(':GVP#')
-        return result or "Unknown"
+        # Mémorisé pour check_mount_settings(), qui ne s'applique qu'aux
+        # montures 10Micron — sans ça le check post-slew ne tournait jamais.
+        self._product_name = result or "Unknown"
+        return self._product_name
 
     def get_mount_id(self) -> str:
         """Get unique mount ID: :GETID# -> 20-digit ID"""
