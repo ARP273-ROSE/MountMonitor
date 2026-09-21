@@ -29,7 +29,12 @@ DEFAULTS = {
     "delay_after_slew_seconds": 0,
     "history_lines": 50,
     "reset_mode": "manual",  # manual, slewing
-    "dump_mode": "manual",  # manual, slewing, parking
+    # manual, slewing, parking, full
+    # « full » reproduit le comportement du MountMonitor Java : une image
+    # est enregistree chaque fois que la largeur du graphe s'est remplie
+    # de donnees neuves, ce qui laisse un carnet photographique continu
+    # de la nuit.
+    "dump_mode": "manual",
     "close_files_mode": "manual",  # manual, slewing, parking
 
     # Auxiliary - NTP

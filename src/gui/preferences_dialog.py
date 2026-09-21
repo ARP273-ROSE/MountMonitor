@@ -305,8 +305,9 @@ class PreferencesDialog(QDialog):
         self._dump_mode = QComboBox()
         self._dump_mode.addItems([
             T("mode_manual"), T("mode_slewing"), T("mode_parking"),
+            T("mode_full"),
         ])
-        dump_mode_map = {"manual": 0, "slewing": 1, "parking": 2}
+        dump_mode_map = {"manual": 0, "slewing": 1, "parking": 2, "full": 3}
         self._dump_mode.setCurrentIndex(dump_mode_map.get(self._settings.get("dump_mode"), 0))
         self._dump_mode.setToolTip(
             "EN: When to automatically dump graphs to files\n"
@@ -576,7 +577,7 @@ class PreferencesDialog(QDialog):
         s.set("axial_mode", axial_map.get(self._axial_mode.currentIndex(), "off"))
         reset_map = {0: "manual", 1: "slewing"}
         s.set("reset_mode", reset_map.get(self._reset_mode.currentIndex(), "manual"))
-        dump_map = {0: "manual", 1: "slewing", 2: "parking"}
+        dump_map = {0: "manual", 1: "slewing", 2: "parking", 3: "full"}
         s.set("dump_mode", dump_map.get(self._dump_mode.currentIndex(), "manual"))
         close_map = {0: "manual", 1: "slewing", 2: "parking"}
         s.set("close_files_mode", close_map.get(self._close_files_mode.currentIndex(), "manual"))

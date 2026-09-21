@@ -894,6 +894,9 @@ class MainWindow(QMainWindow):
         # Update title with current frequency
         self._update_title()
 
+        # Carnet photographique de la nuit, quand il est demande.
+        self._verifier_graphe_plein()
+
     # ── FFT ──────────────────────────────────────────────────────
 
     def _show_fft(self):
@@ -1268,6 +1271,33 @@ class MainWindow(QMainWindow):
         )
 
     # ── Graph dump ─────────────────────────────────────────────
+
+    def _verifier_graphe_plein(self):
+        """Enregistre les graphes quand la largeur s'est remplie de neuf.
+
+        C'est le comportement du MountMonitor Java : « MountMonitor outputs
+        the graphs automatically each time the window width is filled with
+        new data ». Il laisse un carnet photographique continu de la nuit,
+        sans avoir a rejouer quoi que ce soit le lendemain.
+
+        Le critere est celui de l'original : autant d'echantillons neufs que
+        le graphe a de pixels de large — au-dela, un point de plus n'ajoute
+        rien a l'image.
+        """
+        if self._settings.get("dump_mode") != "full":
+            return
+        try:
+            largeur = max(200, self._ra_graph.width())
+            total = self._processor.ra_buffer.size
+        except Exception:
+            return
+        depart = getattr(self, '_rang_dernier_dump', None)
+        if depart is None or total < depart:
+            self._rang_dernier_dump = total
+            return
+        if total - depart >= largeur:
+            self._rang_dernier_dump = total
+            self._dump_graphs()
 
     def _dump_graphs(self):
         """Export all graph images to their respective directories."""
