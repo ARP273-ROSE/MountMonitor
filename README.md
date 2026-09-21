@@ -54,9 +54,15 @@
 - Secure download with size limits, zip validation, anti-path-traversal
 - File whitelist: never overwrites user data (settings, logs, graphs)
 - Automatic restart after successful update
-- **Crash detection**: if MountMonitor crashes, the next startup offers to report it on GitHub
-- **Bug report dialog**: Help → Report a Bug, pre-fills a GitHub Issue with anonymized system info and recent errors
-- All file paths in reports are **completely anonymized** (home dir → ~)
+- **Crash, freeze and native-crash reporting**: a crash that leaves no Python
+  traceback — a segmentation fault inside Qt, say — is picked up from the fault
+  log on the next start; a frozen window is detected by a watchdog that samples
+  the GUI thread's stack, which is the only thing that says *what* froze it
+- **Asked once, and never assumed**: nothing leaves the machine until you have
+  answered the question, and a refusal is final
+- **Bug report dialog**: Help → Report a Bug
+- All file paths in reports are **completely anonymized** (home dir → ~), and
+  no mount data, file name or user name is ever sent
 
 ### Modern Interface
 - Dark astronomy-friendly theme (preserves night vision)
@@ -155,7 +161,21 @@ The application reads RA, DEC, and timing data from the mount, displays real-tim
 
 ## Installation
 
-### Using the Launcher (Recommended)
+### Windows installer (recommended)
+
+Download the latest `MountMonitor-Setup-*.exe` from the
+[Releases page](https://github.com/ARP273-ROSE/MountMonitor/releases/latest)
+and run it. No Python to install, no administrator password: the installer
+places the application in your own user profile, with its own embedded Python.
+
+Once installed, MountMonitor keeps itself up to date: it checks the Releases
+page at startup and offers the new version, which it downloads and applies by
+itself.
+
+Your settings and your session files live in `%LOCALAPPDATA%\MountMonitor`,
+outside the installation folder — an update never touches them.
+
+### From source, with the launcher
 
 **Windows:**
 ```
