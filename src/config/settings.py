@@ -25,8 +25,10 @@ class Settings:
             return
         self._initialized = True
         if path is None:
-            # Default: next to the executable / main script
-            self._path = Path(__file__).resolve().parent.parent.parent / "mountmonitor_settings.json"
+            # Depuis les sources : a cote du code. Installee : dans le dossier
+            # de donnees, que la mise a jour n'efface pas. Voir config/paths.py.
+            from .paths import fichier_reglages
+            self._path = fichier_reglages()
         else:
             self._path = Path(path)
         self._data: dict[str, Any] = {}

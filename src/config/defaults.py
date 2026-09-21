@@ -8,6 +8,10 @@ DEFAULTS = {
     "mount_ip": "192.168.1.1",
     "mount_port": 3492,
     "serial_port": "",
+    # 9600 bauds : la valeur de sortie d'usine des 10Micron. La monture
+    # permet d'en changer dans son menu, et la liaison est alors muette
+    # tant que les deux bouts ne sont pas d'accord.
+    "serial_baudrate": 9600,
     "ascom_driver": "",
     "language": "auto",  # auto, fr, en
 

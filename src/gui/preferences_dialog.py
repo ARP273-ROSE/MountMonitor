@@ -130,6 +130,21 @@ class PreferencesDialog(QDialog):
         self._serial_port.setToolTip("EN: Serial port for mount\nFR: Port série de la monture")
         conn_form.addRow(T("pref_serial_port"), self._serial_port)
 
+        # Vitesse de la liaison série. Elle était figée à 9600 bauds ; une
+        # monture réglée autrement ne répondait alors rien du tout, sans que
+        # rien n'indique pourquoi.
+        self._serial_baudrate = QComboBox()
+        for vitesse in (9600, 19200, 38400, 57600, 115200):
+            self._serial_baudrate.addItem(str(vitesse), vitesse)
+        actuelle = self._settings.get("serial_baudrate")
+        index = self._serial_baudrate.findData(actuelle)
+        self._serial_baudrate.setCurrentIndex(index if index >= 0 else 0)
+        self._serial_baudrate.setToolTip(
+            "EN: Serial speed — must match the mount's own setting (9600 by default)\n"
+            "FR: Vitesse de la liaison — elle doit être celle réglée dans la "
+            "monture (9600 par défaut)")
+        conn_form.addRow("Bauds", self._serial_baudrate)
+
         ascom_row = QHBoxLayout()
         self._ascom_driver = QLineEdit(self._settings.get("ascom_driver"))
         self._ascom_driver.setToolTip("EN: ASCOM driver ID\nFR: Identifiant du driver ASCOM")
@@ -506,6 +521,7 @@ class PreferencesDialog(QDialog):
         self._mount_ip.setEnabled(is_tcp)
         self._mount_port.setEnabled(is_tcp)
         self._serial_port.setEnabled(is_serial)
+        self._serial_baudrate.setEnabled(is_serial)
         self._ascom_driver.setEnabled(is_ascom)
         self._ascom_choose_btn.setEnabled(is_ascom)
 
@@ -538,6 +554,7 @@ class PreferencesDialog(QDialog):
         s.set("mount_ip", self._mount_ip.text())
         s.set("mount_port", self._mount_port.value())
         s.set("serial_port", self._serial_port.currentText())
+        s.set("serial_baudrate", self._serial_baudrate.currentData())
         s.set("ascom_driver", self._ascom_driver.text())
         s.set("graph_textbox_ratio", self._graph_ratio.value())
         lang_map = {0: "auto", 1: "en", 2: "fr"}
