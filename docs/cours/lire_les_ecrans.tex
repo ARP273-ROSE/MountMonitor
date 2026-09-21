@@ -215,10 +215,10 @@ parce que personne d'autre ne le fait pendant que vous dormez.
 \end{simple}
 
 \begin{prepa}
-La cadence affichée en bas à droite (par exemple \texttt{9.5 Hz}) est celle
+La cadence affichée en bas à droite (par exemple \texttt{9.1 Hz}) est celle
 de la \emph{séquence complète}, pas celle d'une commande. Chaque séquence
-envoie quatre commandes ; à \SI{9,5}{\hertz}, ce sont donc environ
-\num{38} commandes par seconde qui circulent sur le câble. La cadence
+envoie quatre commandes ; à \SI{9,1}{\hertz}, ce sont donc environ
+\num{36} commandes par seconde qui circulent sur le câble. La cadence
 réellement atteinte dépend du réseau, de la monture et de l'ordinateur : le
 logiciel demande une cadence, il mesure celle qu'il obtient, et c'est celle-ci
 qu'il affiche.
@@ -227,8 +227,8 @@ qu'il affiche.
 \begin{avance}
 Cette cadence est la fréquence d'échantillonnage du système de mesure. Elle
 fixe, par le théorème de Nyquist--Shannon, la plus haute fréquence de
-perturbation observable : la moitié de la cadence. À \SI{9,5}{\hertz}, aucune
-vibration au-delà de \SI{4,75}{\hertz} n'est visible dans les données de
+perturbation observable : la moitié de la cadence. À \SI{9,1}{\hertz}, aucune
+vibration au-delà de \SI{4,55}{\hertz} n'est visible dans les données de
 monture --- et une vibration plus rapide ne disparaît pas pour autant : elle
 se replie dans le spectre et se fait passer pour une fréquence plus basse.
 C'est la raison d'être du sismomètre, échantillonné beaucoup plus vite.
@@ -308,24 +308,24 @@ Ligne par ligne :
 déplace vers une cible). Gris : elle est parquée, ou à l'arrêt. Rouge :
 erreur de communication.
 
-\item[\texttt{RA: 02:44:08.67}] La position brute renvoyée par la monture,
+\item[\texttt{RA: 02:44:08.72}] La position brute renvoyée par la monture,
 telle quelle, en heures : minutes : secondes. C'est la réponse à la commande
 \texttt{:GR\#}, sans retouche.
 
-\item[\texttt{$\Delta$ +0.29\arcsec}] L'écart à la référence, en secondes
+\item[\texttt{$\Delta$ +0.43\arcsec}] L'écart à la référence, en secondes
 d'arc. Ce nombre devient rouge dès qu'il dépasse la tolérance que vous avez
 fixée.
 
-\item[\texttt{$\sigma$ 0.16\arcsec}] L'écart-type glissant : la dispersion des
+\item[\texttt{$\sigma$ 0.14\arcsec}] L'écart-type glissant : la dispersion des
 dernières minutes. C'est le chiffre qui compte vraiment --- voir le
 chapitre~\ref{ch:ad}.
 
-\item[\texttt{9.5 Hz | 879 samples}] La cadence réellement obtenue, et le
+\item[\texttt{9.1 Hz | 1161 samples}] La cadence réellement obtenue, et le
 nombre d'échantillons depuis le début de la session.
 \end{description}
 
 \begin{warning}
-\texttt{879 samples} compte les échantillons \emph{depuis le début}, pas ceux
+\texttt{1161 samples} compte les échantillons \emph{depuis le début}, pas ceux
 qui sont dans le graphe. Si la monture a pointé et que la remise à zéro
 automatique est active, les graphes repartent à vide alors que ce compteur,
 lui, continue. Une capture prise juste après un pointage montre donc une
@@ -585,7 +585,7 @@ plus petit d'un facteur $\cos\delta$.
 \end{formula}
 
 Quand l'option est active, le bandeau affiche
-\texttt{$\Delta$ +0.019s} au lieu de \texttt{$\Delta$ +0.29\arcsecond}, et les
+\texttt{$\Delta$ +0.029s} au lieu de \texttt{$\Delta$ +0.43\arcsec}, et les
 traits verts de tolérance sont tracés à la même échelle que ce que rapporte
 la monture.
 \end{prepa}
@@ -660,7 +660,7 @@ l'\oe{}il de l'utilisateur au lieu d'être tranché à sa place. La dérivation
 numérique amplifie le bruit : si l'incertitude sur une position est
 $\sigma_x$ et l'intervalle d'échantillonnage $\Delta t$, l'incertitude sur la
 vitesse à deux points vaut $\sigma_v = \sigma_x\sqrt{2}/\Delta t$. À
-\SI{9,5}{\hertz} et $\sigma_x = \SI{0,1}{\arcsecond}$, cela fait déjà
+\SI{9,1}{\hertz} et $\sigma_x = 0{,}1\,\arcsec$, cela fait déjà
 1,3\,\arcsec/s de bruit --- du même ordre que les défauts
 qu'on cherche. Moyenner sur $n$ points divise ce bruit par $\sqrt{n}$, au prix
 d'un retard de $n/2$ échantillons. La régression sur toute la fenêtre pousse
@@ -885,7 +885,7 @@ Trois mises en garde que la lecture naïve d'un spectre ignore.
 
 \medskip
 \textbf{La limite de Nyquist.} Le spectre s'arrête à la moitié de la cadence
-d'échantillonnage. À \SI{9,5}{\hertz}, rien au-delà de \SI{4,75}{\hertz}.
+d'échantillonnage. À \SI{9,1}{\hertz}, rien au-delà de \SI{4,55}{\hertz}.
 Pire : une vibration à \SI{6}{\hertz} ne disparaît pas, elle se replie et
 apparaît à \SI{3,5}{\hertz}, parfaitement crédible et complètement fausse.
 
@@ -903,6 +903,44 @@ C'est indispensable, et cela élargit légèrement les raies réelles : une raie
 isolée dans le spectre correspond à une oscillation un peu plus pure qu'elle
 n'en a l'air.
 \end{avance}
+
+\section{Lecture de la figure ci-dessus}
+
+Prenons la capture de ce chapitre, et lisons-la comme on lirait la vôtre.
+
+\begin{enumerate}
+\item \textbf{L'en-tête} annonce \texttt{RA: 9.9 Hz | DEC: 9.9 Hz |
+Seismic: 20.0 Hz}. Les données de monture sont donc échantillonnées à
+\SI{9,9}{\hertz} : le spectre du haut n'a de sens pour elles que jusqu'à
+\SI{4,95}{\hertz}. Le sismomètre, à \SI{20}{\hertz}, porte jusqu'à
+\SI{10}{\hertz} --- et c'est bien jusqu'à \num{10} que va l'axe.
+
+\item \textbf{Les courbes magenta et rouge sont plates.} L'ascension droite
+et la déclinaison ne contiennent aucune composante périodique marquée : le
+suivi est propre.
+
+\item \textbf{La courbe blanche, elle, a du relief.} Une raie très fine vers
+\SI{0,15}{\hertz}, une autre vers \SI{1,2}{\hertz}, une bosse large centrée
+sur \SI{2}{\hertz}, une raie nette vers \SI{4,5}{\hertz}.
+
+\item \textbf{Raie fine contre bosse large.} Une raie fine est une source
+mécanique régulière : quelque chose qui tourne ou qui oscille à sa fréquence
+propre. Une bosse large est un phénomène sans période franche --- du vent, du
+passage, de la turbulence.
+
+\item \textbf{Le domaine des périodes, en bas}, dit la même chose dans
+l'autre langue : le pic à \SI{6,5}{\second} de période est le même objet que
+la raie à \SI{0,15}{\hertz} du haut. Pour une erreur périodique de vis sans
+fin, dont le catalogue donne la durée de cycle en secondes, c'est ce
+graphe-là qu'on lit.
+\end{enumerate}
+
+\begin{warning}
+Ici, rien de tout cela n'atteint la monture : les courbes magenta et rouge
+restent plates malgré l'agitation sismique. C'est exactement le genre de
+conclusion qu'on ne peut pas tirer sans les deux mesures côte à côte --- et
+c'est la raison d'être de cette fenêtre.
+\end{warning}
 
 \begin{tip}
 Sur une GM1000, l'erreur périodique résiduelle est faible, et le modèle de
