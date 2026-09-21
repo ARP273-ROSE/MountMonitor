@@ -283,11 +283,29 @@ def main():
 
         crash_reporter.clear_crash_report()
 
-    # Detect hardware for optimization
-    from src.utils.hardware_detect import detect_hardware
-    hw = detect_hardware()
-    logger.info(f"Hardware: {hw.cpu_name}, {hw.cpu_cores_physical} cores, "
-                f"{hw.ram_total_mb}MB RAM, GPU: {hw.gpu_name}")
+    # Inventaire de la machine : en fil de fond, apres l'affichage.
+    #
+    # Sous Windows il repose sur quatre appels a `wmic`, chacun avec cinq
+    # secondes d'attente maximum. Lances ici, avant la creation de la
+    # fenetre, ils retardaient l'ouverture d'autant — ecran noir, sans un
+    # mot. Et `wmic` a ete retire des versions recentes de Windows : sur ces
+    # machines les quatre appels echouent, apres avoir coute le lancement de
+    # quatre processus.
+    #
+    # Le resultat ne sert qu'a une ligne de journal. Il n'a aucune raison de
+    # retenir l'affichage.
+    def _inventorier():
+        try:
+            from src.utils.hardware_detect import detect_hardware
+            hw = detect_hardware()
+            logger.info(f"Hardware: {hw.cpu_name}, {hw.cpu_cores_physical} cores, "
+                        f"{hw.ram_total_mb}MB RAM, GPU: {hw.gpu_name}")
+        except Exception:
+            logger.debug("Inventaire de la machine indisponible", exc_info=True)
+
+    import threading
+    threading.Thread(target=_inventorier, daemon=True,
+                     name='inventaire-machine').start()
 
     # Create and show main window
     from src.gui.main_window import MainWindow

@@ -128,9 +128,20 @@ class ParsedSession:
 
     @property
     def effective_frequency(self) -> float:
+        """Cadence reelle des echantillons, en hertz.
+
+        La duree peut valoir zero alors qu'il y a des echantillons : une
+        session tenant dans la meme seconde, un fichier tronque dont toutes
+        les lignes portent la meme heure. La division levait alors une
+        exception au beau milieu de la construction du rapport — et l'ouverture
+        d'un fichier .dat n'est pas protegee : l'application tombait.
+        """
         if len(self.timestamps) < 2:
             return 0.0
-        return (len(self.timestamps) - 1) / self.duration_seconds
+        duree = self.duration_seconds
+        if duree <= 0:
+            return 0.0
+        return (len(self.timestamps) - 1) / duree
 
 
 def _parse_time_to_seconds(t_str: str) -> float:
