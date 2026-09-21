@@ -78,7 +78,17 @@ GSTAT_COLORS = {
 class ParseWorker(QThread):
     """Background worker for parsing .log10m files."""
     progress = pyqtSignal(int)
-    finished = pyqtSignal(list)  # list[Log10mFile]
+    # Ni « finished », ni « list ».
+    #
+    # QThread possede deja un signal « finished », emis quand le fil se
+    # termine : le redeclarer ici le masque, et tout ce qui compte sur le
+    # signal de Qt — une liberation differee, par exemple — recevrait celui-ci
+    # a la place, sans avertissement.
+    #
+    # `object` plutot que `list` parce que PyQt convertit une charge declaree
+    # `list` element par element ; ce sont ici des objets Log10mFile, pas des
+    # types Qt.
+    resultat_pret = pyqtSignal(object)   # list[Log10mFile]
     error = pyqtSignal(str)
 
     def __init__(self, filepaths: list[Path]):
@@ -97,7 +107,7 @@ class ParseWorker(QThread):
                 parsed = parse_log10m(fp, progress_callback=cb)
                 results.append(parsed)
 
-            self.finished.emit(results)
+            self.resultat_pret.emit(results)
         except Exception as e:
             self.error.emit(str(e))
 
@@ -187,7 +197,7 @@ class Log10mAnalysisDialog(QDialog):
 
         self._worker = ParseWorker(filepaths)
         self._worker.progress.connect(self._progress.setValue)
-        self._worker.finished.connect(self._on_parse_done)
+        self._worker.resultat_pret.connect(self._on_parse_done)
         self._worker.error.connect(self._on_parse_error)
         self._worker.start()
 

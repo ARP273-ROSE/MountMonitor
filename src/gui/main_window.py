@@ -6,6 +6,7 @@ Manages the connection lifecycle and data flow.
 
 import sys
 import logging
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -16,7 +17,7 @@ from PyQt6.QtWidgets import (
     QMenuBar, QMenu, QToolBar, QPushButton, QLabel, QMessageBox,
     QApplication, QStatusBar, QFileDialog
 )
-from PyQt6.QtCore import Qt, QTimer, pyqtSlot
+from PyQt6.QtCore import Qt, QTimer, pyqtSlot, pyqtSignal
 from PyQt6.QtGui import QAction, QFont, QIcon, QKeySequence
 
 from .graph_widgets import TrackingGraph, TimeGraph, SeismicGraph, AxialGraph
@@ -43,7 +44,12 @@ from ..logging_module.crash_reporter import CrashReporter, anonymize_path, GITHU
 from ..models.mount_data import MountSample, MountStatus, SessionInfo, ConnectionProtocol
 from ..utils.i18n import T, set_language, get_language
 from ..utils.coordinates import format_ra, format_dec
-from ..utils.updater import UpdateChecker, download_and_apply, restart_application
+# La mise a jour passe par le module commun du kit, a la racine : il va
+# chercher l'archive applicative publiee dans le depot public de
+# distribution. L'ancien mecanisme telechargeait la zipball du depot de
+# code, reste prive : l'API repondait 404 et la mise a jour ne s'est
+# jamais declenchee chez personne.
+import updater
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +64,15 @@ def _read_version() -> str:
 
 class MainWindow(QMainWindow):
     """Main application window."""
+
+    # Retour du fil qui interroge GitHub vers le fil graphique.
+    #
+    # `object` et non `dict` : declare en `dict`, PyQt recopierait la charge
+    # champ par champ. Surtout, le retour passe par un signal et jamais par
+    # QTimer.singleShot — un minuteur cree dans un fil sans boucle
+    # d'evenements ne se declenche jamais, et la reponse serait perdue sans le
+    # moindre message.
+    maj_trouvee = pyqtSignal(object)
 
     def __init__(self, sim_mode: str = "none"):
         """Initialize main window.
@@ -102,11 +117,8 @@ class MainWindow(QMainWindow):
         self._fft_timer.timeout.connect(self._update_fft)
         self._fft_timer.setInterval(2000)  # Every 2 seconds
 
-        # Auto-update checker
-        self._update_checker = UpdateChecker()
-        self._update_poll_timer = QTimer()
-        self._update_poll_timer.timeout.connect(self._poll_update_result)
-        # Silent startup check after 3s delay
+        # Verification des mises a jour, en fond, au demarrage.
+        self.maj_trouvee.connect(self._maj_reperee)
         QTimer.singleShot(3000, self._check_updates_silent)
 
         # Auto-connect in simulation mode
@@ -416,7 +428,9 @@ class MainWindow(QMainWindow):
                     T("no_serial_port"), Colors.STATUS_ERROR,
                 )
                 return
-            self._connection = LX200SerialConnection(port=serial_port)
+            self._connection = LX200SerialConnection(
+                port=serial_port,
+                baudrate=self._settings.get("serial_baudrate") or 9600)
         elif protocol == "ascom":
             driver_id = self._settings.get("ascom_driver")
             if not driver_id:
@@ -1712,50 +1726,63 @@ class MainWindow(QMainWindow):
     # ── Auto-update ──────────────────────────────────────────────
 
     def _check_updates_silent(self):
-        """Silent startup check for updates (background, no error shown)."""
-        self._update_is_manual = False
-        self._update_checker.check_async()
-        # Poll for result every 500ms
-        self._update_poll_timer.start(500)
+        """Verification discrete au demarrage : rien ne s'affiche si tout va bien."""
+        self._lancer_verification(manuelle=False)
 
     def _check_updates_manual(self):
-        """Manual check for updates from Help menu (shows feedback)."""
-        if self._update_checker.is_checking:
-            return
-        self._update_is_manual = True
+        """Verification demandee par le menu Aide : on repond dans tous les cas."""
         self.statusBar().showMessage(T("update_checking"), 5000)
-        self._update_checker.check_async()
-        self._update_poll_timer.start(500)
+        self._lancer_verification(manuelle=True)
 
-    def _poll_update_result(self):
-        """Poll the update checker thread for completion."""
-        if self._update_checker.is_checking:
-            return  # Still running
+    def _lancer_verification(self, manuelle: bool):
+        """Interroge GitHub dans un fil de fond."""
+        if getattr(self, '_verification_en_cours', False):
+            return
+        self._verification_en_cours = True
 
-        self._update_poll_timer.stop()
-        result = self._update_checker.result
+        def _interroger():
+            trouve = None
+            try:
+                if updater.is_packaged():
+                    trouve = updater.check(self._version)
+                elif manuelle:
+                    trouve = 'sources'
+            except Exception:
+                logger.debug("Verification des mises a jour impossible",
+                             exc_info=True)
+            self.maj_trouvee.emit((trouve, manuelle))
 
-        if result is None:
-            # No update available (or error)
-            if self._update_is_manual:
-                QMessageBox.information(
-                    self,
-                    T("menu_check_updates"),
-                    T("update_up_to_date").format(version=self._version),
-                )
+        threading.Thread(target=_interroger, daemon=True,
+                         name='verif-maj').start()
+
+    def _maj_reperee(self, resultat):
+        """Retour de la verification, sur le fil graphique."""
+        trouve, manuelle = resultat
+        self._verification_en_cours = False
+
+        if trouve == 'sources':
+            QMessageBox.information(
+                self, T("menu_check_updates"),
+                "EN: Running from source — update with git.\n"
+                "FR : Version de developpement — mise a jour par git.")
             return
 
-        # Update available — show dialog
-        self._show_update_dialog(result)
+        if not trouve:
+            if manuelle:
+                QMessageBox.information(
+                    self, T("menu_check_updates"),
+                    T("update_up_to_date").format(version=self._version))
+            return
+
+        self._show_update_dialog(trouve)
 
     def _show_update_dialog(self, release_info: dict):
         """Show update available dialog with changelog."""
         from PyQt6.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QDialogButtonBox
 
-        tag = release_info.get("tag_name", "?")
-        name = release_info.get("name", tag)
-        body = release_info.get("body", "")
-        zipball_url = release_info.get("zipball_url", "")
+        tag = release_info.get("version", "?")
+        body = release_info.get("notes", "") or ""
+        taille = release_info.get("size", 0)
 
         dlg = QDialog(self)
         dlg.setWindowTitle(T("update_available"))
@@ -1766,7 +1793,9 @@ class MainWindow(QMainWindow):
         info_text = (
             f"<h3>{T('update_available')}</h3>"
             f"<p><b>{T('update_current')}:</b> {self._version}<br>"
-            f"<b>{T('update_new')}:</b> {tag}</p>"
+            f"<b>{T('update_new')}:</b> {tag}"
+            + (f" ({taille / 1e6:.1f} Mo)" if taille else "")
+            + "</p>"
         )
         info_label = QLabel(info_text)
         info_label.setTextFormat(Qt.TextFormat.RichText)
@@ -1800,56 +1829,59 @@ class MainWindow(QMainWindow):
 
         def on_download():
             dlg.accept()
-            if zipball_url:
-                self._apply_update(zipball_url, release_body=body)
+            self._apply_update(release_info)
 
         buttons.accepted.connect(on_download)
         buttons.rejected.connect(dlg.reject)
         dlg.exec()
 
-    def _apply_update(self, zipball_url: str, release_body: str = ""):
-        """Download and apply the update, then restart."""
-        from ..utils.updater import parse_expected_sha256
+    def _apply_update(self, info: dict):
+        """Telecharge l'archive applicative et la pose, puis redemarre.
 
-        expected = parse_expected_sha256(release_body)
-        if not expected:
+        Rien d'executable n'est telecharge : le module recupere une archive
+        ZIP et remplace les fichiers lui-meme, ce qui evite l'avertissement
+        SmartScreen — un .exe telecharge porte la « marque du web », pas un
+        fichier ecrit par un programme.
+        """
+        from PyQt6.QtWidgets import QProgressDialog
+
+        dlg = QProgressDialog(T("update_downloading"), None, 0, 100, self)
+        dlg.setWindowTitle(T("update_available"))
+        dlg.setMinimumDuration(0)
+        dlg.setValue(0)
+
+        def progression(fait, total):
+            if total:
+                dlg.setValue(int(fait * 100 / total))
+            QApplication.processEvents()
+
+        try:
+            pose = updater.download_and_apply(info, progress=progression)
+        except Exception as e:
+            dlg.close()
             QMessageBox.warning(
-                self,
-                T("update_available"),
-                "EN: This release has no 'sha256:' checksum in its notes — "
-                "update refused for safety.\n"
-                "FR : Cette release n'a pas de somme « sha256: » dans ses "
-                "notes — mise à jour refusée par sécurité.",
-            )
+                self, T("update_available"),
+                "EN: The update could not be installed:\n{err}\n\n"
+                "Your current version stays in place and works.\n\n"
+                "FR : La mise a jour n'a pas pu etre installee :\n{err}\n\n"
+                "Votre version actuelle reste en place et fonctionne."
+                .format(err=e))
+            return
+        dlg.close()
+
+        if not pose:
+            QMessageBox.warning(self, T("update_available"), T("update_failed"))
             return
 
-        self.statusBar().showMessage(T("update_downloading"), 0)
-        QApplication.processEvents()
+        QMessageBox.information(self, T("update_available"), T("update_success"))
 
-        app_dir = Path(__file__).resolve().parent.parent.parent
-        success = download_and_apply(zipball_url, app_dir, expected_sha256=expected)
-
-        if success:
-            QMessageBox.information(
-                self,
-                T("update_available"),
-                T("update_success"),
-            )
-            # os.execv ne repasse pas par closeEvent : arrêter proprement le
-            # poller et fermer les fichiers de log avant de remplacer le
-            # process, sinon les .dat de la session ne sont pas flushés.
-            try:
-                self._disconnect()
-            except Exception:
-                pass
-            restart_application()
-        else:
-            self.statusBar().clearMessage()
-            QMessageBox.warning(
-                self,
-                T("update_available"),
-                T("update_failed"),
-            )
+        # On ferme la fenetre plutot que de quitter l'application : c'est
+        # closeEvent qui arrete le poller, ecrit le resume de session et
+        # ferme les six fichiers de la nuit. Quitter sans passer par la
+        # laisserait un .dat tronque.
+        if updater.restart():
+            self.close()
+            QApplication.quit()
 
     def _create_desktop_shortcut(self):
         """Create a desktop shortcut for MountMonitor."""

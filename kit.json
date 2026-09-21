@@ -1,0 +1,46 @@
+{
+  "nom_technique": "mountmonitor",
+  "nom_fichier": "MountMonitor",
+  "nom_affiche": "MountMonitor",
+  "depot_distribution": "ARP273-ROSE/MountMonitor",
+  "point_entree": "main.py",
+  "fichier_version": "VERSION",
+  "icone": "logo.ico",
+  "appid": "{{C8D9C387-2431-5C18-8010-F3221EC93FA4}",
+  "modules": [
+    "main.py",
+    "shortcut_helper.py",
+    "reporting.py",
+    "updater.py"
+  ],
+  "paquets": [
+    "src"
+  ],
+  "assets": [
+    "VERSION",
+    "README.md",
+    "logo.ico",
+    "logo.png",
+    "logo_64.png",
+    "icon.png",
+    "about.png",
+    "docs"
+  ],
+  "requirements": "requirements.txt",
+  "pip": [],
+  "binaires": [],
+  "fichiers_proteges": [
+    "mountmonitor_settings.json",
+    "MountMonitor.pref",
+    "Logs"
+  ],
+  "verification_import": [
+    "src.config.settings",
+    "src.core.lx200_protocol",
+    "src.core.poller",
+    "src.gui.main_window",
+    "src.logging_module.file_logger",
+    "src.models.data_buffer",
+    "src.utils.coordinates"
+  ]
+}

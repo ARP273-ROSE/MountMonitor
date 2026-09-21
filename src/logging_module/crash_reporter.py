@@ -91,7 +91,8 @@ class CrashReporter:
 
     def __init__(self, app_dir: Optional[Path] = None):
         if app_dir is None:
-            app_dir = Path(__file__).resolve().parent.parent.parent
+            from ..config.paths import dossier_donnees
+            app_dir = dossier_donnees()
         self._app_dir = app_dir
         self._crash_file = app_dir / _CRASH_FILE
         self._original_excepthook = sys.excepthook
@@ -126,6 +127,17 @@ class CrashReporter:
                 json.dump(report, f, indent=2, ensure_ascii=False)
 
             logger.critical("Crash report saved: %s", self._crash_file)
+        except Exception:
+            pass
+
+        # Et on le signale a celui qui maintient l'application, si l'accord a
+        # ete donne. Le fichier local ne sert qu'a celui qui sait le trouver ;
+        # un plantage que personne ne rapporte n'est jamais corrige.
+        try:
+            import reporting
+            reporting.signaler_plantage(
+                ''.join(_anonymize_list(
+                    traceback.format_exception(exc_type, exc_value, exc_tb))))
         except Exception:
             pass
 

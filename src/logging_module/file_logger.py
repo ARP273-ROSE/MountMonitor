@@ -47,7 +47,10 @@ class FileLogger:
 
     def __init__(self, base_dir: Optional[Path] = None):
         if base_dir is None:
-            base_dir = Path(__file__).resolve().parent.parent.parent / "Logs"
+            # Les fichiers d'une nuit d'acquisition ne vivent pas dans le
+            # dossier d'installation : il est efface a chaque mise a jour.
+            from ..config.paths import dossier_journaux
+            base_dir = dossier_journaux()
         self._base_dir = base_dir
         self._base_dir.mkdir(parents=True, exist_ok=True)
 
