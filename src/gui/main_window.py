@@ -125,6 +125,9 @@ class MainWindow(QMainWindow):
         if sim_mode != "none":
             QTimer.singleShot(500, self._connect)
 
+        self._appliquer_zoom_horizontal(
+            self._settings.get("horizontal_zoom") or 1)
+
         self._update_title()
 
     def _setup_window(self):
@@ -1205,7 +1208,18 @@ class MainWindow(QMainWindow):
     # ── Zoom and reset ───────────────────────────────────────────
 
     def _set_horizontal_zoom(self, zoom: int):
+        """Applique le zoom horizontal aux graphes, et le retient.
+
+        Il n'etait jusqu'ici qu'enregistre : le menu existait, le reglage
+        etait sauvegarde, et l'affichage n'en tenait aucun compte.
+        """
         self._settings.set("horizontal_zoom", zoom)
+        self._appliquer_zoom_horizontal(zoom)
+
+    def _appliquer_zoom_horizontal(self, zoom: int):
+        for graphe in (self._ra_graph, self._dec_graph,
+                       self._time_graph, self._seismic_graph):
+            graphe._zoom_horizontal = zoom
 
     def _set_vertical_zoom(self, mode: str):
         self._ra_graph.set_vertical_zoom(mode)

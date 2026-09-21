@@ -38,6 +38,56 @@ def _setup_pyqtgraph():
 _setup_pyqtgraph()
 
 
+
+def accorder_les_axes(plot):
+    """Recopie la plage du repere sur les graduations.
+
+    Les graphes changent leur plage pendant que les signaux du repere sont
+    bloques — c'est voulu, pour eviter une cascade de recalculs a chaque
+    rafraichissement. Mais c'est precisement ce signal qui previent les axes :
+    bloque, il les laisse sur la plage qu'ils avaient a leur creation,
+    c'est-a-dire [0, 1].
+
+    Resultat : les courbes bougeaient, la graduation restait figee de zero a
+    un. Un graphe montrant quarante secondes de donnees etait gradue « 0,2 ;
+    0,4 ; 0,6 » avec « Time (s) » dessous — et le deplacement en secondes
+    d'arc se lisait sur une echelle tout aussi fausse. On ne pouvait
+    litteralement rien lire d'exact sur ces graphes.
+
+    Verifie a la mesure : `axe.range` valait [0, 1] alors que la vue portait
+    sur [0 ; 39,46].
+    """
+    vue = plot.getViewBox()
+    (x0, x1), (y0, y1) = vue.viewRange()
+    plot.getAxis('bottom').setRange(x0, x1)
+    plot.getAxis('left').setRange(y0, y1)
+
+
+def fenetre_horizontale(widget, rel_times, t_end, zoom):
+    """Debut de la plage affichee, selon le zoom horizontal.
+
+    Reprend la regle du MountMonitor Java : au zoom 1, un point de donnee
+    occupe un pixel, donc l'ecran montre autant de points qu'il a de pixels
+    de large ; au zoom 5, chaque point occupe cinq pixels, et l'on voit donc
+    cinq fois moins de donnees — mais en detail.
+
+    Le menu « Zoom horizontal » existait et ne faisait rien : le reglage
+    etait enregistre, jamais applique. La plage affichee partait toujours de
+    zero, c'est-a-dire du debut du tampon.
+    """
+    try:
+        zoom = int(zoom)
+    except (TypeError, ValueError):
+        zoom = 1
+    if zoom <= 1 or len(rel_times) == 0:
+        return 0.0
+    largeur = max(200, int(widget.width()))
+    points_visibles = max(10, largeur // zoom)
+    if len(rel_times) <= points_visibles:
+        return 0.0
+    return float(rel_times[-points_visibles])
+
+
 class TrackingGraph(QWidget):
     """Real-time tracking graph for RA or DEC data.
 
@@ -237,8 +287,12 @@ class TrackingGraph(QWidget):
         y_min = float(np.min(values))
         y_max = float(np.max(values))
         margin = max(abs(y_min), abs(y_max), self._tolerance) * 1.3
-        vb.setRange(xRange=(0, max(t_end, 1.0)), yRange=(-margin, margin), padding=0)
+        x0 = fenetre_horizontale(self, rel_times, t_end,
+                                 getattr(self, '_zoom_horizontal', 1))
+        vb.setRange(xRange=(x0, max(t_end, x0 + 1.0)),
+                    yRange=(-margin, margin), padding=0)
         vb.blockSignals(False)
+        accorder_les_axes(self._plot)
 
         # Position overlays after range is set
         x_right = max(t_end, 1.0)
@@ -381,6 +435,13 @@ class TimeGraph(QWidget):
         self._plot.setTitle(T("time_graph_title"), color='#aaaaaa', size='11pt')
         self._plot.setLabel('left', T('time_diff'), units='ms', color=Colors.TEXT_SECONDARY.name())
         self._plot.setLabel('bottom', T('time_label'), units='s', color=Colors.TEXT_SECONDARY.name())
+        # pyqtgraph choisit tout seul un prefixe et le colle devant l'unite.
+        # Sur une unite deja prefixee comme « ms », cela donnait « mms » —
+        # milli-millisecondes — et une graduation sans rapport avec les
+        # valeurs affichees dans la legende, qui sont en millisecondes. Sur
+        # cet axe, les millisecondes sont le bon ordre de grandeur : on garde
+        # l'unite telle quelle.
+        self._plot.getAxis('left').enableAutoSIPrefix(False)
 
         # Add legend
         self._plot.addLegend(offset=(10, 10))
@@ -455,9 +516,12 @@ class TimeGraph(QWidget):
             y_max = float(np.max(combined))
             y_margin = max(abs(y_max - y_min) * 0.1, 1.0)
             t_end = rel_t[-1]
-            vb.setRange(xRange=(0, max(t_end, 1.0)),
+            x0 = fenetre_horizontale(self, rel_t, t_end,
+                                     getattr(self, '_zoom_horizontal', 1))
+            vb.setRange(xRange=(x0, max(t_end, x0 + 1.0)),
                         yRange=(y_min - y_margin, y_max + y_margin), padding=0)
             vb.blockSignals(False)
+            accorder_les_axes(self._plot)
 
             # Position overlays
             self._values_text.setPos(max(t_end, 1.0), y_max + y_margin)
@@ -565,9 +629,12 @@ class SeismicGraph(QWidget):
             y_min = float(np.min(values))
             y_max = float(np.max(values))
             y_margin = max(abs(y_max - y_min) * 0.15, 1.0)
-            vb.setRange(xRange=(0, max(t_end, 1.0)),
+            x0 = fenetre_horizontale(self, rel_t, t_end,
+                                     getattr(self, '_zoom_horizontal', 1))
+            vb.setRange(xRange=(x0, max(t_end, x0 + 1.0)),
                         yRange=(y_min - y_margin, y_max + y_margin), padding=0)
             vb.blockSignals(False)
+            accorder_les_axes(self._plot)
 
             # Position watermark
             self._watermark.setPos(t_end / 2, (y_min + y_max) / 2)
@@ -751,10 +818,14 @@ class AxialGraph(QWidget):
             y_min = float(np.min(combined))
             y_max = float(np.max(combined))
             y_margin = max(abs(y_max - y_min) * 0.15, 0.01)
-            vb.setRange(xRange=(0, max(t_end, 1.0)),
+            # Le graphe axial trace plusieurs series de longueurs differentes :
+            # il n'y a pas d'echelle de points commune a fenetrer.
+            x0 = 0.0
+            vb.setRange(xRange=(x0, max(t_end, x0 + 1.0)),
                         yRange=(y_min - y_margin, y_max + y_margin), padding=0)
 
         vb.blockSignals(False)
+        accorder_les_axes(self._plot)
 
         # Position overlays
         self._watermark.setPos(t_end / 2, 0)
