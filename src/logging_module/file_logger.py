@@ -351,7 +351,7 @@ class FileLogger:
         """Write .dti file header."""
         f = self._dti_file
         f.write(f"MountMonitor time data file (v.{self._version})\n")
-        f.write(f"Location:\t{info.observatory}\n")
+        f.write(f"Location:\t{self._sanitize(info.observatory)}\n")
         f.write("Mount time\tPC-Mount diff [ms]\t"
                 "PC loop time [ms]\tMount loop time [ms]\t"
                 "PC-NTP diff [ms]\n")
@@ -361,7 +361,7 @@ class FileLogger:
         """Write .sei file header."""
         f = self._sei_file
         f.write(f"MountMonitor seismometer data file (v.{self._version})\n")
-        f.write(f"Location:\t{info.observatory}\n")
+        f.write(f"Location:\t{self._sanitize(info.observatory)}\n")
         f.write("Timestamp\tRaw data\tOffset data\tStDev\n")
         f.flush()
 
@@ -369,8 +369,8 @@ class FileLogger:
         """Write .fft file header."""
         f = self._fft_file
         f.write(f"MountMonitor FFT data file (v.{self._version})\n")
-        f.write(f"Location:\t{info.observatory}\n")
-        f.write(f"Mount:\t{info.mount_name}\n")
+        f.write(f"Location:\t{self._sanitize(info.observatory)}\n")
+        f.write(f"Mount:\t{self._sanitize(info.mount_name)}\n")
         f.write("Timestamp\tAxis\tSample Rate [Hz]\tNum Bins\t"
                 "Peak1 Freq [Hz]\tPeak1 Period [s]\tPeak1 Amp\t"
                 "Peak2 Freq [Hz]\tPeak2 Period [s]\tPeak2 Amp\t"
@@ -381,8 +381,8 @@ class FileLogger:
         """Write .env file header."""
         f = self._env_file
         f.write(f"MountMonitor environment data file (v.{self._version})\n")
-        f.write(f"Location:\t{info.observatory}\n")
-        f.write(f"Mount:\t{info.mount_name}\n")
+        f.write(f"Location:\t{self._sanitize(info.observatory)}\n")
+        f.write(f"Mount:\t{self._sanitize(info.mount_name)}\n")
         f.write("Timestamp\tTemp Ext [°C]\tPressure [mbar]\tTemp Int [°C]\t"
                 "Status Code\tTracking Rate\tMeridian Flip [min]\tPier Side\t"
                 "Align Stars\tAlign RMS [\"]\tPolar Error [°]\n")

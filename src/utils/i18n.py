@@ -272,6 +272,8 @@ TX = {
     "mode_manual": {"en": "Manual", "fr": "Manuel"},
     "mode_slewing": {"en": "When slewing", "fr": "En pointage"},
     "mode_parking": {"en": "When parking", "fr": "Au parcage"},
+    "mode_full": {"en": "When the graph fills",
+                  "fr": "Quand le graphe est plein"},
 
     # Mount checks labels
     "check_refraction_label": {

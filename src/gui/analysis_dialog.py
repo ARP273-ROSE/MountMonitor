@@ -16,6 +16,8 @@ import logging
 from datetime import datetime
 
 import numpy as np
+
+from ..utils.ajustement import pente
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QTextEdit, QPushButton,
     QLabel, QProgressBar, QFileDialog, QApplication
@@ -378,14 +380,16 @@ class AnalysisDialog(QDialog):
             lines.append(f"  PC-Mount diff std  : {np.std(td):.1f} ms")
 
             if len(td) > 100:
-                t_rel = s.time_timestamps - s.time_timestamps[0]
-                coeffs = np.polyfit(t_rel, td, 1)
-                drift_per_min = coeffs[0] * 60.0
-                lines.append(f"  Clock drift rate / Dérive horloge : {drift_per_min:+.3f} ms/min")
-                if abs(drift_per_min) > 1.0:
-                    lines.append("  [!] Significant clock drift detected / Dérive d'horloge significative détectée")
+                a = pente(s.time_timestamps - s.time_timestamps[0], td)
+                if a is None:
+                    lines.append("  Clock drift rate / Dérive horloge : non calculable")
                 else:
-                    lines.append("  [OK] Stable clock / Horloge stable")
+                    drift_per_min = a * 60.0
+                    lines.append(f"  Clock drift rate / Dérive horloge : {drift_per_min:+.3f} ms/min")
+                    if abs(drift_per_min) > 1.0:
+                        lines.append("  [!] Significant clock drift detected / Dérive d'horloge significative détectée")
+                    else:
+                        lines.append("  [OK] Stable clock / Horloge stable")
             lines.append("")
 
             if len(s.time_pc_loop) > 0:
@@ -666,20 +670,18 @@ class AnalysisDialog(QDialog):
         # Check drift per segment
         for seg_idx, seg in enumerate(s.target_segments):
             if len(seg.ra_deviations) > 100:
-                t_rel = seg.timestamps - seg.timestamps[0]
-                ra_coeffs = np.polyfit(t_rel, seg.ra_deviations, 1)
-                ra_drift_h = ra_coeffs[0] * 3600.0
-                if abs(ra_drift_h) > 5.0:
+                a_ra = pente(seg.timestamps - seg.timestamps[0], seg.ra_deviations)
+                ra_drift_h = (a_ra or 0.0) * 3600.0
+                if a_ra is not None and abs(ra_drift_h) > 5.0:
                     recommendations.append(
                         f"- Target #{seg_idx + 1}: RA drift {ra_drift_h:+.1f}\"/h — adjust azimuth of polar alignment\n"
                         f"  Cible #{seg_idx + 1} : dérive RA {ra_drift_h:+.1f}\"/h — ajustez l'azimut de l'alignement polaire"
                     )
 
             if len(seg.dec_deviations) > 100:
-                t_rel = seg.timestamps - seg.timestamps[0]
-                dec_coeffs = np.polyfit(t_rel, seg.dec_deviations, 1)
-                dec_drift_h = dec_coeffs[0] * 3600.0
-                if abs(dec_drift_h) > 5.0:
+                a_dec = pente(seg.timestamps - seg.timestamps[0], seg.dec_deviations)
+                dec_drift_h = (a_dec or 0.0) * 3600.0
+                if a_dec is not None and abs(dec_drift_h) > 5.0:
                     recommendations.append(
                         f"- Target #{seg_idx + 1}: DEC drift {dec_drift_h:+.1f}\"/h — adjust altitude of polar alignment\n"
                         f"  Cible #{seg_idx + 1} : dérive DEC {dec_drift_h:+.1f}\"/h — ajustez l'altitude de l'alignement polaire"
@@ -749,11 +751,24 @@ class AnalysisDialog(QDialog):
             lines.append("")
 
         # Drift analysis
+        #
+        # La regression n'a de sens que si le temps avance. Sur un fichier
+        # tronque, ou sur une session tenant dans la meme seconde, tous les
+        # instants sont egaux : l'ajustement devient degenere et numpy leve
+        # « SVD did not converge » — au milieu de la construction du rapport,
+        # dont l'ouverture d'un fichier .dat n'est pas protegee. Un rapport
+        # qui ne peut pas calculer une pente le dit ; il ne fait pas tomber
+        # l'application.
         if len(deviations) > 100 and len(timestamps) == len(deviations):
             t_rel = timestamps - timestamps[0]
-            coeffs = np.polyfit(t_rel, deviations, 1)
-            drift_per_min = coeffs[0] * 60.0
-            drift_per_hour = coeffs[0] * 3600.0
+            a = pente(t_rel, deviations)
+            if a is None:
+                lines.append("  Drift rate / Taux de dérive : non calculable "
+                             "(durée nulle ou données incomplètes)")
+                lines.append("")
+                return
+            drift_per_min = a * 60.0
+            drift_per_hour = a * 3600.0
             lines.append(f"  Drift rate / Taux de dérive : {drift_per_min:+.4f}\"/min ({drift_per_hour:+.2f}\"/h)")
 
             if abs(drift_per_hour) > 5.0:

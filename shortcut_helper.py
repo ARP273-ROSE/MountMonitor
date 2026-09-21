@@ -82,13 +82,14 @@ def _read_windows_shortcut(shortcut_path: Path) -> dict:
     try:
         ps = (
             f'$s = (New-Object -ComObject WScript.Shell)'
-            f'.CreateShortcut("{shortcut_path}");'
+            f'.CreateShortcut("{str(shortcut_path).replace(chr(34), "`" + chr(34))}");'
             f'Write-Output $s.TargetPath;'
             f'Write-Output $s.WorkingDirectory'
         )
         r = subprocess.run(
             ["powershell.exe", "-NoProfile", "-Command", ps],
-            capture_output=True, text=True, timeout=10
+            capture_output=True, text=True, timeout=10,
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)
         )
         lines = r.stdout.strip().splitlines()
         if len(lines) >= 2:
@@ -182,7 +183,8 @@ def _create_windows_shortcut(app_name: str, main_script: str, icon_file: str,
     try:
         result = subprocess.run(
             ["powershell.exe", "-NoProfile", "-Command", ps_script],
-            capture_output=True, timeout=10
+            capture_output=True, timeout=10,
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)
         )
         if result.returncode == 0:
             logger.info("Shortcut created: %s -> %s", shortcut_path, launch_bat)
@@ -250,6 +252,19 @@ def offer_shortcut(app_name: str, main_script: str, icon_file: str,
     # Skip on macOS (no auto shortcut) or PyInstaller bundles
     if sys.platform == "darwin" or hasattr(sys, '_MEIPASS'):
         return
+
+    # Ni dans l'application installee : l'installeur a deja pose ses
+    # raccourcis, et ils pointent vers le python embarque. Ceux-la, ce code
+    # les jugeait « incorrects » — ils ne mènent pas a launch.bat — et
+    # proposait de les remplacer par un raccourci vers un launch.bat qui
+    # n'existe pas dans le paquet. L'icone du Bureau cessait de fonctionner
+    # apres le premier lancement.
+    try:
+        from src.config.paths import est_empaquete
+        if est_empaquete():
+            return
+    except Exception:
+        pass
 
     # Determine the actual project directory from the running script
     project = _get_project_dir()
