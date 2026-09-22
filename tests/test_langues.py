@@ -2,7 +2,7 @@
 """Trois langues, et aucune etiquette vide.
 
 Le neerlandais est la parce que MountMonitor est un programme neerlandais a
-l'origine : la version 3.37 est de Nicolas de Hilster (Starmountain Survey &
+l'origine : la version 3.37 est de Nicolàs de Hilster (Starmountain Survey &
 Consultancy BV).
 """
 import importlib.util
