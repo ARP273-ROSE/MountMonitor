@@ -161,19 +161,35 @@ The application reads RA, DEC, and timing data from the mount, displays real-tim
 
 ## Installation
 
-### Windows installer (recommended)
+### Installers (recommended)
 
-Download the latest `MountMonitor-Setup-*.exe` from the
-[Releases page](https://github.com/ARP273-ROSE/MountMonitor/releases/latest)
-and run it. No Python to install, no administrator password: the installer
-places the application in your own user profile, with its own embedded Python.
+Everything is on the
+[Releases page](https://github.com/ARP273-ROSE/MountMonitor/releases/latest).
+There is **no Python to install and no administrator password to type** on any
+of the three systems: each package carries its own interpreter and installs
+into your user profile.
 
-Once installed, MountMonitor keeps itself up to date: it checks the Releases
-page at startup and offers the new version, which it downloads and applies by
-itself.
+| System | File | What to do |
+|---|---|---|
+| **Windows** | `MountMonitor-Setup-*.exe` | Run it. |
+| **macOS** | `MountMonitor-*-macos.dmg` | Open the disk image, drag the app into Applications. First launch: **right-click → Open**, then confirm — the app is not signed. |
+| **Linux** | `MountMonitor-*-linux.tar.gz` | Extract, run `installer.sh`. It installs into `~/.local/share` and adds the menu entry. |
 
-Your settings and your session files live in `%LOCALAPPDATA%\MountMonitor`,
-outside the installation folder — an update never touches them.
+Once installed, MountMonitor keeps itself up to date **on all three systems**:
+it checks the Releases page at startup and offers the new version, which it
+downloads and applies by itself. The update archive holds the code only — the
+interpreter and the compiled dependencies are never touched.
+
+Your settings and your session files live outside the installation folder
+(`%LOCALAPPDATA%\MountMonitor` on Windows, `~/.local/share` elsewhere), so an
+update never touches them.
+
+### Languages
+
+The interface speaks **English, French and Dutch**, and picks your system
+language on its own. Dutch is there because MountMonitor began as a Dutch
+program: the original v3.37 is by Nicolas de Hilster. You can force a language
+in *Preferences → Language*.
 
 ### From source, with the launcher
 

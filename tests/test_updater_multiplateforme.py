@@ -58,22 +58,34 @@ def test_l_installeur_n_est_jamais_choisi(monkeypatch):
     assert updater.check("1.0.0") is None
 
 
-def test_rien_pour_ma_plateforme_ne_propose_rien(monkeypatch):
+def test_une_archive_d_un_autre_systeme_n_est_jamais_posee(monkeypatch):
     """Mieux vaut pas de mise a jour qu'une mise a jour qui casse l'installation."""
     monkeypatch.setattr(updater, "plateforme", lambda: "macos")
     monkeypatch.setattr(updater, "_open", lambda url: _Faux(_publication(
-        "mountmonitor-app-9.9.9-windows.zip")))
+        "mountmonitor-app-9.9.9-windows.zip", "mountmonitor-app-9.9.9-linux.zip")))
     assert updater.check("1.0.0") is None
 
 
-def test_les_anciennes_archives_sans_suffixe_restent_acceptees(monkeypatch):
-    """Avant le multiplateforme, l'archive unique etait celle de Windows."""
+@pytest.mark.parametrize("plate", ["windows", "macos", "linux"])
+def test_une_archive_sans_suffixe_convient_a_tout_le_monde(plate, monkeypatch):
+    """Elle ne contient que `app/`, c'est-a-dire du Python pur.
+
+    Les dependances compilees vivent dans `python/`, que la mise a jour ne
+    touche pas. C'est aussi le format des versions anterieures.
+    """
     monkeypatch.setattr(updater, "_open", lambda url: _Faux(_publication(
         "mountmonitor-app-9.9.9.zip")))
-    monkeypatch.setattr(updater, "plateforme", lambda: "windows")
+    monkeypatch.setattr(updater, "plateforme", lambda: plate)
     assert updater.check("1.0.0") is not None
-    monkeypatch.setattr(updater, "plateforme", lambda: "linux")
-    assert updater.check("1.0.0") is None
+
+
+def test_le_suffixe_de_ma_plateforme_passe_avant_l_archive_commune(monkeypatch):
+    monkeypatch.setattr(updater, "plateforme", lambda: "macos")
+    monkeypatch.setattr(updater, "_open", lambda url: _Faux(_publication(
+        "mountmonitor-app-9.9.9.zip",
+        "mountmonitor-app-9.9.9-macos.zip")))
+    maj = updater.check("1.0.0")
+    assert maj is not None and maj["url"].endswith("-macos.zip")
 
 
 def test_le_bit_d_execution_survit_a_l_extraction(tmp_path):
