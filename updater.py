@@ -101,6 +101,15 @@ def _open(url):
     return urllib.request.urlopen(req, timeout=TIMEOUT, context=ctx)
 
 
+def plateforme() -> str:
+    """'windows', 'macos' ou 'linux' — le suffixe des archives publiees."""
+    if sys.platform.startswith('win'):
+        return 'windows'
+    if sys.platform == 'darwin':
+        return 'macos'
+    return 'linux'
+
+
 def check(current_version):
     """Interroge GitHub. Renvoie un dict decrivant la mise a jour, ou None."""
     if not current_version:
@@ -123,15 +132,33 @@ def check(current_version):
     if not tag or not is_newer(tag, current_version):
         return None
 
-    # On cherche l'archive de mise a jour applicative, pas l'installeur complet.
+    # On cherche l'archive applicative de NOTRE plateforme, pas l'installeur
+    # complet et surtout pas celle d'un autre systeme : une archive Windows
+    # posee sur un macOS remplace l'application par des binaires inutilisables.
+    plate = plateforme()
+    candidates = [
+        a for a in data.get('assets', [])
+        if (a.get('name') or '').lower().startswith(PREFIXE_ARCHIVE)
+        and (a.get('name') or '').lower().endswith('.zip')
+    ]
     asset = None
-    for a in data.get('assets', []):
-        name = (a.get('name') or '').lower()
-        if name.startswith(PREFIXE_ARCHIVE) and name.endswith('.zip'):
+    for a in candidates:
+        if f'-{plate}.' in (a.get('name') or '').lower():
             asset = a
             break
     if asset is None:
-        log.info("Version %s publiee, mais sans archive de mise a jour", tag)
+        # Compatibilite avec les versions publiees avant le multiplateforme,
+        # dont l'archive unique ne porte aucun suffixe de systeme.
+        sans_suffixe = [
+            a for a in candidates
+            if not any(f'-{p}.' in (a.get('name') or '').lower()
+                       for p in ('windows', 'macos', 'linux'))
+        ]
+        if sans_suffixe and plate == 'windows':
+            asset = sans_suffixe[0]
+    if asset is None:
+        log.info("Version %s publiee, mais sans archive de mise a jour pour %s",
+                 tag, plate)
         return None
 
     return {
@@ -176,6 +203,17 @@ def download_and_apply(update, progress=None):
                 if not str(dest).startswith(str(extracted.resolve())):
                     raise RuntimeError(f"Archive suspecte : {member}")
             z.extractall(extracted)
+            # zipfile ne restitue pas le bit d'execution. Sous Windows cela
+            # n'a aucune importance ; ailleurs, le lanceur et l'interpreteur
+            # embarque ressortent non executables et l'application ne demarre
+            # plus apres sa premiere mise a jour.
+            if os.name != 'nt':
+                for info in z.infolist():
+                    mode = info.external_attr >> 16
+                    if mode & 0o111:
+                        chemin = extracted / info.filename
+                        if chemin.exists():
+                            chemin.chmod(chemin.stat().st_mode | 0o111)
 
         # Certaines archives contiennent un dossier racine unique.
         entries = [p for p in extracted.iterdir()]
