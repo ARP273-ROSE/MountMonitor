@@ -388,7 +388,7 @@ TX = {
 
 # Supported languages, in the order they appear in Preferences.
 # Dutch is there because MountMonitor started as a Dutch program: the original
-# v3.37 is by Nicolas de Hilster (Starmountain Survey & Consultancy BV).
+# v3.37 is by Nicolàs de Hilster (Starmountain Survey & Consultancy BV).
 LANGUES = {
     'en': "English",
     'fr': "Français",

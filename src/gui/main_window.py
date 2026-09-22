@@ -1735,7 +1735,7 @@ class MainWindow(QMainWindow):
                 f"<h2>MountMonitor v{self._version}</h2>"
                 f"<p>Surveillance de monture télescope en temps réel.</p>"
                 f"<p>Réécriture modernisée du programme original Java v3.37<br>"
-                f"par Nicolas de Hilster (2018-2021).</p>"
+                f"par Nicolàs de Hilster (2018-2021).</p>"
                 f"<p>Python/PyQt6/pyqtgraph</p>"
             )
         else:
@@ -1743,7 +1743,7 @@ class MainWindow(QMainWindow):
                 f"<h2>MountMonitor v{self._version}</h2>"
                 f"<p>Real-time telescope mount monitoring.</p>"
                 f"<p>Modernized rewrite of the original Java v3.37<br>"
-                f"by Nicolas de Hilster (2018-2021).</p>"
+                f"by Nicolàs de Hilster (2018-2021).</p>"
                 f"<p>Python/PyQt6/pyqtgraph</p>"
             )
         QMessageBox.about(self, T("menu_about"), text)
