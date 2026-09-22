@@ -1,4 +1,4 @@
-name: Publier une version Windows
+name: Publier une version
 
 # Gabarit commun du kit : rien ici n'est propre a une application. Tout ce qui
 # varie est lu dans kit.json, a la racine du depot. Pousser un tag « v1.2.3 »
@@ -61,6 +61,7 @@ jobs:
             echo "construire=true" >> "$GITHUB_OUTPUT"
           fi
 
+  # Windows. Python « embeddable » + Inno Setup.
   build:
     needs: decider
     if: needs.decider.outputs.construire == 'true'
@@ -223,6 +224,194 @@ jobs:
             installer.iss
           Get-ChildItem installer_out
 
+      - name: Deposer les artefacts Windows
+        uses: actions/upload-artifact@v4
+        with:
+          name: paquet-windows
+          path: |
+            installer_out/${{ steps.kit.outputs.nom_fichier }}-Setup-${{ steps.version.outputs.value }}.exe
+            ${{ steps.kit.outputs.nom_technique }}-app-${{ steps.version.outputs.value }}.zip
+          if-no-files-found: error
+
+  # ──────────────────────────────────────────────────────────────────────
+  # macOS et Linux. Meme structure de paquet que Windows — python/ et app/ —
+  # pour que la mise a jour automatique fonctionne a l'identique partout.
+  # ──────────────────────────────────────────────────────────────────────
+  build-unix:
+    needs: decider
+    if: needs.decider.outputs.construire == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            plateforme: macos
+          - os: ubuntu-latest
+            plateforme: linux
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Recuperer le depot
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Lire kit.json
+        id: kit
+        shell: bash
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          k = json.load(open('kit.json'))
+          for cle in ('nom_technique', 'nom_fichier', 'nom_affiche',
+                      'depot_distribution', 'fichier_version'):
+              print(f"{cle}={k.get(cle, '')}")
+          PY
+
+      - name: Determiner la version
+        id: version
+        shell: bash
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "value=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verifier que la version declaree concorde avec le tag
+        shell: bash
+        run: |
+          FICHIER=$(tr -d ' \r\n' < "${{ steps.kit.outputs.fichier_version }}")
+          TAG="${{ steps.version.outputs.value }}"
+          if [ "$FICHIER" != "$TAG" ]; then
+            echo "::error::Le depot annonce '$FICHIER' mais le tag dit '$TAG'."
+            exit 1
+          fi
+
+      - name: Python de construction
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # PyQt6 a besoin de ces bibliotheques pour seulement s'importer sur un
+      # runner Linux sans serveur graphique ; sans elles, la verification
+      # d'import du paquet echoue alors que le paquet est bon.
+      - name: Dependances systeme (Linux)
+        if: matrix.plateforme == 'linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            libegl1 libgl1 libxkbcommon-x11-0 libdbus-1-3 \
+            libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
+            libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-cursor0
+
+      - name: Construire le paquet
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python3 build_unix.py --version ${{ steps.version.outputs.value }}
+
+      - name: Image disque (macOS)
+        if: matrix.plateforme == 'macos'
+        run: |
+          NOM="${{ steps.kit.outputs.nom_fichier }}"
+          VER="${{ steps.version.outputs.value }}"
+          mkdir -p dmg_src
+          cp -R "dist/$NOM.app" dmg_src/
+          ln -s /Applications dmg_src/Applications
+          hdiutil create -volname "$NOM $VER" -srcfolder dmg_src \
+            -ov -format UDZO "$NOM-$VER-macos.dmg"
+          ls -lh "$NOM-$VER-macos.dmg"
+
+      - name: Installateur (Linux)
+        if: matrix.plateforme == 'linux'
+        shell: bash
+        run: |
+          NOM="${{ steps.kit.outputs.nom_fichier }}"
+          TECH="${{ steps.kit.outputs.nom_technique }}"
+          # Un script d'installation dans le profil utilisateur : ni sudo, ni
+          # gestionnaire de paquets, comme l'installeur Windows.
+          cat > "dist/$NOM/installer.sh" <<'SH'
+          #!/bin/sh
+          set -e
+          ICI=$(cd "$(dirname "$0")" && pwd)
+          NOM_APP=__NOM__
+          TECH=__TECH__
+          CIBLE="${XDG_DATA_HOME:-$HOME/.local/share}/$TECH"
+          echo "Installation dans $CIBLE"
+          mkdir -p "$CIBLE"
+          # Les donnees de l'utilisateur ne sont jamais ecrasees.
+          rm -rf "$CIBLE/python" "$CIBLE/app"
+          cp -R "$ICI/python" "$ICI/app" "$ICI/$NOM_APP.sh" "$CIBLE/"
+          chmod +x "$CIBLE/$NOM_APP.sh"
+          APPS="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+          mkdir -p "$APPS"
+          sed -e "s|__ICI__|$CIBLE|" -e "s|__ICONE__|Icon=$CIBLE/app/logo.png\n|" \
+              "$ICI/$TECH.desktop" > "$APPS/$TECH.desktop"
+          echo "Termine. Lancez « $NOM_APP » depuis votre menu, ou :"
+          echo "  $CIBLE/$NOM_APP.sh"
+          SH
+          sed -i "s|__NOM__|$NOM|; s|__TECH__|$TECH|" "dist/$NOM/installer.sh"
+          chmod +x "dist/$NOM/installer.sh"
+          rm -f "$NOM-${{ steps.version.outputs.value }}-linux.tar.gz"
+          tar -C dist -czf "$NOM-${{ steps.version.outputs.value }}-linux.tar.gz" "$NOM"
+          ls -lh "$NOM-${{ steps.version.outputs.value }}-linux.tar.gz"
+
+      - name: Deposer les artefacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: paquet-${{ matrix.plateforme }}
+          path: |
+            *.dmg
+            *-linux.tar.gz
+            ${{ steps.kit.outputs.nom_technique }}-app-${{ steps.version.outputs.value }}.zip
+          if-no-files-found: error
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Une seule Release, une fois les trois paquets construits.
+  # ──────────────────────────────────────────────────────────────────────
+  publier:
+    needs: [build, build-unix]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Lire kit.json
+        id: kit
+        shell: bash
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          k = json.load(open('kit.json'))
+          for cle in ('nom_technique', 'nom_fichier', 'nom_affiche', 'depot_distribution'):
+              print(f"{cle}={k.get(cle, '')}")
+          PY
+
+      - name: Determiner la version
+        id: version
+        shell: bash
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "value=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Rassembler les artefacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artefacts
+
+      - name: Mettre a plat
+        shell: bash
+        run: |
+          mkdir -p publication
+          find artefacts -type f -exec cp {} publication/ \;
+          # L'archive applicative ne contient que du Python pur : les trois
+          # jobs produisent la meme, une seule suffit.
+          ls -lh publication
+
       - name: Publier la Release
         uses: softprops/action-gh-release@v2
         with:
@@ -231,27 +420,39 @@ jobs:
           name: ${{ steps.kit.outputs.nom_affiche }} ${{ steps.version.outputs.value }}
           tag_name: v${{ steps.version.outputs.value }}
           draft: false
-          files: |
-            installer_out/${{ steps.kit.outputs.nom_fichier }}-Setup-${{ steps.version.outputs.value }}.exe
-            ${{ steps.kit.outputs.nom_technique }}-app-${{ steps.version.outputs.value }}.zip
+          files: publication/*
           body: |
             ## Installation
 
-            Telechargez **${{ steps.kit.outputs.nom_fichier }}-Setup-${{ steps.version.outputs.value }}.exe**
-            et lancez-le. L'installation se fait dans votre profil utilisateur :
-            aucun mot de passe administrateur n'est demande.
+            | Systeme | Fichier |
+            |---|---|
+            | **Windows** | `${{ steps.kit.outputs.nom_fichier }}-Setup-${{ steps.version.outputs.value }}.exe` |
+            | **macOS** | `${{ steps.kit.outputs.nom_fichier }}-${{ steps.version.outputs.value }}-macos.dmg` |
+            | **Linux** | `${{ steps.kit.outputs.nom_fichier }}-${{ steps.version.outputs.value }}-linux.tar.gz` |
 
-            > Windows peut afficher « Windows a protege votre ordinateur » au
-            > premier lancement, parce que l'installeur n'est pas signe.
-            > Cliquez sur **Informations complementaires** puis sur
-            > **Executer quand meme**. Cet avertissement n'apparait qu'une fois :
-            > les mises a jour suivantes sont installees par l'application
-            > elle-meme et ne le declenchent pas.
+            Aucun mot de passe administrateur n'est demande : l'installation se
+            fait dans votre profil utilisateur.
+
+            **Windows** — Windows peut afficher « Windows a protege votre
+            ordinateur » au premier lancement, parce que l'installeur n'est pas
+            signe. Cliquez sur **Informations complementaires** puis sur
+            **Executer quand meme**. Cet avertissement n'apparait qu'une fois.
+
+            **macOS** — ouvrez l'image disque et glissez l'application dans
+            Applications. Au premier lancement, macOS refusera de l'ouvrir car
+            elle n'est pas signee : faites un **clic droit** sur l'application
+            puis **Ouvrir**, et confirmez.
+
+            **Linux** — decompressez l'archive et lancez `installer.sh`. Il
+            installe dans `~/.local/share` et ajoute l'entree de menu. Vous
+            pouvez aussi lancer directement `MountMonitor.sh`.
 
             ## Mise a jour
 
             Si l'application est deja installee, ne telechargez rien : elle
-            detecte cette version au demarrage et propose de l'installer.
+            detecte cette version au demarrage et propose de l'installer, sur
+            les trois systemes.
 
             L'archive `*-app-*.zip` est destinee a cette mise a jour
-            automatique, elle ne s'installe pas a la main.
+            automatique. Elle ne contient que le code, commun aux trois
+            plateformes, et ne s'installe pas a la main.
