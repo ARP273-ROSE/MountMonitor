@@ -42,7 +42,7 @@ from ..logging_module.file_logger import FileLogger
 from ..logging_module.log_parser import parse_session, list_log_sessions
 from ..logging_module.crash_reporter import CrashReporter, anonymize_path, GITHUB_REPO
 from ..models.mount_data import MountSample, MountStatus, SessionInfo, ConnectionProtocol
-from ..utils.i18n import T, set_language, get_language
+from ..utils.i18n import T, set_language, get_language, LANGUES
 from ..utils.coordinates import format_ra, format_dec
 # La mise a jour passe par le module commun du kit, a la racine : il va
 # chercher l'archive applicative publiee dans le depot public de
@@ -1003,7 +1003,8 @@ class MainWindow(QMainWindow):
             sortie = sauver_rapport(chemin_dat, get_language())
             if sortie:
                 self._status_panel.add_message(
-                    f"{T('report_saved')} : {Path(sortie).name}", Colors.STATUS_OK
+                    f"{T('report_saved')} : {Path(sortie).stem[:-3]}*.txt "
+                    f"({', '.join(LANGUES)})", Colors.STATUS_OK
                 )
 
     def _new_log_files(self):
