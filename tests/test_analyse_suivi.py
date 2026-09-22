@@ -173,3 +173,46 @@ def test_la_derive_masque_l_erreur_periodique():
     p_net, amp_net = pic_dominant(signal - (a * t + b))
     assert p_net == pytest.approx(periode_min, rel=0.05)
     assert amp_net == pytest.approx(amplitude, rel=0.1)
+
+
+def test_un_escalier_n_est_pas_du_jitter():
+    """Le dither deplace la monture et elle y RESTE : c'est un escalier.
+
+    Retirer une droite ne retire pas un escalier. Sur la session reelle du
+    21/09/2026, cela laissait 9,1" de « jitter » alors que la monture tenait
+    chaque marche a 0,12". Le jitter doit donc se mesurer ENTRE les
+    repositionnements.
+    """
+    from src.logging_module.log_parser import TargetSegment
+
+    rng = np.random.default_rng(3)
+    jitter_vrai = 0.12
+    marches = []
+    position = 0.0
+    for _ in range(40):                       # 40 poses
+        position += rng.normal(0, 8.0)        # un dither de quelques secondes d'arc
+        marches.append(rng.normal(position, jitter_vrai, 300))
+    dev = np.concatenate(marches)
+
+    seg = TargetSegment()
+    assert seg.jitter(dev) == pytest.approx(jitter_vrai, rel=0.25)
+
+    # l'ecart-type brut, lui, mesure la promenade du dither : sans rapport
+    assert np.std(dev) > 20 * jitter_vrai
+
+    # et le detrend lineaire n'y change presque rien
+    t = np.arange(len(dev), dtype=float)
+    a, b = np.polyfit(t, dev, 1)
+    assert np.std(dev - (a * t + b)) > 10 * jitter_vrai
+
+
+def test_la_session_reelle_du_21_septembre():
+    """Non-regression sur le fichier qui a declenche tout ceci, s'il est la."""
+    fichier = Path(__file__).resolve().parents[1] / "Logs" / "MountMonitor_20260921-220015.dat"
+    if not fichier.exists():
+        pytest.skip("session de reference absente du depot")
+    s = parse_dat_file(fichier)
+    combine = math.hypot(s.ra_jitter, s.dec_jitter)
+    # le rapport d'origine annoncait 86,269" et la note MAUVAIS
+    assert combine < 0.5, f"jitter {combine:.3f}\", attendu < 0.5\""
+    assert s.repositionnements > 50, "les dithers doivent etre vus comme tels"

@@ -724,11 +724,29 @@ C'est lui, et lui seul, qui étale les étoiles pendant une pose.
 
 Le RMS brut additionne trois choses qui n'ont pas les mêmes conséquences :
 
-| | Effet sur une pose de 180 s | Corrigé par |
+| | Échelle | Effet sur une pose de 180 s |
 |---|---|---|
-| **Jitter** (secondes) | étale directement l'étoile | rien |
-| **Dérive lente** (heures) | déplace l'étoile de quelques dixièmes de seconde d'arc | chaque dither |
-| **Mouvement commandé** (dither, recentrage) | aucun, la pose est terminée | — |
+| **Jitter** | secondes | **étale directement l'étoile** |
+| **Repositionnement** (dither, recentrage) | entre les poses | aucun : la pose est finie |
+| **Dérive lente** | heures | quelques dixièmes de seconde d'arc, annulés par le dither suivant |
+
+Le rapport les sépare, et la note porte sur le premier.
+
+#### Le jitter se mesure entre les repositionnements
+
+Un enregistrement de déviation n'est pas une ligne bruitée, c'est un **escalier** :
+entre deux poses le séquenceur dithère, et la monture *reste* sur sa nouvelle marche.
+
+```
+-14.10"  -14.10"  -14.10"   <- une marche : écart-type local 0,07"
+-14.40"  -14.40"  -14.40"   <- la suivante
+-10.20"  -10.10"  -10.10"   <- et ainsi de suite
+```
+
+Retirer une droite ne retire pas un escalier. Sur la session du 21/09/2026, il
+restait **9,1″** de prétendu jitter, alors que la monture tenait chaque marche à
+**0,12″**. Le jitter est donc mesuré **à l'intérieur de chaque palier**, et les
+marches sont comptées à part.
 
 Une dérive de 5"/h ne déplace une étoile que de **0.28"** pendant une pose de 180 s.
 Mais étalée sur sept heures, elle produit à elle seule un RMS de **12"** — une rampe
@@ -738,14 +756,20 @@ juger son suivi sur la durée de la nuit.
 Le rapport affiche donc les deux, et note sur le premier :
 
 ```
---- Tracking jitter (drift removed) ---
-Combined RMS       : 0.370"   <-- la note est fondée là-dessus
---- Slow drift ---
-RA drift           : -5.65"/h
-Star motion over a 180 s exposure : 0.28"
+--- 1. Tracking jitter ---
+Combined jitter    : 0.179"   <-- la note est fondée là-dessus
+--- 2. Commanded repositioning ---
+Moves detected     : 170        Median size : 1.05"
+--- 3. Slow drift ---
+RA drift           : +0.73"/h   DEC drift : -2.42"/h
+Star motion over a 180 s exposure : 0.13"
 --- For reference ---
-Raw RMS (jitter + drift) : 11.365"
+Raw RMS (everything mixed)   : 11.243"
+After removing the drift only:  9.107"   (contient encore les paliers)
 ```
+
+*(chiffres réels de la session du 21 septembre 2026 : le rapport d'origine
+annonçait 86,269″ et la note MAUVAIS)*
 
 #### Ce qui est exclu des statistiques
 
