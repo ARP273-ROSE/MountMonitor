@@ -248,8 +248,11 @@ def step_verifier(version):
         return
     code = 'import sys; sys.path.insert(0, "app")\n' + \
            '\n'.join(f'import {m}' for m in modules) + '\nprint("ok")'
-    r = subprocess.run([str(exe), '-c', code], cwd=base,
-                       capture_output=True, text=True)
+    # -B : sans cela la verification recree des .pyc dans app/ — apres
+    # l'elagage, qui les avait retires — et ils partent dans le paquet.
+    r = subprocess.run([str(exe), '-B', '-c', code], cwd=base,
+                       capture_output=True, text=True,
+                       env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
     if r.returncode != 0:
         raise RuntimeError('Le paquet ne s\'importe pas :\n' + r.stderr[-2000:])
     log('verification d\'import : ok')
