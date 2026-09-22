@@ -217,12 +217,18 @@ class AnalysisDialog(QDialog):
         dec_rms = float(np.std(s.dec_deviations)) if len(s.dec_deviations) > 0 else 999
         combined_rms_raw = float(np.sqrt(ra_rms**2 + dec_rms**2))
 
-        # Drift-free RMS: what actually blurs an exposure. A drift of a few
-        # arcsec per hour moves a star by a fraction of an arcsec during a
-        # 3-minute exposure, and every dither cancels it; jitter does not.
-        ra_jit = float(np.std(s.ra_detrended)) if len(s.ra_detrended) > 0 else ra_rms
-        dec_jit = float(np.std(s.dec_detrended)) if len(s.dec_detrended) > 0 else dec_rms
+        # Jitter: the spread the mount shows WHILE it holds a position. It is
+        # measured between repositionings, because a deviation record is a
+        # staircase, not a noisy line: the sequencer dithers between exposures
+        # and the mount STAYS on its new step. Removing a straight line does not
+        # remove a staircase — on the real 21/09/2026 session that left 9.1"
+        # while the mount was holding each step to 0.12".
+        ra_jit = float(s.ra_jitter) if s.ra_jitter > 0 else float(np.std(s.ra_detrended) or ra_rms)
+        dec_jit = float(s.dec_jitter) if s.dec_jitter > 0 else float(np.std(s.dec_detrended) or dec_rms)
         combined_rms = float(np.sqrt(ra_jit**2 + dec_jit**2))
+        rms_detrend = float(np.sqrt(
+            (np.std(s.ra_detrended) if len(s.ra_detrended) else 0.0) ** 2
+            + (np.std(s.dec_detrended) if len(s.dec_detrended) else 0.0) ** 2))
 
         # Mean drift over the segments, weighted by sample count.
         _segs = [g for g in s.target_segments if g.sample_count > 0]
@@ -271,12 +277,28 @@ class AnalysisDialog(QDialog):
         lines.append("")
         lines.append(f"  Rating / Note      : {rating_text}")
         lines.append("")
-        lines.append("  --- Tracking jitter (drift removed) / Jitter de suivi (derive retiree) ---")
-        lines.append(f"  Combined RMS       : {combined_rms:.3f}\"   <-- rating is based on this")
+        lines.append("  --- 1. Tracking jitter / Jitter de suivi ---")
+        lines.append("      (spread while the mount holds a position — this is what blurs a frame)")
+        lines.append("      (dispersion quand la monture tient sa position — c'est ce qui etale l'etoile)")
+        lines.append(f"  Combined jitter    : {combined_rms:.3f}\"   <-- rating is based on this")
         lines.append(f"  RA RMS             : {ra_jit:.3f}\"")
         lines.append(f"  DEC RMS            : {dec_jit:.3f}\"")
         lines.append("")
-        lines.append("  --- Slow drift / Derive lente ---")
+        lines.append("  --- 2. Commanded repositioning / Repositionnements commandes ---")
+        if s.repositionnements:
+            _amp = [g.amplitude_repositionnement for g in s.target_segments
+                    if g.amplitude_repositionnement > 0]
+            _am = float(np.median(_amp)) if _amp else 0.0
+            lines.append(f"  Moves detected / Mouvements detectes : {s.repositionnements}")
+            lines.append(f"  Median size / Amplitude mediane      : {_am:.2f}\"")
+            lines.append("      (dither and re-centering: the mount is MOVED between frames and")
+            lines.append("       stays there — no effect inside an exposure)")
+            lines.append("      (dither et recentrage : la monture est DEPLACEE entre les poses et")
+            lines.append("       y reste — sans effet pendant une pose)")
+        else:
+            lines.append("  None detected / Aucun detecte")
+        lines.append("")
+        lines.append("  --- 3. Slow drift / Derive lente ---")
         lines.append(f"  RA drift           : {ra_drift_mean:+.2f}\"/h")
         lines.append(f"  DEC drift          : {dec_drift_mean:+.2f}\"/h")
         _expo = 180.0
@@ -285,7 +307,9 @@ class AnalysisDialog(QDialog):
         lines.append("      (cancelled by every dither / annulee par chaque dither)")
         lines.append("")
         lines.append("  --- For reference / Pour memoire ---")
-        lines.append(f"  Raw RMS (jitter + drift) / RMS brut : {combined_rms_raw:.3f}\"")
+        lines.append(f"  Raw RMS (everything mixed) / RMS brut : {combined_rms_raw:.3f}\"")
+        lines.append(f"  After removing the drift only / Derive retiree seule : {rms_detrend:.3f}\"")
+        lines.append("      (still contains the repositioning steps / contient encore les paliers)")
         if s.excursions_removed:
             lines.append(f"  Commanded excursions excluded / Excursions commandees ecartees : "
                          f"{s.excursions_removed:,} samples")
@@ -811,20 +835,14 @@ class AnalysisDialog(QDialog):
         # raw RMS is dominated by the drift (a linear ramp of amplitude A has an
         # RMS of A/sqrt(12)), which says nothing about what a single exposure sees.
         jitter = rms
-        if len(deviations) > 2 and len(timestamps) == len(deviations):
-            t_rel = np.asarray(timestamps, dtype=np.float64)
-            t_rel = t_rel - t_rel[0]
-            if float(np.ptp(t_rel)) > 0:
-                try:
-                    a, b = np.polyfit(t_rel, np.asarray(deviations, dtype=np.float64), 1)
-                    jitter = float(np.std(deviations - (a * t_rel + b)))
-                except (np.linalg.LinAlgError, ValueError):
-                    pass
+        if len(deviations) >= 8:
+            from ..logging_module.log_parser import TargetSegment
+            jitter = TargetSegment().jitter(deviations)
         lines.append(f"  --- {axis_name} ---")
         lines.append(f"  Mean deviation / Déviation moyenne   : {np.mean(deviations):+.4f}\"")
         lines.append(f"  Median deviation / Déviation médiane : {np.median(deviations):+.4f}\"")
-        lines.append(f"  JITTER (drift removed) / sans dérive : {jitter:.4f}\"   <-- blurs the exposure")
-        lines.append(f"  RMS raw / brut (jitter + drift)      : {rms:.4f}\"")
+        lines.append(f"  JITTER (between repositionings)      : {jitter:.4f}\"   <-- blurs the exposure")
+        lines.append(f"  RMS raw / brut (tout melange)        : {rms:.4f}\"")
         lines.append(f"  Peak-to-peak / Pic-à-pic             : {np.ptp(deviations):.4f}\"")
         lines.append(f"  Min deviation                        : {np.min(deviations):+.4f}\"")
         lines.append(f"  Max deviation                        : {np.max(deviations):+.4f}\"")

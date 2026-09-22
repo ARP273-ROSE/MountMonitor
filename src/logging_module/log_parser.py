@@ -54,6 +54,80 @@ class TargetSegment:
     excursions_removed: int = 0       # dithers / re-centering excluded from stats
     excursion_max_arcsec: float = 0.0 # largest excursion seen, for the report
 
+    def _paliers(self, dev: np.ndarray) -> np.ndarray:
+        """Indices where the mount was repositioned (dither, re-centering).
+
+        Between two exposures the sequencer moves the mount and it STAYS there:
+        the deviation is a staircase, not a noisy line. Removing a straight line
+        does not remove a staircase, so the step heights end up counted as
+        tracking error — on a real session they reached 9.7" while the mount was
+        actually holding each step to 0.09".
+        """
+        if len(dev) < 8:
+            return np.array([], dtype=int)
+        d = np.abs(np.diff(np.asarray(dev, dtype=np.float64)))
+        # Robust noise scale: most samples are inside a step, so the median
+        # absolute difference describes the noise, not the steps.
+        ech = float(np.median(d))
+        seuil = max(8.0 * ech, 0.5)
+        return np.flatnonzero(d > seuil) + 1
+
+    def jitter(self, dev: np.ndarray) -> float:
+        """Tracking jitter: the spread the mount shows WHILE it holds a position.
+
+        This is the only figure that blurs an exposure. Anything slower — drift,
+        dithers, re-centering — either does not move the star during the frame or
+        is cancelled between frames.
+        """
+        dev = np.asarray(dev, dtype=np.float64)
+        if len(dev) < 8:
+            return float(np.std(dev)) if len(dev) else 0.0
+        bords = np.concatenate(([0], self._paliers(dev), [len(dev)]))
+        morceaux = [dev[a:b] for a, b in zip(bords[:-1], bords[1:]) if b - a >= 8]
+        if not morceaux:
+            return float(np.std(dev))
+        # Median of the per-step spreads: robust to the few steps that contain
+        # the tail of a move.
+        return float(np.median([np.std(m) for m in morceaux]))
+
+    @property
+    def ra_jitter(self) -> float:
+        return self.jitter(self.ra_deviations)
+
+    @property
+    def dec_jitter(self) -> float:
+        return self.jitter(self.dec_deviations)
+
+    @property
+    def repositionnements(self) -> int:
+        """How many times the sequencer moved the mount during this segment."""
+        ra = set(self._paliers(self.ra_deviations).tolist())
+        dec = set(self._paliers(self.dec_deviations).tolist())
+        # a dither moves both axes: merge indices closer than 3 samples
+        tous = sorted(ra | dec)
+        n = 0
+        prec = -10
+        for i in tous:
+            if i - prec > 3:
+                n += 1
+            prec = i
+        return n
+
+    @property
+    def amplitude_repositionnement(self) -> float:
+        """Median size of those moves, in arcsec."""
+        idx = sorted(set(self._paliers(self.ra_deviations).tolist())
+                     | set(self._paliers(self.dec_deviations).tolist()))
+        if not idx:
+            return 0.0
+        sauts = []
+        for i in idx:
+            if 0 < i < len(self.ra_deviations):
+                sauts.append(float(np.hypot(
+                    self.ra_deviations[i] - self.ra_deviations[i - 1],
+                    self.dec_deviations[i] - self.dec_deviations[i - 1])))
+        return float(np.median(sauts)) if sauts else 0.0
+
     def _detrended(self, dev: np.ndarray) -> tuple[np.ndarray, float]:
         """Deviations with the linear drift removed, and that drift in "/h.
 
@@ -124,6 +198,9 @@ class ParsedSession:
     dec_detrended: np.ndarray = field(default_factory=lambda: np.array([]))
     excursions_removed: int = 0
     samples_in_segments: int = 0
+    ra_jitter: float = 0.0
+    dec_jitter: float = 0.0
+    repositionnements: int = 0
 
     # TRACKING-only filtered arrays (for analysis)
     tracking_mask: np.ndarray = field(default_factory=lambda: np.array([], dtype=bool))
@@ -526,6 +603,11 @@ def parse_dat_file(dat_path: Path) -> ParsedSession:
             # Drift-free deviations: this is what actually blurs an exposure.
             session.ra_detrended = np.concatenate([seg.ra_detrended for seg in segments])
             session.dec_detrended = np.concatenate([seg.dec_detrended for seg in segments])
+            # Jitter weighted by sample count: the figure the rating is based on.
+            _w = float(sum(g.sample_count for g in segments)) or 1.0
+            session.ra_jitter = sum(g.ra_jitter * g.sample_count for g in segments) / _w
+            session.dec_jitter = sum(g.dec_jitter * g.sample_count for g in segments) / _w
+            session.repositionnements = sum(g.repositionnements for g in segments)
             session.excursions_removed = sum(seg.excursions_removed for seg in segments)
             session.samples_in_segments = int(sum(seg.sample_count for seg in segments))
         else:
