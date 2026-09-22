@@ -462,6 +462,13 @@ class Vigie:
         # a chaque lancement. C'est arrive : six rapports remontes d'un poste
         # ou tout allait bien, la pile montrant le fil graphique au repos.
         self._deja_battu = False
+        # Drapeau distinct de `_signale`, et ce n'est pas un detail : les
+        # confondre faisait annoncer la « fin » d'un gel qui n'avait jamais
+        # ete signale, avec pour duree le temps ecoule depuis le demarrage de
+        # la machine — `_debut_gel` valant encore zero. Trois rapports sont
+        # ainsi remontes d'un poste sain : « fin du gel apres 23 573 s »,
+        # soit exactement les six heures et demie d'allumage de l'ordinateur.
+        self._avertissement_sans_battement = False
 
     def battre(self) -> None:
         """À appeler depuis le fil graphique, à intervalle régulier."""
@@ -492,8 +499,8 @@ class Vigie:
                 # manquant. On le dit dans le journal, une seule fois, et on
                 # se tait — mieux vaut une vigie muette qu'une vigie qui crie
                 # au loup a chaque demarrage.
-                if not self._signale:
-                    self._signale = True
+                if not self._avertissement_sans_battement:
+                    self._avertissement_sans_battement = True
                     log.warning(
                         "Vigie sans battement : aucun appel a battre() depuis "
                         "le fil graphique. Surveillance des gels inactive.")
