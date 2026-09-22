@@ -771,6 +771,22 @@ After removing the drift only:  9.107"   (contient encore les paliers)
 *(chiffres réels de la session du 21 septembre 2026 : le rapport d'origine
 annonçait 86,269″ et la note MAUVAIS)*
 
+### Le rapport de nuit est enregistré tout seul
+
+À l'arrêt de l'enregistrement, le rapport complet est écrit **à côté du `.dat`** :
+
+```
+MountMonitor_20260921-220015.dat
+MountMonitor_20260921-220015-rapport.txt   <- écrit automatiquement
+```
+
+Le bouton **Exporter TXT** de la fenêtre d'analyse reste disponible pour en poser
+une copie ailleurs.
+
+⚠️ Si l'écriture échoue (disque plein, dossier en lecture seule), la fermeture des
+fichiers de session se poursuit normalement : perdre le rapport ne doit jamais
+coûter les données.
+
 #### Ce qui est exclu des statistiques
 
 - les échantillons pris **pendant un slew** entre deux cibles ;

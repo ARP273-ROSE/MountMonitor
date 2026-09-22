@@ -201,6 +201,13 @@ class ParsedSession:
     ra_jitter: float = 0.0
     dec_jitter: float = 0.0
     repositionnements: int = 0
+    # Timestamps ALIGNED with ra_deviations / dec_deviations. The plain
+    # `timestamps` array holds every sample of the file, while the deviations
+    # only hold the samples kept in the segments: plotting one against the
+    # other silently draws nothing.
+    deviation_timestamps: np.ndarray = field(default_factory=lambda: np.array([]))
+    deviation_ra_stdevs: np.ndarray = field(default_factory=lambda: np.array([]))
+    deviation_dec_stdevs: np.ndarray = field(default_factory=lambda: np.array([]))
 
     # TRACKING-only filtered arrays (for analysis)
     tracking_mask: np.ndarray = field(default_factory=lambda: np.array([], dtype=bool))
@@ -608,6 +615,9 @@ def parse_dat_file(dat_path: Path) -> ParsedSession:
             session.ra_jitter = sum(g.ra_jitter * g.sample_count for g in segments) / _w
             session.dec_jitter = sum(g.dec_jitter * g.sample_count for g in segments) / _w
             session.repositionnements = sum(g.repositionnements for g in segments)
+            session.deviation_timestamps = np.concatenate([g.timestamps for g in segments])
+            session.deviation_ra_stdevs = np.concatenate([g.ra_stdevs for g in segments])
+            session.deviation_dec_stdevs = np.concatenate([g.dec_stdevs for g in segments])
             session.excursions_removed = sum(seg.excursions_removed for seg in segments)
             session.samples_in_segments = int(sum(seg.sample_count for seg in segments))
         else:
@@ -618,6 +628,9 @@ def parse_dat_file(dat_path: Path) -> ParsedSession:
             ra_diffs = np.array([_ra_diff_hours(r, ra_med) for r in session.tracking_ra_hours])
             session.ra_deviations = ra_diffs * 15.0 * 3600.0 * cos_dec
             session.dec_deviations = (session.tracking_dec_degrees - dec_med) * 3600.0
+            session.deviation_timestamps = session.tracking_timestamps
+            session.deviation_ra_stdevs = session.tracking_ra_stdevs
+            session.deviation_dec_stdevs = session.tracking_dec_stdevs
 
         logger.info(f"Segmented into {len(segments)} target(s) from "
                      f"{int(np.sum(tracking_mask))} tracking samples")

@@ -94,6 +94,55 @@ def _is_precision_unguided_mount(session) -> bool:
     return False
 
 
+def construire_rapport(session, lang: str = 'fr') -> str:
+    """Le texte du rapport de nuit, sans ouvrir de fenetre.
+
+    Sert a la sauvegarde automatique en fin de session : le rapport le plus
+    utile est celui qu'on n'a pas eu besoin de demander.
+    """
+    dlg = AnalysisDialog.__new__(AnalysisDialog)
+    dlg._session = session
+    dlg._lang = lang
+
+    class _Tampon:
+        def __init__(self):
+            self.texte = ""
+
+        def setPlainText(self, t):
+            self.texte = t
+
+        def __getattr__(self, _):
+            return lambda *a, **k: None
+
+    dlg._report = _Tampon()
+    dlg._run_analysis()
+    return dlg._report.texte
+
+
+def sauver_rapport(chemin_dat, lang: str = 'fr'):
+    """Ecrit <session>-rapport.txt a cote du .dat. Renvoie le chemin, ou None.
+
+    Ne leve jamais : perdre le rapport ne doit pas empecher la fermeture propre
+    des fichiers de session.
+    """
+    from pathlib import Path as _P
+    from ..logging_module.log_parser import parse_dat_file
+    try:
+        chemin_dat = _P(chemin_dat)
+        if not chemin_dat.exists():
+            return None
+        session = parse_dat_file(chemin_dat)
+        if session.sample_count == 0:
+            return None
+        sortie = chemin_dat.with_name(chemin_dat.stem + "-rapport.txt")
+        sortie.write_text(construire_rapport(session, lang), encoding="utf-8")
+        logger.info("Rapport de nuit ecrit : %s", sortie)
+        return sortie
+    except Exception:
+        logger.exception("Le rapport de nuit n'a pas pu etre ecrit")
+        return None
+
+
 class AnalysisDialog(QDialog):
     """Comprehensive session analysis dialog."""
 

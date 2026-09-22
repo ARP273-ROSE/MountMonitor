@@ -121,6 +121,22 @@ TX = {
         "fr": "Aucune donnée trouvée dans ce fichier log",
     },
     "replay_mode": {"en": "REPLAY MODE", "fr": "MODE RELECTURE"},
+    "report_saved": {
+        "en": "Night report saved",
+        "fr": "Rapport de nuit enregistré",
+    },
+    "replay_graphs_failed": {
+        "en": "Graphs could not be drawn (the report opens anyway)",
+        "fr": "Les graphes n'ont pas pu être tracés (le rapport s'ouvre quand même)",
+    },
+    "replay_fft_failed": {
+        "en": "FFT could not be computed (the report opens anyway)",
+        "fr": "La FFT n'a pas pu être calculée (le rapport s'ouvre quand même)",
+    },
+    "replay_report_failed": {
+        "en": "The night report could not be built",
+        "fr": "Le rapport de nuit n'a pas pu être construit",
+    },
     "analysis_complete": {
         "en": "Analysis complete",
         "fr": "Analyse terminée",
