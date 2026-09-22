@@ -710,12 +710,51 @@ Le rapport couvre **12 sections** d'analyse exhaustive :
 
 ### Barème de qualité
 
-| Note | RMS combiné | Signification |
-|------|-------------|---------------|
-| **EXCELLENT** | < 0.5" | Étoiles parfaitement ponctuelles |
-| **BON** | 0.5" - 1.5" | Résultats satisfaisants pour la plupart des focales |
-| **MOYEN** | 1.5" - 3.0" | Visible sur longues poses à focales élevées |
-| **MAUVAIS** | > 3.0" | Étoiles probablement allongées |
+La note porte sur le **jitter** — les déviations une fois la dérive lente retirée.
+C'est lui, et lui seul, qui étale les étoiles pendant une pose.
+
+| Note | Jitter combiné | Signification |
+|------|----------------|---------------|
+| **EXCELLENT** | < 0.4" (0.5" non-guidé) | Étoiles parfaitement ponctuelles |
+| **BON** | jusqu'à 1.0" | Résultats satisfaisants pour la plupart des focales |
+| **MOYEN** | jusqu'à 2.0" | Visible sur longues poses à focales élevées |
+| **MAUVAIS** | au-delà | Étoiles probablement allongées |
+
+#### Pourquoi le jitter, et pas le RMS brut
+
+Le RMS brut additionne trois choses qui n'ont pas les mêmes conséquences :
+
+| | Effet sur une pose de 180 s | Corrigé par |
+|---|---|---|
+| **Jitter** (secondes) | étale directement l'étoile | rien |
+| **Dérive lente** (heures) | déplace l'étoile de quelques dixièmes de seconde d'arc | chaque dither |
+| **Mouvement commandé** (dither, recentrage) | aucun, la pose est terminée | — |
+
+Une dérive de 5"/h ne déplace une étoile que de **0.28"** pendant une pose de 180 s.
+Mais étalée sur sept heures, elle produit à elle seule un RMS de **12"** — une rampe
+d'amplitude A ayant un écart-type de A/√12. Noter une monture là-dessus revient à
+juger son suivi sur la durée de la nuit.
+
+Le rapport affiche donc les deux, et note sur le premier :
+
+```
+--- Tracking jitter (drift removed) ---
+Combined RMS       : 0.370"   <-- la note est fondée là-dessus
+--- Slow drift ---
+RA drift           : -5.65"/h
+Star motion over a 180 s exposure : 0.28"
+--- For reference ---
+Raw RMS (jitter + drift) : 11.365"
+```
+
+#### Ce qui est exclu des statistiques
+
+- les échantillons pris **pendant un slew** entre deux cibles ;
+- les **excursions commandées** au-delà de 30" : dither, recentrage, autofocus.
+  Ce sont de vrais mouvements de la monture, mais ils sont *demandés* — les
+  compter reviendrait à mesurer le séquenceur, pas la monture.
+
+Les deux sont comptés et affichés dans la section « For reference ».
 
 ### Détection automatique de l'erreur périodique
 

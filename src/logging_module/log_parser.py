@@ -17,10 +17,23 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-# Thresholds for detecting a target change (slew between objects)
-_RA_JUMP_THRESHOLD_HOURS = 0.25   # 15 arcmin in RA = new target
-_DEC_JUMP_THRESHOLD_DEG = 2.0     # 2 degrees in DEC = new target
+# ── Target-change detection ────────────────────────────────────────────────
+# A target change is detected on the angular separation from the CURRENT target
+# position, never on the jump between two consecutive samples: a slew is a
+# continuous motion, so consecutive samples differ by a fraction of a degree
+# and no jump is ever large enough to be seen. Before this was fixed, a whole
+# night on two targets was parsed as ONE segment whose median fell between them,
+# giving deviations of several degrees and a meaningless RMS.
+_TARGET_CHANGE_ARCSEC = 300.0     # 5 arcmin from the target = new target
 _MIN_SEGMENT_SAMPLES = 20         # Minimum samples to consider a segment valid
+_REF_WINDOW = 256                 # samples used to refresh the reference position
+
+# ── Excursion rejection inside a segment ──────────────────────────────────
+# Dithers, re-centering slews and autofocus moves happen WHILE the mount still
+# reports TRACKING. They are real mount motion, but they are commanded, not
+# tracking error: including them makes the RMS describe the sequencer, not the
+# mount. They are excluded from the statistics and counted separately.
+_EXCURSION_ARCSEC = 30.0
 
 
 @dataclass
@@ -38,6 +51,44 @@ class TargetSegment:
     dec_degrees: np.ndarray = field(default_factory=lambda: np.array([]))
     ra_stdevs: np.ndarray = field(default_factory=lambda: np.array([]))
     dec_stdevs: np.ndarray = field(default_factory=lambda: np.array([]))
+    excursions_removed: int = 0       # dithers / re-centering excluded from stats
+    excursion_max_arcsec: float = 0.0 # largest excursion seen, for the report
+
+    def _detrended(self, dev: np.ndarray) -> tuple[np.ndarray, float]:
+        """Deviations with the linear drift removed, and that drift in "/h.
+
+        Slow drift and short-term jitter do not have the same consequence: a
+        drift of 5"/h moves a star by 0.25" during a 3-minute exposure and is
+        cancelled by every dither, while jitter blurs each exposure directly.
+        Reporting a single RMS mixing the two describes neither.
+        """
+        if len(dev) < 2 or len(self.timestamps) != len(dev):
+            return dev, 0.0
+        t = np.asarray(self.timestamps, dtype=np.float64)
+        t = t - t[0]
+        if float(np.ptp(t)) <= 0:
+            return dev, 0.0
+        try:
+            a, b = np.polyfit(t, np.asarray(dev, dtype=np.float64), 1)
+        except (np.linalg.LinAlgError, ValueError):
+            return dev, 0.0
+        return dev - (a * t + b), float(a) * 3600.0
+
+    @property
+    def ra_detrended(self) -> np.ndarray:
+        return self._detrended(self.ra_deviations)[0]
+
+    @property
+    def dec_detrended(self) -> np.ndarray:
+        return self._detrended(self.dec_deviations)[0]
+
+    @property
+    def ra_drift_arcsec_per_hour(self) -> float:
+        return self._detrended(self.ra_deviations)[1]
+
+    @property
+    def dec_drift_arcsec_per_hour(self) -> float:
+        return self._detrended(self.dec_deviations)[1]
 
 
 @dataclass
@@ -69,6 +120,10 @@ class ParsedSession:
     # Computed deviation arrays — TRACKING only, per-segment combined
     ra_deviations: np.ndarray = field(default_factory=lambda: np.array([]))
     dec_deviations: np.ndarray = field(default_factory=lambda: np.array([]))
+    ra_detrended: np.ndarray = field(default_factory=lambda: np.array([]))
+    dec_detrended: np.ndarray = field(default_factory=lambda: np.array([]))
+    excursions_removed: int = 0
+    samples_in_segments: int = 0
 
     # TRACKING-only filtered arrays (for analysis)
     tracking_mask: np.ndarray = field(default_factory=lambda: np.array([], dtype=bool))
@@ -199,64 +254,107 @@ def _ra_diff_hours(ra1: float, ra2: float) -> float:
     return diff
 
 
+def _sep_arcsec(ra1_h, dec1_d, ra2_h, dec2_d) -> float:
+    """Angular separation in arcseconds (small-angle, ample here)."""
+    dra = _ra_diff_hours(ra1_h, ra2_h) * 15.0 * 3600.0 * np.cos(np.radians(dec2_d))
+    ddec = (dec1_d - dec2_d) * 3600.0
+    return float(np.hypot(dra, ddec))
+
+
 def _segment_tracking_data(
     ra_hours: np.ndarray, dec_degrees: np.ndarray,
     timestamps: np.ndarray, ra_stdevs: np.ndarray, dec_stdevs: np.ndarray,
 ) -> list[TargetSegment]:
     """Segment TRACKING data into target groups.
 
-    Detects target changes by finding large jumps in RA or DEC.
-    Computes per-segment deviations from each segment's own median.
+    A new target is detected when a sample lies further than
+    ``_TARGET_CHANGE_ARCSEC`` from the CURRENT target position — not when two
+    consecutive samples differ, which never happens during a continuous slew.
+
+    Samples taken while the mount is moving between targets form runs shorter
+    than ``_MIN_SEGMENT_SAMPLES`` and are therefore dropped, which is what we
+    want: they are travel, not tracking.
+
+    Within a segment, excursions beyond ``_EXCURSION_ARCSEC`` (dither,
+    re-centering, autofocus moves) are excluded from the deviations and counted
+    in ``excursions_removed``.
     """
     n = len(ra_hours)
     if n < _MIN_SEGMENT_SAMPLES:
         return []
 
-    # Find segment boundaries: indices where RA or DEC jump significantly
+    # ── 1. boundaries, from the separation to the current reference ────────
     boundaries = [0]
+    ref_ra = float(ra_hours[0])
+    ref_dec = float(dec_degrees[0])
+    buf_start = 0
     for i in range(1, n):
-        ra_jump = abs(_ra_diff_hours(ra_hours[i], ra_hours[i - 1]))
-        dec_jump = abs(dec_degrees[i] - dec_degrees[i - 1])
-        if ra_jump > _RA_JUMP_THRESHOLD_HOURS or dec_jump > _DEC_JUMP_THRESHOLD_DEG:
+        if _sep_arcsec(ra_hours[i], dec_degrees[i], ref_ra, ref_dec) > _TARGET_CHANGE_ARCSEC:
             boundaries.append(i)
+            ref_ra = float(ra_hours[i])
+            ref_dec = float(dec_degrees[i])
+            buf_start = i
+        elif i - buf_start >= _REF_WINDOW:
+            # refresh the reference so a slow drift does not end up splitting
+            # a segment after a few hours
+            lo = max(buf_start, i - _REF_WINDOW)
+            ref_ra = float(np.median(ra_hours[lo:i + 1]))
+            ref_dec = float(np.median(dec_degrees[lo:i + 1]))
+            buf_start = i
     boundaries.append(n)
 
     segments = []
     for b in range(len(boundaries) - 1):
         start = boundaries[b]
         end = boundaries[b + 1]
-        count = end - start
-        if count < _MIN_SEGMENT_SAMPLES:
+        if end - start < _MIN_SEGMENT_SAMPLES:
             continue
 
         seg_ra = ra_hours[start:end]
         seg_dec = dec_degrees[start:end]
-        seg_ts = timestamps[start:end]
-        seg_ra_stdev = ra_stdevs[start:end]
-        seg_dec_stdev = dec_stdevs[start:end]
 
         ra_median = float(np.median(seg_ra))
         dec_median = float(np.median(seg_dec))
         cos_dec = np.cos(np.radians(dec_median))
 
-        # RA deviations in true arcseconds on the sky
         ra_dev = np.array([_ra_diff_hours(r, ra_median) for r in seg_ra]) * 15.0 * 3600.0 * cos_dec
-        # DEC deviations in arcseconds
         dec_dev = (seg_dec - dec_median) * 3600.0
 
+        # ── 2. drop commanded excursions (dither, re-centering, AF) ────────
+        sep = np.hypot(ra_dev, dec_dev)
+        keep = sep <= _EXCURSION_ARCSEC
+        n_out = int(np.sum(~keep))
+        sep_max = float(sep.max()) if len(sep) else 0.0
+        if n_out and int(np.sum(keep)) >= _MIN_SEGMENT_SAMPLES:
+            # recompute the median on the clean samples, then the deviations
+            ra_median = float(np.median(seg_ra[keep]))
+            dec_median = float(np.median(seg_dec[keep]))
+            cos_dec = np.cos(np.radians(dec_median))
+            ra_dev = np.array([_ra_diff_hours(r, ra_median) for r in seg_ra]) * 15.0 * 3600.0 * cos_dec
+            dec_dev = (seg_dec - dec_median) * 3600.0
+            sep = np.hypot(ra_dev, dec_dev)
+            keep = sep <= _EXCURSION_ARCSEC
+            n_out = int(np.sum(~keep))
+        else:
+            keep = np.ones(len(seg_ra), dtype=bool)
+            n_out = 0
+
+        idx = np.arange(start, end)[keep]
         seg = TargetSegment(
             start_index=start,
             end_index=end,
             ra_median_hours=ra_median,
             dec_median_degrees=dec_median,
-            sample_count=count,
-            ra_deviations=ra_dev,
-            dec_deviations=dec_dev,
-            timestamps=seg_ts,
-            ra_hours=seg_ra,
-            dec_degrees=seg_dec,
-            ra_stdevs=seg_ra_stdev,
-            dec_stdevs=seg_dec_stdev,
+            sample_count=int(np.sum(keep)),
+            ra_deviations=ra_dev[keep],
+            dec_deviations=dec_dev[keep],
+            timestamps=timestamps[idx],
+            ra_hours=seg_ra[keep],
+            dec_degrees=seg_dec[keep],
+            ra_stdevs=ra_stdevs[idx],
+            dec_stdevs=dec_stdevs[idx],
+            excursions_removed=n_out,
+            excursion_max_arcsec=sep_max,
         )
         segments.append(seg)
 
@@ -425,6 +523,11 @@ def parse_dat_file(dat_path: Path) -> ParsedSession:
             all_dec_dev = np.concatenate([seg.dec_deviations for seg in segments])
             session.ra_deviations = all_ra_dev
             session.dec_deviations = all_dec_dev
+            # Drift-free deviations: this is what actually blurs an exposure.
+            session.ra_detrended = np.concatenate([seg.ra_detrended for seg in segments])
+            session.dec_detrended = np.concatenate([seg.dec_detrended for seg in segments])
+            session.excursions_removed = sum(seg.excursions_removed for seg in segments)
+            session.samples_in_segments = int(sum(seg.sample_count for seg in segments))
         else:
             # Fallback: single segment from all tracking data
             ra_med = float(np.median(session.tracking_ra_hours))

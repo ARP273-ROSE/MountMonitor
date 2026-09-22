@@ -210,9 +210,28 @@ class AnalysisDialog(QDialog):
         # ═══════════════════════════════════════════════════════════
         # 2. OVERALL QUALITY RATING (combined from all segments)
         # ═══════════════════════════════════════════════════════════
+        # Raw RMS, kept for reference only. It mixes three different things:
+        # the tracking jitter, the slow drift, and any commanded motion. The
+        # rating must not depend on it — see the detrended figures below.
         ra_rms = float(np.std(s.ra_deviations)) if len(s.ra_deviations) > 0 else 999
         dec_rms = float(np.std(s.dec_deviations)) if len(s.dec_deviations) > 0 else 999
-        combined_rms = np.sqrt(ra_rms**2 + dec_rms**2)
+        combined_rms_raw = float(np.sqrt(ra_rms**2 + dec_rms**2))
+
+        # Drift-free RMS: what actually blurs an exposure. A drift of a few
+        # arcsec per hour moves a star by a fraction of an arcsec during a
+        # 3-minute exposure, and every dither cancels it; jitter does not.
+        ra_jit = float(np.std(s.ra_detrended)) if len(s.ra_detrended) > 0 else ra_rms
+        dec_jit = float(np.std(s.dec_detrended)) if len(s.dec_detrended) > 0 else dec_rms
+        combined_rms = float(np.sqrt(ra_jit**2 + dec_jit**2))
+
+        # Mean drift over the segments, weighted by sample count.
+        _segs = [g for g in s.target_segments if g.sample_count > 0]
+        if _segs:
+            _w = float(sum(g.sample_count for g in _segs))
+            ra_drift_mean = sum(g.ra_drift_arcsec_per_hour * g.sample_count for g in _segs) / _w
+            dec_drift_mean = sum(g.dec_drift_arcsec_per_hour * g.sample_count for g in _segs) / _w
+        else:
+            ra_drift_mean = dec_drift_mean = 0.0
 
         # Detect mount type and adapt scoring thresholds
         # Unguided precision mounts (10Micron, Planewave) report coordinate-level
@@ -220,22 +239,26 @@ class AnalysisDialog(QDialog):
         # quality is excellent even at 2-4" RMS as measured by MountMonitor.
         precision_unguided = _is_precision_unguided_mount(s)
         if precision_unguided:
-            # Adapted thresholds for unguided precision mounts
-            if combined_rms < 2.0:
+            # Thresholds for unguided precision mounts, applied to the JITTER.
+            # They used to be 2/4/8" because the figure they graded included the
+            # drift and the commanded motion. On the jitter alone, a 10Micron
+            # under a pointing model sits around 0.2-0.5", so the scale must be
+            # tighter or every session would come out "excellent".
+            if combined_rms < 0.5:
                 rating = 'excellent'
-            elif combined_rms < 4.0:
+            elif combined_rms < 1.0:
                 rating = 'good'
-            elif combined_rms < 8.0:
+            elif combined_rms < 2.0:
                 rating = 'fair'
             else:
                 rating = 'poor'
         else:
-            # Standard thresholds for guided mounts
-            if combined_rms < 0.5:
+            # Standard thresholds for guided mounts, also applied to the jitter
+            if combined_rms < 0.4:
                 rating = 'excellent'
-            elif combined_rms < 1.5:
+            elif combined_rms < 1.0:
                 rating = 'good'
-            elif combined_rms < 3.0:
+            elif combined_rms < 2.0:
                 rating = 'fair'
             else:
                 rating = 'poor'
@@ -247,14 +270,35 @@ class AnalysisDialog(QDialog):
         lines.append("=" * 70)
         lines.append("")
         lines.append(f"  Rating / Note      : {rating_text}")
-        lines.append(f"  Combined RMS       : {combined_rms:.3f}\"")
-        lines.append(f"  RA RMS             : {ra_rms:.3f}\"")
-        lines.append(f"  DEC RMS            : {dec_rms:.3f}\"")
+        lines.append("")
+        lines.append("  --- Tracking jitter (drift removed) / Jitter de suivi (derive retiree) ---")
+        lines.append(f"  Combined RMS       : {combined_rms:.3f}\"   <-- rating is based on this")
+        lines.append(f"  RA RMS             : {ra_jit:.3f}\"")
+        lines.append(f"  DEC RMS            : {dec_jit:.3f}\"")
+        lines.append("")
+        lines.append("  --- Slow drift / Derive lente ---")
+        lines.append(f"  RA drift           : {ra_drift_mean:+.2f}\"/h")
+        lines.append(f"  DEC drift          : {dec_drift_mean:+.2f}\"/h")
+        _expo = 180.0
+        _mv = np.hypot(ra_drift_mean, dec_drift_mean) * _expo / 3600.0
+        lines.append(f"  Star motion over a {_expo:.0f} s exposure / Deplacement sur une pose de {_expo:.0f} s : {_mv:.2f}\"")
+        lines.append("      (cancelled by every dither / annulee par chaque dither)")
+        lines.append("")
+        lines.append("  --- For reference / Pour memoire ---")
+        lines.append(f"  Raw RMS (jitter + drift) / RMS brut : {combined_rms_raw:.3f}\"")
+        if s.excursions_removed:
+            lines.append(f"  Commanded excursions excluded / Excursions commandees ecartees : "
+                         f"{s.excursions_removed:,} samples")
+            lines.append("      (dither, re-centering, autofocus — mount motion, not tracking error)")
+            lines.append("      (dither, recentrage, autofocus — mouvement commande, pas erreur de suivi)")
+        _dropped = s.tracking_sample_count - s.samples_in_segments
+        if _dropped > 0:
+            lines.append(f"  Slew samples excluded / Echantillons de slew ecartes : {_dropped:,}")
         if precision_unguided:
             lines.append(f"  Mount type         : Precision unguided / Précision non-guidée")
-            lines.append(f"  Thresholds adapted / Seuils adaptés : Exc <2.0\" | Good <4.0\" | Fair <8.0\"")
+            lines.append(f"  Thresholds adapted / Seuils adaptés : Exc <0.5\" | Good <1.0\" | Fair <2.0\" (jitter)")
         else:
-            lines.append(f"  Thresholds / Seuils : Exc <0.5\" | Good <1.5\" | Fair <3.0\"")
+            lines.append(f"  Thresholds / Seuils : Exc <0.4\" | Good <1.0\" | Fair <2.0\" (jitter)")
         lines.append("")
 
         if rating == 'excellent':
@@ -273,18 +317,26 @@ class AnalysisDialog(QDialog):
                 lines.append("  Bon suivi. Résultats satisfaisants pour la plupart des focales.")
         elif rating == 'fair':
             if precision_unguided:
-                lines.append("  Fair tracking. Consider re-running alignment model or checking balance.")
-                lines.append("  Suivi moyen. Refaites le modèle d'alignement ou vérifiez l'équilibrage.")
+                lines.append("  Fair tracking. Check balance and axis play first.")
+                lines.append("  Suivi moyen. Vérifiez d'abord l'équilibrage et le jeu des axes.")
+                lines.append("  Note: on a model-driven mount the polar error is IN the model and is")
+                lines.append("  compensated by corrected tracking rates — do not touch the azimuth screw.")
+                lines.append("  Note : sur une monture à modèle, l'erreur polaire est DANS le modèle et")
+                lines.append("  est compensée par les taux de suivi — ne touchez pas la vis d'azimut.")
             else:
                 lines.append("  Fair tracking. Visible on long exposures at high focal lengths.")
                 lines.append("  Suivi moyen. Visible sur les longues poses à haute focale.")
                 lines.append("  Check polar alignment. / Vérifiez l'alignement polaire.")
         else:
             if precision_unguided:
-                lines.append("  Poor tracking for precision mount. Rebuild alignment model.")
-                lines.append("  Suivi insuffisant pour monture de précision. Refaites le modèle d'alignement.")
-                lines.append("  Check: model quality, balance, axis play, temperature changes.")
-                lines.append("  Vérifiez : qualité du modèle, équilibrage, jeu d'axes, variations thermiques.")
+                lines.append("  Poor jitter for a precision mount.")
+                lines.append("  Jitter insuffisant pour une monture de précision.")
+                lines.append("  Check, in this order: balance, axis play, cable snag, wind, seeing.")
+                lines.append("  Vérifiez, dans cet ordre : équilibrage, jeu d'axes, câble qui tire, vent, seeing.")
+                lines.append("  A pointing model corrects POINTING and slow drift, not short-term jitter:")
+                lines.append("  rebuilding it will not help here.")
+                lines.append("  Un modèle de pointage corrige le POINTAGE et la dérive lente, pas le jitter :")
+                lines.append("  le refaire n'y changera rien.")
             else:
                 lines.append("  Poor tracking. Stars likely elongated.")
                 lines.append("  Suivi insuffisant. Étoiles probablement allongées.")
@@ -305,17 +357,22 @@ class AnalysisDialog(QDialog):
             lines.append("")
 
             self._write_axis_stats(lines, "RA", seg.ra_deviations,
-                                   seg.timestamps, seg.ra_stdevs, fr)
+                                   seg.timestamps, seg.ra_stdevs, fr,
+                                   precision_unguided)
             self._write_axis_stats(lines, "DEC", seg.dec_deviations,
-                                   seg.timestamps, seg.dec_stdevs, fr)
+                                   seg.timestamps, seg.dec_stdevs, fr,
+                                   precision_unguided)
 
-            # FFT for this segment
+            # FFT on the DETRENDED deviations. A linear drift is not periodic,
+            # but a finite window turns it into a large low-frequency component
+            # that dominates the spectrum and hides the worm period we are
+            # actually looking for.
             if len(seg.ra_deviations) > 64:
                 freq = len(seg.ra_deviations) / max(1.0, seg.timestamps[-1] - seg.timestamps[0])
-                self._write_fft(lines, "RA", seg.ra_deviations, freq, fr, top_n=5)
+                self._write_fft(lines, "RA", seg.ra_detrended, freq, fr, top_n=5)
             if len(seg.dec_deviations) > 64:
                 freq = len(seg.dec_deviations) / max(1.0, seg.timestamps[-1] - seg.timestamps[0])
-                self._write_fft(lines, "DEC", seg.dec_deviations, freq, fr, top_n=3)
+                self._write_fft(lines, "DEC", seg.dec_detrended, freq, fr, top_n=3)
 
             lines.append("")
 
@@ -640,14 +697,16 @@ class AnalysisDialog(QDialog):
         recommendations = []
 
         # Adapt recommendation thresholds for mount type
-        ra_threshold = 5.0 if precision_unguided else 2.0
-        dec_threshold = 5.0 if precision_unguided else 2.0
+        # Applied to the JITTER (drift removed), so the values are much tighter
+        # than the old ones, which graded a figure polluted by drift and slews.
+        ra_threshold = 1.0 if precision_unguided else 1.5
+        dec_threshold = 1.0 if precision_unguided else 1.5
 
-        if ra_rms > ra_threshold:
+        if ra_jit > ra_threshold:
             if precision_unguided:
                 recommendations.append(
-                    f"- RA unstable (RMS > {ra_threshold}\"): rebuild alignment model, check RA balance\n"
-                    f"  RA instable (RMS > {ra_threshold}\") : refaites le modèle d'alignement, vérifiez l'équilibrage RA"
+                    f"- RA jitter > {ra_threshold}\": check RA balance, clamp tightness, cable drag\n"
+                    f"  Jitter RA > {ra_threshold}\" : vérifiez l'équilibrage RA, le serrage, les câbles"
                 )
             else:
                 recommendations.append(
@@ -655,11 +714,11 @@ class AnalysisDialog(QDialog):
                     "  RA instable (RMS > 2\") : vérifiez l'équilibrage RA, le serrage, les câbles"
                 )
 
-        if dec_rms > dec_threshold:
+        if dec_jit > dec_threshold:
             if precision_unguided:
                 recommendations.append(
-                    f"- DEC unstable (RMS > {dec_threshold}\"): rebuild alignment model, check DEC balance\n"
-                    f"  DEC instable (RMS > {dec_threshold}\") : refaites le modèle d'alignement, vérifiez l'équilibrage DEC"
+                    f"- DEC jitter > {dec_threshold}\": check DEC balance and DEC axis backlash\n"
+                    f"  Jitter DEC > {dec_threshold}\" : vérifiez l'équilibrage DEC et le jeu de l'axe DEC"
                 )
             else:
                 recommendations.append(
@@ -672,20 +731,36 @@ class AnalysisDialog(QDialog):
             if len(seg.ra_deviations) > 100:
                 a_ra = pente(seg.timestamps - seg.timestamps[0], seg.ra_deviations)
                 ra_drift_h = (a_ra or 0.0) * 3600.0
-                if a_ra is not None and abs(ra_drift_h) > 5.0:
-                    recommendations.append(
-                        f"- Target #{seg_idx + 1}: RA drift {ra_drift_h:+.1f}\"/h — adjust azimuth of polar alignment\n"
-                        f"  Cible #{seg_idx + 1} : dérive RA {ra_drift_h:+.1f}\"/h — ajustez l'azimut de l'alignement polaire"
-                    )
+                if a_ra is not None and abs(ra_drift_h) > 15.0:
+                    if precision_unguided:
+                        recommendations.append(
+                            f"- Target #{seg_idx + 1}: RA drift {ra_drift_h:+.1f}\"/h — add model points near this target\n"
+                            f"  (on a model-driven mount the azimuth screw is NOT the answer: the polar\n"
+                            f"   error is in the model and is compensated by corrected tracking rates)\n"
+                            f"  Cible #{seg_idx + 1} : dérive RA {ra_drift_h:+.1f}\"/h — ajoutez des points de modèle près de cette cible\n"
+                            f"  (sur une monture à modèle, la vis d'azimut n'est PAS la réponse : l'erreur\n"
+                            f"   polaire est dans le modèle et compensée par les taux de suivi)"
+                        )
+                    else:
+                        recommendations.append(
+                            f"- Target #{seg_idx + 1}: RA drift {ra_drift_h:+.1f}\"/h — adjust azimuth of polar alignment\n"
+                            f"  Cible #{seg_idx + 1} : dérive RA {ra_drift_h:+.1f}\"/h — ajustez l'azimut de l'alignement polaire"
+                        )
 
             if len(seg.dec_deviations) > 100:
                 a_dec = pente(seg.timestamps - seg.timestamps[0], seg.dec_deviations)
                 dec_drift_h = (a_dec or 0.0) * 3600.0
-                if a_dec is not None and abs(dec_drift_h) > 5.0:
-                    recommendations.append(
-                        f"- Target #{seg_idx + 1}: DEC drift {dec_drift_h:+.1f}\"/h — adjust altitude of polar alignment\n"
-                        f"  Cible #{seg_idx + 1} : dérive DEC {dec_drift_h:+.1f}\"/h — ajustez l'altitude de l'alignement polaire"
-                    )
+                if a_dec is not None and abs(dec_drift_h) > 15.0:
+                    if precision_unguided:
+                        recommendations.append(
+                            f"- Target #{seg_idx + 1}: DEC drift {dec_drift_h:+.1f}\"/h — add model points near this target\n"
+                            f"  Cible #{seg_idx + 1} : dérive DEC {dec_drift_h:+.1f}\"/h — ajoutez des points de modèle près de cette cible"
+                        )
+                    else:
+                        recommendations.append(
+                            f"- Target #{seg_idx + 1}: DEC drift {dec_drift_h:+.1f}\"/h — adjust altitude of polar alignment\n"
+                            f"  Cible #{seg_idx + 1} : dérive DEC {dec_drift_h:+.1f}\"/h — ajustez l'altitude de l'alignement polaire"
+                        )
 
         # Environment-based recommendations
         if has_env:
@@ -725,21 +800,49 @@ class AnalysisDialog(QDialog):
 
     def _write_axis_stats(self, lines: list, axis_name: str,
                           deviations: np.ndarray, timestamps: np.ndarray,
-                          stdevs: np.ndarray, fr: bool):
+                          stdevs: np.ndarray, fr: bool,
+                          precision_unguided: bool = False):
         """Write statistics for one axis (RA or DEC)."""
         if len(deviations) == 0:
             return
 
         rms = float(np.std(deviations))
+        # Jitter = deviations with the linear drift removed. On a long segment the
+        # raw RMS is dominated by the drift (a linear ramp of amplitude A has an
+        # RMS of A/sqrt(12)), which says nothing about what a single exposure sees.
+        jitter = rms
+        if len(deviations) > 2 and len(timestamps) == len(deviations):
+            t_rel = np.asarray(timestamps, dtype=np.float64)
+            t_rel = t_rel - t_rel[0]
+            if float(np.ptp(t_rel)) > 0:
+                try:
+                    a, b = np.polyfit(t_rel, np.asarray(deviations, dtype=np.float64), 1)
+                    jitter = float(np.std(deviations - (a * t_rel + b)))
+                except (np.linalg.LinAlgError, ValueError):
+                    pass
         lines.append(f"  --- {axis_name} ---")
         lines.append(f"  Mean deviation / Déviation moyenne   : {np.mean(deviations):+.4f}\"")
         lines.append(f"  Median deviation / Déviation médiane : {np.median(deviations):+.4f}\"")
-        lines.append(f"  RMS (std dev)                        : {rms:.4f}\"")
+        lines.append(f"  JITTER (drift removed) / sans dérive : {jitter:.4f}\"   <-- blurs the exposure")
+        lines.append(f"  RMS raw / brut (jitter + drift)      : {rms:.4f}\"")
         lines.append(f"  Peak-to-peak / Pic-à-pic             : {np.ptp(deviations):.4f}\"")
         lines.append(f"  Min deviation                        : {np.min(deviations):+.4f}\"")
         lines.append(f"  Max deviation                        : {np.max(deviations):+.4f}\"")
         lines.append(f"  95th percentile                      : {np.percentile(np.abs(deviations), 95):.4f}\"")
         lines.append(f"  99th percentile                      : {np.percentile(np.abs(deviations), 99):.4f}\"")
+        lines.append("")
+
+        # A median that lands exactly on zero means more than half the samples
+        # read identically: the mount reports its position on a finite grid
+        # (0.01 s in RA, 0.1" in DEC for a 10Micron). Worth saying, because it
+        # bounds how small a deviation this file can possibly show.
+        _q = float(np.median(np.abs(np.diff(np.unique(np.sort(deviations)))))) \
+            if len(np.unique(deviations)) > 2 else 0.0
+        if _q > 0:
+            lines.append(f"  Reading resolution / Résolution de lecture : {_q:.3f}\"")
+            if jitter < 2 * _q:
+                lines.append("      [!] jitter is at the resolution limit — the true value may be smaller")
+                lines.append("      [!] le jitter est à la limite de résolution — la vraie valeur peut être plus faible")
         lines.append("")
 
         # Running STDEV statistics
@@ -771,13 +874,26 @@ class AnalysisDialog(QDialog):
             drift_per_hour = a * 3600.0
             lines.append(f"  Drift rate / Taux de dérive : {drift_per_min:+.4f}\"/min ({drift_per_hour:+.2f}\"/h)")
 
-            if abs(drift_per_hour) > 5.0:
-                if axis_name == "RA":
+            # What a drift actually costs is what it moves a star DURING one
+            # exposure — not its hourly figure, which every dither cancels.
+            mv180 = abs(drift_per_hour) * 180.0 / 3600.0
+            lines.append(f"      = {mv180:.2f}\" over a 180 s exposure / sur une pose de 180 s")
+
+            if abs(drift_per_hour) > 15.0:
+                if precision_unguided:
+                    lines.append(f"  [!] Significant {axis_name} drift — add model points near this target")
+                    lines.append(f"      Dérive {axis_name} significative — ajoutez des points de modèle près de cette cible")
+                    lines.append("      (the polar error is IN the model: the azimuth screw is not the answer)")
+                    lines.append("      (l'erreur polaire est DANS le modèle : la vis d'azimut n'est pas la réponse)")
+                elif axis_name == "RA":
                     lines.append("  [!] Significant RA drift — check polar alignment (azimuth)")
                     lines.append("      Dérive RA significative — vérifiez l'alignement polaire (azimut)")
                 else:
                     lines.append("  [!] Significant DEC drift — check polar alignment (altitude)")
                     lines.append("      Dérive DEC significative — vérifiez l'alignement polaire (altitude)")
+            elif abs(drift_per_hour) > 5.0:
+                lines.append(f"  [i] {axis_name} drift present but harmless over one exposure")
+                lines.append(f"      Dérive {axis_name} présente mais sans effet sur une pose")
             elif abs(drift_per_hour) > 1.0:
                 lines.append(f"  [i] Slight {axis_name} drift detected / Légère dérive {axis_name} détectée")
             else:
