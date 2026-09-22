@@ -132,9 +132,11 @@ def check(current_version):
     if not tag or not is_newer(tag, current_version):
         return None
 
-    # On cherche l'archive applicative de NOTRE plateforme, pas l'installeur
-    # complet et surtout pas celle d'un autre systeme : une archive Windows
-    # posee sur un macOS remplace l'application par des binaires inutilisables.
+    # On cherche l'archive applicative, jamais l'installeur complet.
+    # Si la Release en publie une par systeme, on prend celle du notre : poser
+    # une archive Windows sur un macOS remplacerait l'application par des
+    # binaires inutilisables. Si elle n'en publie qu'une, sans suffixe, elle
+    # convient a tous — elle ne contient que du Python pur.
     plate = plateforme()
     candidates = [
         a for a in data.get('assets', [])
@@ -147,14 +149,16 @@ def check(current_version):
             asset = a
             break
     if asset is None:
-        # Compatibilite avec les versions publiees avant le multiplateforme,
-        # dont l'archive unique ne porte aucun suffixe de systeme.
+        # Une archive sans suffixe convient a tout le monde : elle ne contient
+        # que le dossier `app/`, c'est-a-dire du Python pur. Les dependances
+        # compilees vivent dans `python/`, que la mise a jour ne touche pas.
+        # C'est aussi ce que publiaient les versions anterieures.
         sans_suffixe = [
             a for a in candidates
             if not any(f'-{p}.' in (a.get('name') or '').lower()
                        for p in ('windows', 'macos', 'linux'))
         ]
-        if sans_suffixe and plate == 'windows':
+        if sans_suffixe:
             asset = sans_suffixe[0]
     if asset is None:
         log.info("Version %s publiee, mais sans archive de mise a jour pour %s",
