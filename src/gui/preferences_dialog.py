@@ -14,7 +14,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 
 from ..config.settings import Settings
-from ..utils.i18n import T
+from ..utils.i18n import T, langues_disponibles
 from ..core.seismometer import Seismometer
 
 import logging
@@ -172,12 +172,23 @@ class PreferencesDialog(QDialog):
         self._graph_ratio.setToolTip("EN: Graph to text box height ratio\nFR: Ratio hauteur graphe/zone texte")
         layout_form.addRow(T("pref_graph_ratio"), self._graph_ratio)
 
-        # Language
+        # Language. The list is built from i18n so that adding a language is a
+        # one-line change there, and each one is named in its own tongue —
+        # someone looking for their language does not read the current one.
         self._language = QComboBox()
-        self._language.addItems(["Auto", "English", "Français"])
-        lang_map = {"auto": 0, "en": 1, "fr": 2}
-        self._language.setCurrentIndex(lang_map.get(self._settings.get("language"), 0))
-        self._language.setToolTip("EN: Interface language\nFR: Langue de l'interface")
+        self._codes_langue = ["auto"] + list(langues_disponibles().keys())
+        self._language.addItem("Auto")
+        for code, nom in langues_disponibles().items():
+            self._language.addItem(nom)
+        courant = self._settings.get("language")
+        self._language.setCurrentIndex(
+            self._codes_langue.index(courant) if courant in self._codes_langue else 0
+        )
+        self._language.setToolTip(
+            "EN: Interface language\n"
+            "FR: Langue de l'interface\n"
+            "NL: Taal van de interface"
+        )
         layout_form.addRow(T("pref_language"), self._language)
 
         layout.addWidget(layout_group)
@@ -558,8 +569,8 @@ class PreferencesDialog(QDialog):
         s.set("serial_baudrate", self._serial_baudrate.currentData())
         s.set("ascom_driver", self._ascom_driver.text())
         s.set("graph_textbox_ratio", self._graph_ratio.value())
-        lang_map = {0: "auto", 1: "en", 2: "fr"}
-        s.set("language", lang_map.get(self._language.currentIndex(), "auto"))
+        i = self._language.currentIndex()
+        s.set("language", self._codes_langue[i] if 0 <= i < len(self._codes_langue) else "auto")
 
         # Processing
         s.set("polling_frequency_hz", self._polling_freq.value())
