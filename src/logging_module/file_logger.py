@@ -93,6 +93,7 @@ class FileLogger:
         self._tracking_max_dec_stdev: float = 0.0
         self._slewing_count: int = 0
         self._parked_count: int = 0
+        self._dat_path: Optional[Path] = None
 
     @property
     def active(self) -> bool:
@@ -101,6 +102,15 @@ class FileLogger:
     @property
     def log_dir(self) -> Path:
         return self._base_dir
+
+    @property
+    def dat_path(self) -> Optional[Path]:
+        """Path of the .dat of the session in progress, or of the last one.
+
+        Kept after close() so the night report can be built from it once the
+        files are shut.
+        """
+        return self._dat_path
 
     @staticmethod
     def _sanitize(text: str) -> str:
@@ -244,9 +254,8 @@ class FileLogger:
             self._write_log_header(session_info)
 
             # .dat file
-            self._dat_file = open(
-                self._base_dir / f"{prefix}.dat", 'w', encoding='utf-8'
-            )
+            self._dat_path = self._base_dir / f"{prefix}.dat"
+            self._dat_file = open(self._dat_path, 'w', encoding='utf-8')
             self._write_dat_header(session_info)
 
             # .dti file

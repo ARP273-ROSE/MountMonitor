@@ -22,7 +22,7 @@ from PyQt6.QtGui import QAction, QFont, QIcon, QKeySequence
 
 from .graph_widgets import TrackingGraph, TimeGraph, SeismicGraph, AxialGraph
 from .fft_window import FFTWindow
-from .analysis_dialog import AnalysisDialog
+from .analysis_dialog import AnalysisDialog, sauver_rapport
 from .log10m_dialog import Log10mAnalysisDialog
 from .status_panel import StatusPanel
 from .preferences_dialog import PreferencesDialog
@@ -990,10 +990,21 @@ class MainWindow(QMainWindow):
         """Stop data logging."""
         if not self._logging_active:
             return
+        chemin_dat = getattr(self._file_logger, 'dat_path', None)
         self._file_logger.close()
         self._logging_active = False
         self._btn_logging.setText(T("btn_start_log"))
         self._status_panel.add_message(T("logging_stopped"))
+
+        # The night report is written on its own, next to the .dat. Asking the
+        # user to remember to export it is how a night ends up without one.
+        if chemin_dat:
+            QApplication.processEvents()
+            sortie = sauver_rapport(chemin_dat, get_language())
+            if sortie:
+                self._status_panel.add_message(
+                    f"{T('report_saved')} : {Path(sortie).name}", Colors.STATUS_OK
+                )
 
     def _new_log_files(self):
         """Close current files and open new ones."""
@@ -1058,41 +1069,79 @@ class MainWindow(QMainWindow):
             f"  {T('replay_mode')}", Colors.STATUS_WARNING
         )
 
-        # Load data into graphs
-        self._replay_session(session)
+        # Drawing the graphs must never cost the night report. Until 1.10.2 a
+        # single mismatched array left the graphs black AND stopped the report
+        # from opening, with nothing said: the exception went to stderr, which
+        # a packaged build does not show.
+        try:
+            self._replay_session(session)
+        except Exception as exc:
+            logger.exception("Replay: graph drawing failed")
+            self._status_panel.add_message(
+                f"{T('replay_graphs_failed')} : {exc}", Colors.STATUS_ERROR
+            )
 
-        # Show FFT from replayed data
-        self._replay_fft(session)
+        try:
+            self._replay_fft(session)
+        except Exception as exc:
+            logger.exception("Replay: FFT failed")
+            self._status_panel.add_message(
+                f"{T('replay_fft_failed')} : {exc}", Colors.STATUS_ERROR
+            )
 
-        # Open analysis dialog
+        # The report is the point of the whole operation: it opens even if
+        # everything above failed.
         QApplication.processEvents()
-        dialog = AnalysisDialog(session, self)
-        dialog.exec()
+        try:
+            dialog = AnalysisDialog(session, self)
+            dialog.exec()
+        except Exception as exc:
+            logger.exception("Replay: analysis report failed")
+            self._status_panel.add_message(
+                f"{T('replay_report_failed')} : {exc}", Colors.STATUS_ERROR
+            )
+            return
 
         self._status_panel.add_message(
             T("analysis_complete"), Colors.STATUS_OK
         )
 
     def _replay_session(self, session):
-        """Load parsed session data into the graph widgets."""
+        """Load parsed session data into the graph widgets.
+
+        The abscissa MUST be `deviation_timestamps`, not `timestamps`: the
+        latter holds every sample of the file, while the deviations only hold
+        the samples kept in the segments (slews and, since 1.10.0, commanded
+        excursions are dropped). Plotting 54 047 abscissae against 44 604
+        ordinates draws nothing at all — the graphs stayed black while the
+        console announced replay mode, which is exactly what was reported.
+        """
+        t_dev = session.deviation_timestamps
+        if len(t_dev) != len(session.ra_deviations):
+            t_dev = session.timestamps[:len(session.ra_deviations)]
+
         # RA graph
-        if len(session.ra_deviations) > 0:
+        if len(session.ra_deviations) > 0 and len(t_dev) == len(session.ra_deviations):
+            sd = session.deviation_ra_stdevs
+            sd = sd if len(sd) == len(t_dev) else None
             self._ra_graph.update_data(
-                session.timestamps, session.ra_deviations,
-                stdev_values=session.ra_stdevs if len(session.ra_stdevs) == len(session.timestamps) else None,
+                t_dev, session.ra_deviations,
+                stdev_values=sd,
                 min_val=float(np.min(session.ra_deviations)),
                 max_val=float(np.max(session.ra_deviations)),
-                max_stdev=float(np.max(session.ra_stdevs)) if len(session.ra_stdevs) > 0 and np.any(session.ra_stdevs > 0) else None,
+                max_stdev=float(np.max(sd)) if sd is not None and np.any(sd > 0) else None,
             )
 
         # DEC graph
-        if len(session.dec_deviations) > 0:
+        if len(session.dec_deviations) > 0 and len(t_dev) == len(session.dec_deviations):
+            sd = session.deviation_dec_stdevs
+            sd = sd if len(sd) == len(t_dev) else None
             self._dec_graph.update_data(
-                session.timestamps, session.dec_deviations,
-                stdev_values=session.dec_stdevs if len(session.dec_stdevs) == len(session.timestamps) else None,
+                t_dev, session.dec_deviations,
+                stdev_values=sd,
                 min_val=float(np.min(session.dec_deviations)),
                 max_val=float(np.max(session.dec_deviations)),
-                max_stdev=float(np.max(session.dec_stdevs)) if len(session.dec_stdevs) > 0 and np.any(session.dec_stdevs > 0) else None,
+                max_stdev=float(np.max(sd)) if sd is not None and np.any(sd > 0) else None,
             )
 
         # Time graph

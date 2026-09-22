@@ -26,6 +26,19 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from src.logging_module.log_parser import parse_dat_file  # noqa: E402
 
+def _exige_qt():
+    """Le rapport passe par le dialogue Qt : hors environnement graphique, on saute.
+
+    `pytest.importorskip` ne suffit pas : selon l'installation, importer Qt leve
+    autre chose qu'une ImportError (TypeError depuis pyqtgraph, par exemple).
+    """
+    try:
+        import PyQt6.QtWidgets  # noqa: F401
+        import src.gui.analysis_dialog  # noqa: F401
+    except Exception as exc:
+        pytest.skip(f"environnement Qt indisponible : {type(exc).__name__}")
+
+
 JITTER = 0.26      # arcsec RMS, verite terrain
 DERIVE = -5.65     # arcsec/h en RA
 HZ = 1.68
@@ -216,3 +229,48 @@ def test_la_session_reelle_du_21_septembre():
     # le rapport d'origine annoncait 86,269" et la note MAUVAIS
     assert combine < 0.5, f"jitter {combine:.3f}\", attendu < 0.5\""
     assert s.repositionnements > 50, "les dithers doivent etre vus comme tels"
+
+
+def test_les_graphes_de_relecture_recoivent_des_tableaux_de_meme_taille(session):
+    """Ecrans noirs en mode relecture : x et y n'avaient pas la meme longueur.
+
+    `timestamps` porte TOUS les echantillons du fichier, `ra_deviations` ne
+    porte que ceux retenus dans les segments. Sur la session du 21/09/2026 :
+    54 047 abscisses contre 44 604 ordonnees. pyqtgraph ne trace alors rien, et
+    l'exception partait sur stderr — invisible dans une version empaquetee, si
+    bien que la console annoncait « MODE RELECTURE » et que plus rien ne se
+    passait, rapport de nuit compris.
+    """
+    assert len(session.deviation_timestamps) == len(session.ra_deviations)
+    assert len(session.deviation_timestamps) == len(session.dec_deviations)
+    assert len(session.deviation_ra_stdevs) == len(session.ra_deviations)
+    assert len(session.deviation_dec_stdevs) == len(session.dec_deviations)
+
+
+def test_le_rapport_de_nuit_s_ecrit_tout_seul(tmp_path):
+    """Un rapport qu'il faut penser a exporter est un rapport qu'on n'a pas."""
+    _exige_qt()
+    fichier = Path(__file__).resolve().parents[1] / "Logs" / "MountMonitor_20260921-220015.dat"
+    if not fichier.exists():
+        pytest.skip("session de reference absente du depot")
+    copie = tmp_path / fichier.name
+    copie.write_bytes(fichier.read_bytes())
+
+    from src.gui.analysis_dialog import sauver_rapport
+
+    sortie = sauver_rapport(copie, "fr")
+    assert sortie is not None and sortie.exists()
+    texte = sortie.read_text(encoding="utf-8")
+    assert "Rating" in texte and "Combined jitter" in texte
+    assert len(texte) > 5000
+
+
+def test_sauver_rapport_ne_leve_jamais(tmp_path):
+    """Perdre le rapport ne doit pas empecher la fermeture propre des fichiers."""
+    _exige_qt()
+    from src.gui.analysis_dialog import sauver_rapport
+
+    assert sauver_rapport(tmp_path / "absent.dat", "fr") is None
+    vide = tmp_path / "vide.dat"
+    vide.write_text("")
+    assert sauver_rapport(vide, "fr") is None
