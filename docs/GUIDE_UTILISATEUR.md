@@ -771,17 +771,25 @@ After removing the drift only:  9.107"   (contient encore les paliers)
 *(chiffres réels de la session du 21 septembre 2026 : le rapport d'origine
 annonçait 86,269″ et la note MAUVAIS)*
 
-### Le rapport de nuit est enregistré tout seul
+### Le rapport de nuit, en trois langues, enregistré tout seul
 
-À l'arrêt de l'enregistrement, le rapport complet est écrit **à côté du `.dat`** :
+À l'arrêt de l'enregistrement, le rapport complet est écrit **à côté du `.dat`**,
+une fois par langue :
 
 ```
 MountMonitor_20260921-220015.dat
-MountMonitor_20260921-220015-rapport.txt   <- écrit automatiquement
+MountMonitor_20260921-220015-rapport-fr.txt   <- écrits
+MountMonitor_20260921-220015-rapport-en.txt      automatiquement
+MountMonitor_20260921-220015-rapport-nl.txt
 ```
 
-Le bouton **Exporter TXT** de la fenêtre d'analyse reste disponible pour en poser
-une copie ailleurs.
+La fenêtre d'analyse présente les trois dans des **onglets** — English, Français,
+Nederlands — et s'ouvre sur celui de la langue de l'interface. Le bouton
+**Exporter TXT** enregistre l'onglet que vous avez sous les yeux, pas un autre.
+
+Chaque rapport est écrit dans **une seule** langue. Auparavant chaque phrase était
+suivie de sa traduction française, ce qui le rendait deux fois plus long à lire
+sans rien apporter.
 
 ⚠️ Si l'écriture échoue (disque plein, dossier en lecture seule), la fermeture des
 fichiers de session se poursuit normalement : perdre le rapport ne doit jamais
