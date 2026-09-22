@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """MountMonitor - Modern telescope mount monitoring for astrophotography.
 
-Modernized rewrite of MountMonitor v3.37 (Java) by Nicolas de Hilster.
+Modernized rewrite of MountMonitor v3.37 (Java) by Nicolàs de Hilster.
 Now in Python/PyQt6/pyqtgraph with dark astronomy theme.
 
 Usage:

@@ -1061,7 +1061,7 @@ vitesse = (position_t2 - position_t1) / (t2 - t1)  [arcsec/s]
 
 ### Sources
 
-- [MountMonitor - Nicolas de Hilster](https://dehilster.info/astronomy/mountmonitor.php)
+- [MountMonitor - Nicolàs de Hilster](https://dehilster.info/astronomy/mountmonitor.php)
 - [Documentation MountMonitor v3.37](https://dehilster.info/docs/MountMonitor-Help/about.htm)
 - [10Micron HPS Key Features](https://alpineastro.com/blogs/blog/10micron-hps-mounts-key-features-and-benefits)
 - [Equatorial Mount Tracking Errors](https://www.pk3.org/Astro/astrophoto_mount_errors.htm)
