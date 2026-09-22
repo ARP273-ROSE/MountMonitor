@@ -72,7 +72,7 @@ _FICHIER_CRASH_NATIF = "_crash_natif.log"
 _vigie = None
 
 
-def _initialiser_les_rapports():
+def _initialiser_les_rapports(app):
     """Prepare la remontee des incidents, et ramasse ceux du dernier depart.
 
     Trois choses se jouent ici :
@@ -119,9 +119,19 @@ def _initialiser_les_rapports():
     # pile du fil graphique dit alors quelle operation n'a pas ete deportee.
     # Sans cela un gel ne laisse aucune trace : on tue l'application et on ne
     # peut rien en dire.
+    # Le battement est indispensable : sans lui, la vigie ne voit jamais
+    # passer le fil graphique et conclut au gel au bout de dix secondes, a
+    # chaque lancement. C'est ce qui s'est produit de la 1.8.1 a la 1.13.0 :
+    # six fausses alertes remontees d'un poste ou tout allait bien, avec pour
+    # seule trace une pile montrant le fil graphique au repos dans app.exec().
     try:
+        from PyQt6.QtCore import QTimer
         _vigie = reporting.Vigie(seuil=10.0, periode=2.0)
         _vigie.demarrer()
+        _battement = QTimer(app)
+        _battement.timeout.connect(_vigie.battre)
+        _battement.start(2000)
+        app._battement_vigie = _battement   # sinon le minuteur est ramasse
     except Exception:
         logging.getLogger(__name__).debug("Vigie non demarree", exc_info=True)
 
@@ -223,7 +233,7 @@ def main():
 
     # Remontee des incidents. Initialisee avant tout le reste : ce qui nous
     # interesse le plus, ce sont justement les demarrages qui n'aboutissent pas.
-    _initialiser_les_rapports()
+    _initialiser_les_rapports(app)
 
     # Apply dark theme
     from src.gui.theme import apply_dark_theme
