@@ -452,10 +452,21 @@ class Vigie:
         self._debut_gel = 0.0
         self._actif = False
         self._fil_gui = threading.get_ident()
+        # A-t-on deja vu battre le fil graphique, au moins une fois ?
+        #
+        # Tant que la reponse est non, la vigie n'a rien a dire : personne ne
+        # lui a branche de battement, et une interface dont on n'a jamais pris
+        # le pouls n'est pas une interface figee. Sans ce garde-fou, une
+        # integration incomplete — appeler `demarrer()` en oubliant le
+        # minuteur qui appelle `battre()` — produit une fausse alerte de gel
+        # a chaque lancement. C'est arrive : six rapports remontes d'un poste
+        # ou tout allait bien, la pile montrant le fil graphique au repos.
+        self._deja_battu = False
 
     def battre(self) -> None:
         """À appeler depuis le fil graphique, à intervalle régulier."""
         maintenant = time.monotonic()
+        self._deja_battu = True
         if self._signale:
             duree = maintenant - self._debut_gel
             log.warning("Interface de nouveau réactive après %.0f s", duree)
@@ -476,6 +487,17 @@ class Vigie:
         while self._actif:
             time.sleep(self.periode)
             retard = time.monotonic() - self._dernier
+            if not self._deja_battu:
+                # Rien ne bat : ce n'est pas un gel, c'est un branchement
+                # manquant. On le dit dans le journal, une seule fois, et on
+                # se tait — mieux vaut une vigie muette qu'une vigie qui crie
+                # au loup a chaque demarrage.
+                if not self._signale:
+                    self._signale = True
+                    log.warning(
+                        "Vigie sans battement : aucun appel a battre() depuis "
+                        "le fil graphique. Surveillance des gels inactive.")
+                continue
             if retard >= self.seuil and not self._signale:
                 self._signale = True
                 self._debut_gel = self._dernier
