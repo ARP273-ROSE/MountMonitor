@@ -244,10 +244,20 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # macos-latest is Apple Silicon since 2024, so building only there
+          # shipped an arm64-only .dmg: an Intel Mac could not open it at all.
           - os: macos-latest
             plateforme: macos
+            arch: arm64
+          - os: macos-15-intel
+            plateforme: macos
+            arch: x86_64
           - os: ubuntu-latest
             plateforme: linux
+            arch: x86_64
+          - os: ubuntu-24.04-arm
+            plateforme: linux
+            arch: arm64
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -319,8 +329,8 @@ jobs:
           cp -R "dist/$NOM.app" dmg_src/
           ln -s /Applications dmg_src/Applications
           hdiutil create -volname "$NOM $VER" -srcfolder dmg_src \
-            -ov -format UDZO "$NOM-$VER-macos.dmg"
-          ls -lh "$NOM-$VER-macos.dmg"
+            -ov -format UDZO "$NOM-$VER-macos-${{ matrix.arch }}.dmg"
+          ls -lh "$NOM-$VER-macos-${{ matrix.arch }}.dmg"
 
       - name: Installateur (Linux)
         if: matrix.plateforme == 'linux'
@@ -352,18 +362,18 @@ jobs:
           SH
           sed -i "s|__NOM__|$NOM|; s|__TECH__|$TECH|" "dist/$NOM/installer.sh"
           chmod +x "dist/$NOM/installer.sh"
-          rm -f "$NOM-${{ steps.version.outputs.value }}-linux.tar.gz"
-          tar -C dist -czf "$NOM-${{ steps.version.outputs.value }}-linux.tar.gz" "$NOM"
-          ls -lh "$NOM-${{ steps.version.outputs.value }}-linux.tar.gz"
+          ARCHIVE="$NOM-${{ steps.version.outputs.value }}-linux-${{ matrix.arch }}.tar.gz"
+          rm -f "$ARCHIVE"
+          tar -C dist -czf "$ARCHIVE" "$NOM"
+          ls -lh "$ARCHIVE"
 
       - name: Deposer les artefacts
         uses: actions/upload-artifact@v4
         with:
-          name: paquet-${{ matrix.plateforme }}
+          name: paquet-${{ matrix.plateforme }}-${{ matrix.arch }}
           path: |
             *.dmg
-            *-linux.tar.gz
-            ${{ steps.kit.outputs.nom_technique }}-app-${{ steps.version.outputs.value }}.zip
+            *-linux-*.tar.gz
           if-no-files-found: error
 
   # ──────────────────────────────────────────────────────────────────────
