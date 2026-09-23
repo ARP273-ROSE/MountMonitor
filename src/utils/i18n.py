@@ -14,6 +14,16 @@ TX = {
     "menu_reset": {"en": "Reset", "fr": "Réinitialiser", "nl": "Resetten"},
     "menu_help": {"en": "Help", "fr": "Aide", "nl": "Help"},
     "menu_language": {"en": "Language", "fr": "Langue", "nl": "Taal"},
+    "menu_manual": {"en": "Manual (PDF)", "fr": "Manuel (PDF)",
+                    "nl": "Handleiding (pdf)"},
+    "tt_manual": {
+        "en": "Open the full manual in your language",
+        "fr": "Ouvrir le manuel complet dans votre langue",
+        "nl": "De volledige handleiding in uw taal openen"},
+    "manual_absent": {
+        "en": "The manual was not found next to the application.",
+        "fr": "Le manuel est introuvable à côté de l'application.",
+        "nl": "De handleiding is niet naast de toepassing gevonden."},
 
     "tt_zoom_h": {
         "en": "Set horizontal zoom to {zoom}x",
