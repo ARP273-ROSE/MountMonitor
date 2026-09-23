@@ -19,6 +19,7 @@
   "assets": [
     "VERSION",
     "README.md",
+    "CHANGELOG.md",
     "logo.ico",
     "logo.png",
     "logo_64.png",
