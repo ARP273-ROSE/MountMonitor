@@ -148,25 +148,37 @@ def _demander_accord_rapports(fenetre):
             boite = QMessageBox(fenetre)
             boite.setWindowTitle("MountMonitor")
             boite.setIcon(QMessageBox.Icon.Question)
-            boite.setText("Autoriser MountMonitor a signaler ses problemes ?\n"
-                          "Allow MountMonitor to report its own problems?")
-            boite.setInformativeText(
-                "Si l'application plante, se fige ou refuse de demarrer, elle "
-                "peut l'annoncer toute seule a celui qui la maintient. Vous "
-                "n'aurez rien a faire, et rien d'autre n'est envoye : ni vos "
-                "donnees de suivi, ni vos noms de fichiers, ni votre nom "
-                "d'utilisateur.\n\n"
-                "If the application crashes, freezes or fails to start, it can "
-                "report it by itself. Nothing else is ever sent.")
-            oui = boite.addButton("Autoriser / Allow",
+            # Asked in ONE language -- the one the user reads. It used to be
+            # French and English stacked in the same box, which meant the
+            # Dutch user got neither and everyone else read it twice. The
+            # window language is already set by the time this is shown.
+            from src.utils.i18n import T
+            boite.setText(T("consent_question"))
+            boite.setInformativeText(T("consent_detail"))
+            oui = boite.addButton(T("consent_oui"),
                                   QMessageBox.ButtonRole.AcceptRole)
-            boite.addButton("Non merci / No thanks",
+            boite.addButton(T("consent_non"),
                             QMessageBox.ButtonRole.RejectRole)
             boite.exec()
             reporting.definir_consentement(boite.clickedButton() is oui)
         reporting.signaler_demarrage()
     except Exception:
         logging.getLogger(__name__).debug("Accord non demande", exc_info=True)
+
+
+def _langue_tot():
+    """Apply the user's language before any dialog can appear.
+
+    The crash dialog is shown at line ~246, the main window is built at
+    ~319: without this, a crash report asked its question in the
+    auto-detected language rather than the one the user chose.
+    """
+    try:
+        from src.config.settings import Settings
+        from src.utils.i18n import set_language
+        set_language(Settings().get("language"))
+    except Exception:
+        pass
 
 
 def main():
@@ -179,6 +191,8 @@ def main():
 
     logger = logging.getLogger(__name__)
     logger.info("MountMonitor starting...")
+
+    _langue_tot()
 
     # Determine simulation mode
     if args.sim_all:
@@ -255,26 +269,24 @@ def main():
             exc_type = report.get('exception_type', 'Unknown')
             exc_msg = anonymize_path(report.get('exception_message', ''))
 
+            from src.utils.i18n import T
             msg = QMessageBox()
-            msg.setWindowTitle("Crash Report / Rapport de crash")
+            msg.setWindowTitle(T("crash_titre"))
             msg.setIcon(QMessageBox.Icon.Warning)
             msg.setText(
-                "MountMonitor crashed during the last session.\n"
-                "MountMonitor a planté lors de la dernière session.\n\n"
-                f"Error: {exc_type}\n{exc_msg}"
+                f"{T('crash_texte')}\n\n"
+                f"{T('crash_erreur')}: {exc_type}\n{exc_msg}"
             )
             msg.setInformativeText(
-                "Would you like to report this crash on GitHub?\n"
-                "Voulez-vous signaler ce crash sur GitHub ?\n\n"
-                "(All paths are anonymized / Tous les chemins sont anonymisés)"
+                f"{T('crash_question')}\n\n{T('crash_anonyme')}"
             )
 
             send_btn = msg.addButton(
-                "Report on GitHub / Signaler",
+                T("crash_signaler"),
                 QMessageBox.ButtonRole.AcceptRole,
             )
             dismiss_btn = msg.addButton(
-                "Dismiss / Ignorer",
+                T("crash_ignorer"),
                 QMessageBox.ButtonRole.RejectRole,
             )
             msg.exec()
