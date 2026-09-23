@@ -110,6 +110,7 @@ class MainWindow(QMainWindow):
         # Chemin du .dat que CE lancement a ferme. Tant qu'il est None, il n'y
         # a rien a analyser automatiquement.
         self._derniere_session = None
+        self._fen_analyse = None
         self._aube_timer = None
         # Site as the mount reports it, when it does. Plenty of setups never
         # push their site to the mount -- hence the preference fallback.
@@ -1050,9 +1051,29 @@ class MainWindow(QMainWindow):
         self._btn_logging.setText(T("btn_armed_log"))
         self._status_panel.add_message(T("logging_armed"), Colors.STATUS_OK)
         # Already tracking when armed: start at once rather than wait for a
-        # transition that has already happened.
+        # transition that has already happened -- unless it is broad daylight.
         if getattr(self, '_prev_mount_status', None) == MountStatus.TRACKING:
             self._demarrer_sur_suivi()
+
+    def _fait_jour(self) -> bool:
+        """Le Soleil est-il leve ? False si on ne peut pas savoir.
+
+        Sert de garde-fou a l'armement : au lever, la monture suit souvent
+        encore, si bien qu'un rearmement redemarrait une session dans la
+        seconde — le programme cloturait la nuit puis rouvrait aussitot un
+        fichier en plein jour, en boucle.
+        """
+        if not self._settings.get("close_at_sunrise"):
+            return False
+        site = self._site()
+        if not site:
+            return False
+        from ..core.ephemerides import hauteur_soleil, HORIZON
+        from datetime import datetime, timezone
+        try:
+            return hauteur_soleil(datetime.now(timezone.utc), site[0], site[1]) > HORIZON
+        except Exception:
+            return False
 
     def _desarmer(self):
         self._logging_armed = False
@@ -1062,6 +1083,9 @@ class MainWindow(QMainWindow):
     def _demarrer_sur_suivi(self):
         """The mount started tracking while armed."""
         if not self._logging_armed or self._logging_active:
+            return
+        if self._fait_jour():
+            # On reste arme : la nuit viendra.
             return
         self._logging_armed = False
         self._start_logging()
@@ -1126,6 +1150,12 @@ class MainWindow(QMainWindow):
         if self._nuit_vue:
             self._status_panel.add_message(T("logging_autostop"), Colors.STATUS_OK)
             self._stop_logging()
+            # Et on se remet en attente pour le soir. Sans cela le programme
+            # restait connecte mais inerte jusqu'a un clic : il fallait etre
+            # la chaque soir. Arme, il enchaine les nuits tout seul.
+            if (self._connected
+                    and self._settings.get("autostart_on_tracking")):
+                self._armer()
 
     def _start_logging(self):
         """Start data logging to files."""
@@ -1439,9 +1469,22 @@ class MainWindow(QMainWindow):
             if session.sample_count < 10:
                 return
 
-            # Show analysis dialog
+            # Non modale, et une seule a la fois. exec() bloquait la boucle
+            # d'evenements : au premier matin sans personne devant l'ecran,
+            # le programme se figeait et ne voyait plus passer la nuit
+            # suivante. La precedente est fermee pour ne pas empiler une
+            # fenetre par nuit.
+            precedente = getattr(self, '_fen_analyse', None)
+            if precedente is not None:
+                try:
+                    precedente.close()
+                except RuntimeError:
+                    pass          # deja detruite par Qt
             dialog = AnalysisDialog(session, self)
-            dialog.exec()
+            dialog.setModal(False)
+            dialog.show()
+            dialog.raise_()
+            self._fen_analyse = dialog
 
             self._status_panel.add_message(
                 T("analysis_complete"), Colors.STATUS_OK

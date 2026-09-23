@@ -8,6 +8,8 @@ sont ceux qui ont ete mesures, pas des estimations.
 
 from __future__ import annotations
 
+import time
+
 import numpy as np
 import pytest
 
@@ -340,3 +342,49 @@ def test_le_matin_on_annonce_la_nuit_qui_vient():
     # et le lendemain matin, on passe a la suivante
     suivant = nuit_autour(datetime(2026, 9, 24, 9, 0, tzinfo=tz), lat, lon)
     assert suivant.astro_debut > matin.astro_debut
+
+
+# ── L'enchainement des nuits ────────────────────────────────────────
+
+def test_le_garde_fou_de_jour_empeche_la_boucle():
+    """Laisse allume, le programme doit tenir plusieurs nuits tout seul.
+
+    Au lever il cloturait la nuit et restait connecte mais inerte : il
+    fallait etre la chaque soir pour recliquer. Et la premiere version du
+    rearmement redemarrait dans la seconde, parce que la monture suit
+    souvent encore au lever — le programme cloturait puis rouvrait un
+    fichier en plein jour, en boucle. C'est _fait_jour qui casse la boucle.
+
+    La fenetre complete n'est pas construite ici : l'instancier sous pytest
+    fait tomber Qt. Le cycle entier des trois nuits se rejoue avec
+    outils/simuler_nuits.py, qui demande un vrai environnement graphique.
+    """
+    _exige_qt()
+    import src.core.ephemerides as E
+    from src.config.settings import Settings
+    from src.gui.main_window import MainWindow
+
+    w = MainWindow.__new__(MainWindow)
+    s = Settings()
+    s.set("close_at_sunrise", True)
+    w._settings = s
+    w._site = lambda: (49.3061, 2.7553, 57)
+
+    vraie = E.hauteur_soleil
+    try:
+        E.hauteur_soleil = lambda *a, **k: +10.0
+        assert w._fait_jour() is True, "le Soleil est haut, on doit refuser"
+        E.hauteur_soleil = lambda *a, **k: -20.0
+        assert w._fait_jour() is False, "il fait nuit, on doit accepter"
+
+        # Sans l'option, aucun garde-fou : le bouton garde son sens habituel.
+        s.set("close_at_sunrise", False)
+        E.hauteur_soleil = lambda *a, **k: +10.0
+        assert w._fait_jour() is False
+
+        # Site inconnu : on ne devine pas, on laisse passer.
+        s.set("close_at_sunrise", True)
+        w._site = lambda: None
+        assert w._fait_jour() is False
+    finally:
+        E.hauteur_soleil = vraie
