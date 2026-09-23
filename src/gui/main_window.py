@@ -4,6 +4,7 @@ Assembles all components: graphs, status panel, menus, toolbar.
 Manages the connection lifecycle and data flow.
 """
 
+import os
 import sys
 import logging
 import threading
@@ -290,6 +291,11 @@ class MainWindow(QMainWindow):
         help_action.setShortcut(QKeySequence("F1"))
         help_action.triggered.connect(self._show_help)
         help_menu.addAction(help_action)
+
+        manual_action = QAction(T("menu_manual"), self)
+        manual_action.setToolTip(T("tt_manual"))
+        manual_action.triggered.connect(self._ouvrir_manuel)
+        help_menu.addAction(manual_action)
 
         online_help_action = QAction(T("menu_online_help"), self)
         online_help_action.setToolTip(T("tt_doc_online"))
@@ -1774,6 +1780,33 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, title, text)
 
     # ── Help ─────────────────────────────────────────────────────
+
+    def _ouvrir_manuel(self):
+        """Open the PDF manual for the current language.
+
+        It ships in app/docs next to the program; without a menu entry
+        nobody would ever find it there.
+        """
+        import subprocess
+        import webbrowser
+        lang = get_language()
+        base = Path(__file__).resolve().parent.parent.parent / "docs"
+        chemin = base / f"manual_{lang}.pdf"
+        if not chemin.exists():
+            chemin = base / "manual_en.pdf"
+        if not chemin.exists():
+            QMessageBox.information(self, T("menu_manual"), T("manual_absent"))
+            return
+        try:
+            if sys.platform == "win32":
+                os.startfile(str(chemin))
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", str(chemin)])
+            else:
+                subprocess.Popen(["xdg-open", str(chemin)])
+        except Exception:
+            # xdg-open may simply be absent on a bare Linux install.
+            webbrowser.open(chemin.as_uri())
 
     def _show_help(self):
         """Show the help document, in the user's language.

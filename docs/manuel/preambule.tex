@@ -97,6 +97,11 @@
     breakable, left=4mm, right=4mm
 }
 
+% Les encadres et les tableaux laissent parfois une page presque vide si
+% LaTeX doit etirer le texte pour atteindre le bas. On prefere un bas de
+% page irregulier a une page qui ne porte qu'un encadre.
+\raggedbottom
+
 % ─── Unites d'angle ─────────────────────────────────────────────
 % \arcsec et \arcmin n'existent pas en LaTeX standard, et le caractere
 % degre n'est pas valide en mode mathematique : on les definit une fois,

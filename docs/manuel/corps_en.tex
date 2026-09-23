@@ -295,3 +295,252 @@ of common mounts fall.
 A sharp peak at a stable period marks a periodic error. A flat spectrum means
 there is no detectable one --- the case of 10Micron mounts after correction.
 Broad, wandering peaks are noise, usually wind.
+
+% ═══════════════════════════════════════════════════════════════════
+\part{Using}
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{Installation}
+\label{ch:install}
+
+\section{Supported systems}
+
+The published packages carry their own Python and their own Qt: nothing else
+needs installing. What they do require is a recent enough system, because the
+Qt binaries inside them require it.
+
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{lXl}
+\toprule
+\textbf{System} & \textbf{Minimum} & \textbf{Architecture} \\
+\midrule
+Windows & Windows 10 (1809) & x64 \\
+macOS & macOS 11 Big Sur & Apple Silicon \emph{and} Intel \\
+Linux & glibc 2.28 --- Debian 11, Ubuntu 20.04, RHEL 8 & x86\_64 \\
+Linux ARM & glibc 2.39 --- Ubuntu 24.04 & arm64 \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{warning}
+Pick the macOS package that matches your machine:
+\texttt{-macos-arm64.dmg} for an Apple Silicon Mac, \texttt{-macos-x86\_64.dmg}
+for an Intel one. The bundled Python is architecture-specific even though Qt
+itself is universal: the wrong package will not start at all.
+\end{warning}
+
+\section{Installing}
+
+On Windows the installer handles everything. On macOS, drag the application
+into the Applications folder. On Linux, \texttt{installer.sh} installs it into
+the user profile, with neither \texttt{sudo} nor a package manager.
+
+Updates are then checked quietly at every start and offered when there are any.
+
+\section{A first run without a mount}
+
+Simulation mode lets you walk through everything with no hardware:
+
+\begin{lstlisting}[language=bash]
+MountMonitor --sim-all
+\end{lstlisting}
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{Settings}
+\label{ch:config}
+
+\section{Connection}
+
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Protocol} & \textbf{When to use it} \\
+\midrule
+LX200 TCP/IP & A 10Micron on the network. Port 3492 by default. \\
+LX200 serial & RS-232 link, 9600 8N1 as shipped on 10Micron mounts. \\
+ASCOM & Windows only, through the manufacturer's driver. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{The observing site}
+
+\begin{warning}
+Fill in \textbf{latitude, longitude and elevation} in the preferences. The
+mount is asked first (\texttt{:Gt\#} and \texttt{:Gg\#}), but many setups never
+pushed their site to it and it then answers nothing. Without a site the night
+ephemeris cannot be computed.
+
+Longitude is entered \textbf{positive east}. The LX200 protocol counts the
+other way; the conversion is done for you when the mount answers.
+\end{warning}
+
+\section{Tolerances and running window}
+
+The tolerance is an alert threshold you set yourself. A simple rule: take your
+sampling in arcseconds per pixel. A tolerance equal to the sampling is strict,
+twice that is comfortable.
+
+The running standard deviation window is set between 60 and 900 seconds. Sixty
+reacts fast, nine hundred smooths a long session.
+
+\section{Arming the logger}
+
+Three settings govern the record button. All three are \textbf{on by default}.
+
+\textbf{Start recording when the mount starts tracking.} The button then
+\emph{arms} the logger instead of starting it: nothing is written until the
+mount tracks. A mount connected at noon for a night beginning at 19:00 no
+longer records seven hours of nothing. A second click disarms.
+
+\textbf{Suspend when the mount stops tracking}, with a two-minute grace delay.
+The delay exists for a reason: a stop may be transient --- a meridian flip, an
+autofocus run, a slew between targets --- and cutting on the first sample would
+punch a hole at every dither.
+
+\textbf{End the night at sunrise.} A night is one unit: if the mount parks at
+02:00 and resumes at 03:00, recording suspends and resumes \emph{in the same
+file}. Only daylight closes the session and triggers the report --- and only
+once the Sun has actually been below the horizon during the session, so that a
+daytime trial does not close itself.
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{A night out}
+\label{ch:usage}
+
+\section{How it goes}
+
+\begin{enumerate}
+  \item Connect the mount and check the status turns to tracking.
+  \item Arm the logger --- or start it, if arming is switched off.
+  \item Leave it running. The report will write itself at the end.
+\end{enumerate}
+
+\section{What to watch live}
+
+\begin{itemize}
+  \item \textbf{The running standard deviation}, rather than the instantaneous
+  deviation: it says whether the mount is holding its position.
+  \item \textbf{Tolerance alerts}, which flag an overshoot.
+  \item \textbf{The dew-point margin}, if an environment sensor is connected.
+\end{itemize}
+
+\begin{tip}
+An isolated spike is almost never the mount: it is a gust, a cable, a footstep
+too close to the pier. What matters is the level \emph{between} the spikes.
+\end{tip}
+
+\section{Night ephemeris}
+
+Computed from the site, it gives sunset, nautical twilight, astronomical night
+and sunrise --- and above all how much of the dark night the session actually
+covered. A night started an hour late loses an hour that cannot be recovered,
+and that is more useful read beside the tracking figures than after the fact.
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{The files}
+\label{ch:files}
+
+\section{What a session writes}
+
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Extension} & \textbf{Contents} \\
+\midrule
+\texttt{.dat} & The samples: time, RA, DEC, standard deviations, status. \\
+\texttt{.dti} & PC / mount synchronisation measurements. \\
+\texttt{.fft} & Spectra recorded during the session. \\
+\texttt{.env} & Temperature, pressure, humidity, when the mount reports them. \\
+\texttt{.log} & Events: connections, slews, alerts, suspensions. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+The \texttt{.dat} header carries the site and the time offset. That is what
+allows twilights to be recomputed on replay, long after the mount has been
+unplugged.
+
+\section{The night report}
+
+It is written automatically at the end of a session, next to the
+\texttt{.dat}, as \textbf{one file per language}. Nothing has to be asked for.
+
+\section{Replay}
+
+\textbf{File $\rightarrow$ Open log} reads a finished session and rebuilds the
+whole analysis: per-target statistics, commanded moves, drift, spectra,
+ephemeris. The language tabs show the same report in all three languages.
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{When something is wrong}
+\label{ch:trouble}
+
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Symptom} & \textbf{Where to look} \\
+\midrule
+No network connection & Check the address and port 3492, and that nothing else
+already holds the session --- a 10Micron accepts only one. \\
+Serial link silent & Both ends must agree on the speed. 10Micron mounts ship at
+9600 baud, and the mount's own menu can change it. \\
+Declination drift & On a modelled mount, add model points near the target. The
+azimuth screw is not the answer. \\
+Poor rating, quiet mount & Read chapter~\ref{ch:stats}: it is often the reading
+that is wrong, not the mount. \\
+Absurd running STDEV & Normal just after a slew or a repositioning: its window
+straddles the move. The report excludes those values. \\
+No ephemeris & The site is not set. Preferences, site section. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{Reference}
+\label{ch:ref}
+
+\section{Shortcuts}
+
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Keys} & \textbf{Action} \\
+\midrule
+\texttt{F1} & Help \\
+\texttt{Ctrl+,} & Preferences \\
+\texttt{Ctrl+O} & Open a log \\
+\texttt{Ctrl+Q} & Quit \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Language}
+
+The \textbf{Language} menu offers English, French and Dutch, plus automatic
+detection from the system. Each entry is written in its own language: someone
+who ends up in the wrong one cannot read the current one to find their way out.
+A change takes effect at the next start.
+
+\section{Problem reports}
+
+If the program crashes, freezes or fails to start, it can report that by
+itself. You are asked once, and nothing else is ever sent: not your tracking
+data, not your file names, not your user name. All paths are anonymised.
+
+\section{Version history}
+
+The detail of every change, with the measured figures behind it, is in the
+\texttt{CHANGELOG.md} file shipped with the program.
+
+\section{Origin}
+
+MountMonitor is an independent Python and PyQt6 rewrite of MountMonitor v3.37
+by \textbf{Nicolàs de Hilster} (2018--2021), written in Java. No code from the
+original program appears in it. The MIT licence of the present program covers
+this rewrite only; the original work remains subject to its author's terms.
