@@ -14,6 +14,44 @@ TX = {
     "menu_reset": {"en": "Reset", "fr": "Réinitialiser", "nl": "Resetten"},
     "menu_help": {"en": "Help", "fr": "Aide", "nl": "Help"},
     "menu_language": {"en": "Language", "fr": "Langue", "nl": "Taal"},
+
+    # Panneau d'etat : ces lignes etaient ecrites en anglais en dur, si bien
+    # que le journal melangeait la langue de l'utilisateur et l'anglais.
+    "pan_mount": {"en": "Mount", "fr": "Monture", "nl": "Montering"},
+    "pan_firmware": {"en": "Firmware", "fr": "Micrologiciel", "nl": "Firmware"},
+    "pan_id": {"en": "ID", "fr": "Identifiant", "nl": "Identificatie"},
+    "pan_pier": {"en": "Pier side", "fr": "Côté du pied", "nl": "Zijde van de zuil"},
+    "pan_site": {"en": "Site", "fr": "Site", "nl": "Locatie"},
+    "pan_elev": {"en": "elev.", "fr": "alt.", "nl": "hoogte"},
+    "chk_refraction_ok": {"en": "Refraction: {v}", "fr": "Réfraction : {v}",
+                          "nl": "Refractie: {v}"},
+    "chk_refraction_ko": {
+        "en": "Refraction is '{a}', expected '{e}'",
+        "fr": "La réfraction est « {a} », attendu « {e} »",
+        "nl": "De refractie is '{a}', verwacht '{e}'"},
+    "chk_refraction_simple": {
+        "en": "Refraction: {v} (simple check)",
+        "fr": "Réfraction : {v} (contrôle simple)",
+        "nl": "Refractie: {v} (eenvoudige controle)"},
+    "chk_rate_ok": {"en": "Tracking rate set to {v}",
+                    "fr": "Vitesse de suivi réglée sur {v}",
+                    "nl": "Volgsnelheid ingesteld op {v}"},
+    "chk_rate_ko": {
+        "en": "Tracking rate is {a}, expected {e}",
+        "fr": "La vitesse de suivi est {a}, attendu {e}",
+        "nl": "De volgsnelheid is {a}, verwacht {e}"},
+    "chk_gps_ok": {"en": "GPS: {v}", "fr": "GPS : {v}", "nl": "Gps: {v}"},
+    "chk_gps_ko": {"en": "GPS is {a}, expected {e}", "fr": "Le GPS est {a}, attendu {e}",
+                   "nl": "De gps is {a}, verwacht {e}"},
+    "chk_dual_ok": {"en": "Dual tracking: {v}", "fr": "Suivi dual : {v}",
+                    "nl": "Dual tracking: {v}"},
+    "chk_dual_ko": {"en": "Dual tracking is {a}, expected {e}",
+                    "fr": "Le suivi dual est {a}, attendu {e}",
+                    "nl": "Dual tracking is {a}, verwacht {e}"},
+    "chk_parked": {
+        "en": "Mount parked: tracking checks skipped.",
+        "fr": "Monture parquée : contrôles de suivi ignorés.",
+        "nl": "Montering geparkeerd: volgcontroles overgeslagen."},
     "menu_manual": {"en": "Manual (PDF)", "fr": "Manuel (PDF)",
                     "nl": "Handleiding (pdf)"},
     "tt_manual": {

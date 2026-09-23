@@ -503,13 +503,21 @@ class ASCOMConnection(MountConnection):
     def get_longitude(self) -> Optional[str]:
         """Get site longitude from ASCOM SiteLongitude property.
 
-        ASCOM returns decimal degrees. Converts to DMS format.
+        ASCOM returns decimal degrees, counted positive EAST. The LX200
+        protocol counts the other way, and the string produced here is read
+        back with the LX200 convention -- so the sign is flipped once, at
+        the source, and there is one convention in the rest of the program
+        instead of two.
+
+        Getting this wrong does not fail loudly: it moves the observatory to
+        the wrong side of Greenwich. On a site 2.76 deg east it shifted every
+        twilight by 22 minutes, which reads as plausible.
         """
         lon = self._safe_read("SiteLongitude")
         if lon is None:
             return None
         try:
-            return _degrees_to_dms_lon(float(lon))
+            return _degrees_to_dms_lon(-float(lon))
         except (ValueError, TypeError):
             return None
 
