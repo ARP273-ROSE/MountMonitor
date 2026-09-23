@@ -18,7 +18,7 @@ from PyQt6.QtWidgets import (
     QApplication, QStatusBar, QFileDialog
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSlot, pyqtSignal
-from PyQt6.QtGui import QAction, QFont, QIcon, QKeySequence
+from PyQt6.QtGui import QAction, QActionGroup, QFont, QIcon, QKeySequence
 
 from .graph_widgets import TrackingGraph, TimeGraph, SeismicGraph, AxialGraph
 from .fft_window import FFTWindow
@@ -93,6 +93,11 @@ class MainWindow(QMainWindow):
         self._fft_window: Optional[FFTWindow] = None
         self._connected = False
         self._logging_active = False
+        # Armed: the button has been pressed but nothing is being written yet.
+        # The mount can be connected hours before the night starts, and those
+        # hours are dead weight in the .dat and noise in the night report.
+        self._logging_armed = False
+        self._park_timer = None
         self._mount_info = {}
         self._prev_mount_status = MountStatus.UNKNOWN
 
@@ -249,6 +254,28 @@ class MainWindow(QMainWindow):
         pref_action.setToolTip("EN: Open preferences\nFR: Ouvrir les préférences")
         pref_action.triggered.connect(self._show_preferences)
         edit_menu.addAction(pref_action)
+
+        # Language menu.
+        #
+        # This lived in Preferences, inside the "Layout" group -- nobody looks
+        # for their language under layout, so in practice the option did not
+        # exist. It is a top-level menu now, and every entry is written in its
+        # OWN language: someone who landed in the wrong language cannot read
+        # the current one to find their way out.
+        lang_menu = menubar.addMenu(T("menu_language"))
+        self._lang_group = QActionGroup(self)
+        self._lang_group.setExclusive(True)
+        courant = self._settings.get("language") or "auto"
+        for code, libelle in [("auto", T("lang_auto"))] + list(LANGUES.items()):
+            act = QAction(libelle, self)
+            act.setCheckable(True)
+            act.setChecked(code == courant)
+            act.setData(code)
+            act.triggered.connect(lambda _checked, c=code: self._choisir_langue(c))
+            self._lang_group.addAction(act)
+            lang_menu.addAction(act)
+            if code == "auto":
+                lang_menu.addSeparator()
 
         # Help menu
         help_menu = menubar.addMenu(T("menu_help"))
@@ -614,6 +641,20 @@ class MainWindow(QMainWindow):
         if self._logging_active:
             self._file_logger.log_event(f"Mount status: {status.name}")
 
+        # ── Armed logger: start on the first TRACKING, stop on a real park ──
+        if status == MountStatus.TRACKING:
+            self._annuler_arret_park()
+            if self._logging_armed:
+                self._demarrer_sur_suivi()
+        elif status == MountStatus.PARKED:
+            if (self._logging_active and self._park_timer is None
+                    and self._settings.get("autostop_on_park")):
+                delai = int(self._settings.get("autostop_park_delay_s") or 120)
+                self._park_timer = QTimer(self)
+                self._park_timer.setSingleShot(True)
+                self._park_timer.timeout.connect(self._arreter_sur_park)
+                self._park_timer.start(delai * 1000)
+
         # Detect transition from slewing to tracking
         was_slewing = prev_status == MountStatus.SLEWING
         now_tracking = status == MountStatus.TRACKING
@@ -963,8 +1004,54 @@ class MainWindow(QMainWindow):
     def _toggle_logging(self):
         if self._logging_active:
             self._stop_logging()
+        elif self._logging_armed:
+            self._desarmer()
+        elif self._settings.get("autostart_on_tracking"):
+            self._armer()
         else:
             self._start_logging()
+
+    def _armer(self):
+        """Wait for the mount to track before writing anything."""
+        self._logging_armed = True
+        self._btn_logging.setText(T("btn_armed_log"))
+        self._status_panel.add_message(T("logging_armed"), Colors.STATUS_OK)
+        # Already tracking when armed: start at once rather than wait for a
+        # transition that has already happened.
+        if getattr(self, '_prev_mount_status', None) == MountStatus.TRACKING:
+            self._demarrer_sur_suivi()
+
+    def _desarmer(self):
+        self._logging_armed = False
+        self._btn_logging.setText(T("btn_start_log"))
+        self._status_panel.add_message(T("logging_disarmed"))
+
+    def _demarrer_sur_suivi(self):
+        """The mount started tracking while armed."""
+        if not self._logging_armed or self._logging_active:
+            return
+        self._logging_armed = False
+        self._start_logging()
+        self._status_panel.add_message(T("logging_autostart"), Colors.STATUS_OK)
+
+    def _annuler_arret_park(self):
+        if self._park_timer is not None:
+            self._park_timer.stop()
+            self._park_timer = None
+
+    def _arreter_sur_park(self):
+        """Mount parked long enough: close the session and write the report.
+
+        A grace delay is used because a park can be transient -- a meridian
+        flip, a sequence that parks between two targets and resumes. Stopping
+        on the first PARKED sample would cut the night in two and write a
+        report on half of it.
+        """
+        self._annuler_arret_park()
+        if not self._logging_active:
+            return
+        self._stop_logging()
+        self._status_panel.add_message(T("logging_autostop"), Colors.STATUS_OK)
 
     def _start_logging(self):
         """Start data logging to files."""
@@ -988,6 +1075,7 @@ class MainWindow(QMainWindow):
 
     def _stop_logging(self):
         """Stop data logging."""
+        self._annuler_arret_park()
         if not self._logging_active:
             return
         chemin_dat = getattr(self._file_logger, 'dat_path', None)
@@ -1296,11 +1384,69 @@ class MainWindow(QMainWindow):
 
     # ── Preferences ──────────────────────────────────────────────
 
+    def _choisir_langue(self, code: str):
+        """Change the interface language.
+
+        Nothing is retranslated in place: the menus, labels and tooltips are
+        built once at startup, so changing the language only takes effect on
+        the next run. Saying so -- and offering the restart -- is the whole
+        point, because silently doing nothing is what made the option look
+        like it did not exist.
+        """
+        if code == self._settings.get("language"):
+            return
+        self._settings.set("language", code)
+        self._settings.save()
+        set_language(code)
+        self._prevenir_redemarrage()
+
+    def _prevenir_redemarrage(self):
+        """Tell the user the new language needs a restart, and offer it."""
+        boite = QMessageBox(self)
+        boite.setIcon(QMessageBox.Icon.Information)
+        boite.setWindowTitle(T("lang_restart_titre"))
+        boite.setText(T("lang_restart_texte"))
+        if self._logging_active:
+            # Restarting would end the session and write the night report in
+            # the middle of the night. Not offered.
+            boite.setInformativeText(T("lang_restart_bloque"))
+            boite.setStandardButtons(QMessageBox.StandardButton.Ok)
+            boite.exec()
+            return
+        maintenant = boite.addButton(T("lang_restart_now"),
+                                     QMessageBox.ButtonRole.AcceptRole)
+        boite.addButton(T("lang_restart_later"), QMessageBox.ButtonRole.RejectRole)
+        boite.exec()
+        if boite.clickedButton() is maintenant:
+            self._redemarrer()
+
+    def _redemarrer(self):
+        """Relaunch the application in place."""
+        import os
+        import subprocess
+        try:
+            self.close()
+            if getattr(sys, 'frozen', False):
+                subprocess.Popen([sys.executable])
+            else:
+                subprocess.Popen([sys.executable, os.path.abspath(sys.argv[0])]
+                                 + sys.argv[1:])
+        except Exception as exc:
+            logger.error(f"Restart failed: {exc}")
+            return
+        QApplication.quit()
+
     def _show_preferences(self):
         """Show preferences dialog."""
+        avant = self._settings.get("language")
         dialog = PreferencesDialog(self._settings, self)
         if dialog.exec():
             self._apply_settings()
+            # The language combo also lives in Preferences. Changing it there
+            # must say the same thing as the Language menu, otherwise it is
+            # again an option that appears to do nothing.
+            if self._settings.get("language") != avant:
+                self._prevenir_redemarrage()
 
     def _apply_settings(self):
         """Apply changed settings to running components."""

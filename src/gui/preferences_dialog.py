@@ -289,6 +289,37 @@ class PreferencesDialog(QDialog):
         self._log_mode.setToolTip("EN: What to log\nFR: Quoi journaliser")
         log_form.addRow(T("pref_log_mode_label"), self._log_mode)
 
+        # Arming. Put next to the log mode because it answers the same
+        # question -- what ends up in the file -- and because a mount
+        # connected at noon for a night that starts at 19:00 writes seven
+        # hours of nothing.
+        self._autostart = QCheckBox(T("pref_autostart"))
+        self._autostart.setChecked(bool(self._settings.get("autostart_on_tracking")))
+        self._autostart.setToolTip(
+            "EN: The log button arms the logger; recording starts at the first "
+            "TRACKING sample\n"
+            "FR: Le bouton d'enregistrement arme l'enregistreur ; "
+            "l'enregistrement démarre au premier échantillon en SUIVI")
+        log_form.addRow(self._autostart)
+
+        self._autostop = QCheckBox(T("pref_autostop"))
+        self._autostop.setChecked(bool(self._settings.get("autostop_on_park")))
+        self._autostop.setToolTip(
+            "EN: A grace delay avoids stopping on a transient park\n"
+            "FR: Un délai de grâce évite de couper sur un park passager")
+        log_form.addRow(self._autostop)
+
+        self._park_delay = QSpinBox()
+        self._park_delay.setRange(0, 3600)
+        self._park_delay.setValue(int(self._settings.get("autostop_park_delay_s") or 120))
+        self._park_delay.setSuffix(" s")
+        self._park_delay.setToolTip(
+            "EN: How long the mount must stay parked before the session is closed\n"
+            "FR: Durée pendant laquelle la monture doit rester parquée avant fermeture")
+        self._park_delay.setEnabled(self._autostop.isChecked())
+        self._autostop.toggled.connect(self._park_delay.setEnabled)
+        log_form.addRow("    ↳", self._park_delay)
+
         self._delay_slew = QDoubleSpinBox()
         self._delay_slew.setRange(0, 60)
         self._delay_slew.setValue(self._settings.get("delay_after_slew_seconds"))
@@ -571,6 +602,9 @@ class PreferencesDialog(QDialog):
         s.set("graph_textbox_ratio", self._graph_ratio.value())
         i = self._language.currentIndex()
         s.set("language", self._codes_langue[i] if 0 <= i < len(self._codes_langue) else "auto")
+        s.set("autostart_on_tracking", self._autostart.isChecked())
+        s.set("autostop_on_park", self._autostop.isChecked())
+        s.set("autostop_park_delay_s", self._park_delay.value())
 
         # Processing
         s.set("polling_frequency_hz", self._polling_freq.value())
