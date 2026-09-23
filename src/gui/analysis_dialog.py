@@ -587,6 +587,11 @@ class AnalysisDialog(QDialog):
             lines.append("")
 
         # ═══════════════════════════════════════════════════════════
+        # 6b. NIGHT EPHEMERIS
+        # ═══════════════════════════════════════════════════════════
+        lines.extend(self._section_nuit(s, lg))
+
+        # ═══════════════════════════════════════════════════════════
         # 7. TOLERANCE ANALYSIS (TRACKING data only)
         # ═══════════════════════════════════════════════════════════
         if len(s.ra_deviations) > 0:
@@ -856,6 +861,80 @@ class AnalysisDialog(QDialog):
                 self._report.setPlainText(texte)
                 self._report.moveCursor(QTextCursor.MoveOperation.Start)
         return texte
+
+    def _section_nuit(self, s, lg) -> list:
+        """Sunset, twilights and how much of the night the session covers.
+
+        Computed from the site the mount reported, stored in the .dat header
+        so that it still works on replay. Without a site there is nothing to
+        say, and saying where to set one is more use than an empty section.
+        """
+        def _(cle, **kw):
+            return T(cle, lg) if not kw else T(cle, lg).format(**kw)
+
+        lines = ["=" * 70, "  " + _("t_nuit"), "=" * 70, ""]
+        lat = getattr(s, 'site_lat', None)
+        lon = getattr(s, 'site_lon', None)
+        if lat is None or lon is None:
+            lines += ["  " + _("nuit_pas_de_site"), ""]
+            return lines
+
+        from ..core.ephemerides import nuit_autour
+        from datetime import datetime, timezone, timedelta
+        debut = getattr(s, 'start_iso', None)
+        if debut is None:
+            lines += ["  " + _("nuit_pas_de_site"), ""]
+            return lines
+        try:
+            n = nuit_autour(debut, lat, lon)
+        except Exception:
+            return lines[:0]
+
+        tz = debut.tzinfo or timezone.utc
+
+        def hl(t):
+            return t.astimezone(tz).strftime('%H:%M') if t else '--:--'
+
+        elev = getattr(s, 'site_elev', None)
+        elev_s = f"  {elev:.0f} m" if elev else ""
+        lines.append(f"  {_('nuit_site'):<34} : {lat:+.4f}  {lon:+.4f}{elev_s}")
+        lines.append("")
+        lines.append(f"  {_('nuit_coucher'):<34} : {hl(n.coucher)}")
+        lines.append(f"  {_('nuit_nautique'):<34} : {hl(n.nautique)}")
+        if n.nuit_noire:
+            d = n.duree_noire
+            lines.append(f"  {_('nuit_noire'):<34} : {hl(n.astro_debut)} "
+                         f"-> {hl(n.astro_fin)}")
+            lines.append(f"  {_('nuit_duree_noire'):<34} : "
+                         f"{int(d.total_seconds() // 3600)} h "
+                         f"{int((d.total_seconds() % 3600) // 60):02d}")
+        else:
+            lines.append("  " + _("nuit_pas_de_nuit_noire"))
+        lines.append(f"  {_('nuit_lever'):<34} : {hl(n.lever)}")
+        lines.append("")
+
+        # How much of the dark night the session actually holds. A session
+        # that starts an hour late loses an hour that cannot be recovered,
+        # and that is worth seeing next to the tracking figures.
+        if n.nuit_noire and len(s.timestamps) > 1:
+            fin = debut + timedelta(seconds=float(s.timestamps[-1] - s.timestamps[0]))
+            recouvre = (min(fin, n.astro_fin) - max(debut, n.astro_debut))
+            secs = max(0.0, recouvre.total_seconds())
+            total = n.duree_noire.total_seconds()
+            lines.append(f"  {_('nuit_couverture'):<34} : "
+                         f"{int(secs // 3600)} h {int((secs % 3600) // 60):02d} "
+                         f"/ {int(total // 3600)} h {int((total % 3600) // 60):02d}"
+                         f"  ({100 * secs / total:.0f} %)")
+            avant = (min(fin, n.astro_debut) - debut).total_seconds()
+            if avant > 300:
+                lines.append(f"      {int(avant // 3600)} h "
+                             f"{int((avant % 3600) // 60):02d} {_('nuit_avant')}")
+            apres = (fin - max(debut, n.astro_fin)).total_seconds()
+            if apres > 300:
+                lines.append(f"      {int(apres // 3600)} h "
+                             f"{int((apres % 3600) // 60):02d} {_('nuit_apres')}")
+            lines.append("")
+        return lines
 
     def _write_axis_stats(self, lines: list, axis_name: str,
                           deviations: np.ndarray, timestamps: np.ndarray,

@@ -57,6 +57,12 @@ class TargetSegment:
     # blurs a frame, and it is the basis the jitter and the rating use.
     ra_residual: np.ndarray = field(default_factory=lambda: np.array([]))
     dec_residual: np.ndarray = field(default_factory=lambda: np.array([]))
+    # Observing site, read back from the header: decimal degrees, longitude
+    # positive east. Needed on replay, when the mount is long gone.
+    site_lat: float | None = None
+    site_lon: float | None = None
+    site_elev: float | None = None
+    start_iso: object = None
     excursions_removed: int = 0       # dithers / re-centering excluded from stats
     excursion_max_arcsec: float = 0.0 # largest excursion seen, for the report
 
@@ -587,6 +593,25 @@ def parse_dat_file(dat_path: Path) -> ParsedSession:
                         session.mount_driver = line.split('\t', 1)[1].strip() if '\t' in line else ""
                     elif line.startswith("Firmware:"):
                         session.firmware = line.split('\t', 1)[1].strip() if '\t' in line else ""
+                    elif line.startswith("Site:"):
+                        # Decimal degrees, longitude positive EAST -- the
+                        # writer normalises both the mount's sexagesimal
+                        # LX200 (positive west) and the preferences.
+                        champs = line.split('\t')[1:]
+                        try:
+                            session.site_lat = float(champs[0])
+                            session.site_lon = float(champs[1])
+                            if len(champs) > 2 and champs[2].strip():
+                                session.site_elev = float(champs[2])
+                        except (IndexError, ValueError):
+                            session.site_lat = session.site_lon = None
+                    elif line.startswith("Start:"):
+                        from datetime import datetime as _dt
+                        try:
+                            session.start_iso = _dt.fromisoformat(
+                                line.split('\t', 1)[1].strip())
+                        except (IndexError, ValueError):
+                            session.start_iso = None
 
                     # Column header line (last header line)
                     if line.startswith("RAW Mount time"):
