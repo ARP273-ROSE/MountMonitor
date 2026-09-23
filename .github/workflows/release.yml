@@ -431,38 +431,121 @@ jobs:
           tag_name: v${{ steps.version.outputs.value }}
           draft: false
           files: publication/*
+          # Les notes sont ecrites dans les trois langues, chacune sous son
+          # propre titre. L'application n'affiche que la section de la langue
+          # de l'utilisateur : un utilisateur neerlandais lisait jusqu'ici du
+          # francais dans sa fenetre de mise a jour.
           body: |
-            ## Installation
+            ## English
+
+            ### Download
+
+            | System | File |
+            |---|---|
+            | **Windows** | `${{ steps.kit.outputs.nom_fichier }}-Setup-${{ steps.version.outputs.value }}.exe` |
+            | **macOS Apple Silicon** | `${{ steps.kit.outputs.nom_fichier }}-${{ steps.version.outputs.value }}-macos-arm64.dmg` |
+            | **macOS Intel** | `${{ steps.kit.outputs.nom_fichier }}-${{ steps.version.outputs.value }}-macos-x86_64.dmg` |
+            | **Linux x86_64** | `${{ steps.kit.outputs.nom_fichier }}-${{ steps.version.outputs.value }}-linux-x86_64.tar.gz` |
+            | **Linux ARM64** | `${{ steps.kit.outputs.nom_fichier }}-${{ steps.version.outputs.value }}-linux-arm64.tar.gz` |
+
+            Pick the macOS package that matches your Mac: the bundled Python is
+            architecture-specific and the wrong one will not start.
+
+            No administrator password is asked for: everything installs into
+            your own user profile.
+
+            **Windows** may show "Windows protected your PC" on first launch
+            because the installer is unsigned. Click **More info**, then **Run
+            anyway**. It appears only once.
+
+            **macOS** will refuse to open an unsigned application: **right
+            click** it, choose **Open**, and confirm.
+
+            **Linux** — unpack and run `installer.sh`. It installs into
+            `~/.local/share` and adds the menu entry.
+
+            ### Updating
+
+            If the application is already installed, download nothing: it finds
+            this version at startup and offers to install it, on all three
+            systems. The `*-app-*.zip` archive exists for that automatic update
+            and is not meant to be installed by hand.
+
+            Full change history with the measured figures: `CHANGELOG.md`.
+
+            ## Francais
+
+            ### Telechargement
 
             | Systeme | Fichier |
             |---|---|
             | **Windows** | `${{ steps.kit.outputs.nom_fichier }}-Setup-${{ steps.version.outputs.value }}.exe` |
-            | **macOS** | `${{ steps.kit.outputs.nom_fichier }}-${{ steps.version.outputs.value }}-macos.dmg` |
-            | **Linux** | `${{ steps.kit.outputs.nom_fichier }}-${{ steps.version.outputs.value }}-linux.tar.gz` |
+            | **macOS Apple Silicon** | `${{ steps.kit.outputs.nom_fichier }}-${{ steps.version.outputs.value }}-macos-arm64.dmg` |
+            | **macOS Intel** | `${{ steps.kit.outputs.nom_fichier }}-${{ steps.version.outputs.value }}-macos-x86_64.dmg` |
+            | **Linux x86_64** | `${{ steps.kit.outputs.nom_fichier }}-${{ steps.version.outputs.value }}-linux-x86_64.tar.gz` |
+            | **Linux ARM64** | `${{ steps.kit.outputs.nom_fichier }}-${{ steps.version.outputs.value }}-linux-arm64.tar.gz` |
+
+            Choisissez le paquet macOS qui correspond a votre Mac : le Python
+            embarque est propre a une architecture et le mauvais ne demarrera
+            pas.
 
             Aucun mot de passe administrateur n'est demande : l'installation se
             fait dans votre profil utilisateur.
 
-            **Windows** — Windows peut afficher « Windows a protege votre
-            ordinateur » au premier lancement, parce que l'installeur n'est pas
-            signe. Cliquez sur **Informations complementaires** puis sur
-            **Executer quand meme**. Cet avertissement n'apparait qu'une fois.
+            **Windows** peut afficher « Windows a protege votre ordinateur » au
+            premier lancement, parce que l'installeur n'est pas signe. Cliquez
+            sur **Informations complementaires** puis **Executer quand meme**.
+            Cet avertissement n'apparait qu'une fois.
 
-            **macOS** — ouvrez l'image disque et glissez l'application dans
-            Applications. Au premier lancement, macOS refusera de l'ouvrir car
-            elle n'est pas signee : faites un **clic droit** sur l'application
-            puis **Ouvrir**, et confirmez.
+            **macOS** refusera d'ouvrir une application non signee : faites un
+            **clic droit** dessus, puis **Ouvrir**, et confirmez.
 
-            **Linux** — decompressez l'archive et lancez `installer.sh`. Il
-            installe dans `~/.local/share` et ajoute l'entree de menu. Vous
-            pouvez aussi lancer directement `MountMonitor.sh`.
+            **Linux** — decompressez et lancez `installer.sh`. Il installe dans
+            `~/.local/share` et ajoute l'entree de menu.
 
-            ## Mise a jour
+            ### Mise a jour
 
             Si l'application est deja installee, ne telechargez rien : elle
             detecte cette version au demarrage et propose de l'installer, sur
-            les trois systemes.
+            les trois systemes. L'archive `*-app-*.zip` est destinee a cette
+            mise a jour automatique et ne s'installe pas a la main.
 
-            L'archive `*-app-*.zip` est destinee a cette mise a jour
-            automatique. Elle ne contient que le code, commun aux trois
-            plateformes, et ne s'installe pas a la main.
+            Historique complet avec les chiffres mesures : `CHANGELOG.md`.
+
+            ## Nederlands
+
+            ### Downloaden
+
+            | Systeem | Bestand |
+            |---|---|
+            | **Windows** | `${{ steps.kit.outputs.nom_fichier }}-Setup-${{ steps.version.outputs.value }}.exe` |
+            | **macOS Apple Silicon** | `${{ steps.kit.outputs.nom_fichier }}-${{ steps.version.outputs.value }}-macos-arm64.dmg` |
+            | **macOS Intel** | `${{ steps.kit.outputs.nom_fichier }}-${{ steps.version.outputs.value }}-macos-x86_64.dmg` |
+            | **Linux x86_64** | `${{ steps.kit.outputs.nom_fichier }}-${{ steps.version.outputs.value }}-linux-x86_64.tar.gz` |
+            | **Linux ARM64** | `${{ steps.kit.outputs.nom_fichier }}-${{ steps.version.outputs.value }}-linux-arm64.tar.gz` |
+
+            Kies het macOS-pakket dat bij uw Mac past: de meegeleverde Python is
+            architectuurgebonden en het verkeerde pakket start niet.
+
+            Er wordt geen beheerderswachtwoord gevraagd: alles wordt in uw eigen
+            gebruikersprofiel geinstalleerd.
+
+            **Windows** kan bij de eerste start "Windows heeft uw pc beschermd"
+            tonen omdat het installatieprogramma niet ondertekend is. Klik op
+            **Meer informatie** en daarna op **Toch uitvoeren**. Dit verschijnt
+            maar een keer.
+
+            **macOS** weigert een niet-ondertekende toepassing te openen:
+            **klik met rechts** erop, kies **Openen** en bevestig.
+
+            **Linux** — pak het archief uit en voer `installer.sh` uit. Het
+            installeert in `~/.local/share` en voegt het menu-item toe.
+
+            ### Bijwerken
+
+            Is de toepassing al geinstalleerd, download dan niets: zij vindt
+            deze versie bij het opstarten en biedt aan haar te installeren, op
+            alle drie de systemen. Het archief `*-app-*.zip` is voor die
+            automatische update bedoeld en installeert u niet met de hand.
+
+            Volledige geschiedenis met de gemeten cijfers: `CHANGELOG.md`.

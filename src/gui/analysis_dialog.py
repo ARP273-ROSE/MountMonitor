@@ -265,16 +265,20 @@ class AnalysisDialog(QDialog):
         lines.append(f"  {_('fichier'):<22} : {s.file_path}")
         lines.append("")
 
+        # Ces deux sorties anticipees ecrivaient dans self._report sans
+        # verifier `langue`, alors que la fin de la methode le fait. Les
+        # onglets appellent _run_analysis une fois par langue : le dernier
+        # appel — le neerlandais — ecrasait donc l'onglet de la langue
+        # courante. Visible seulement sur une session vide, c'est-a-dire
+        # precisement le cas ou ces sorties servent.
         if s.sample_count == 0:
             lines.append("  [!] " + _("rien_a_analyser"))
-            self._report.setPlainText("\n".join(lines))
-            return
+            return self._rendre(lines, langue)
 
         if s.tracking_sample_count == 0:
             lines.append("  [!] " + _("pas_de_suivi"))
             lines.append("      " + _("pas_de_suivi_detail"))
-            self._report.setPlainText("\n".join(lines))
-            return
+            return self._rendre(lines, langue)
 
         # ═══════════════════════════════════════════════════════════
         # 2. OVERALL QUALITY RATING (combined from all segments)
@@ -845,10 +849,14 @@ class AnalysisDialog(QDialog):
                      f"{_('a_heure')} {datetime.now().strftime('%H:%M:%S')}")
         lines.append("=" * 70)
 
+        return self._rendre(lines, langue)
+
+    def _rendre(self, lines, langue):
+        """Assemble le texte, et ne remplit la fenetre que si c'est l'appel
+        normal. Un appel avec une langue explicite — les onglets, la
+        sauvegarde des trois rapports — doit seulement rendre le texte."""
         texte = "\n".join(lines)
         if langue is None:
-            # Appel normal : on remplit la fenetre. Appel pour une autre langue
-            # (les onglets, la sauvegarde) : on rend seulement le texte.
             self._report_text = texte
             if getattr(self, '_report', None) is not None:
                 self._report.setPlainText(texte)
