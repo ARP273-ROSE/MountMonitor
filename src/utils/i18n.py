@@ -14,6 +14,10 @@ TX = {
     "menu_reset": {"en": "Reset", "fr": "Réinitialiser", "nl": "Resetten"},
     "menu_help": {"en": "Help", "fr": "Aide", "nl": "Help"},
     "menu_language": {"en": "Language", "fr": "Langue", "nl": "Taal"},
+    "pref_ra_degrees": {
+        "en": "Show right ascension in degrees rather than hours",
+        "fr": "Afficher l'ascension droite en degrés plutôt qu'en heures",
+        "nl": "De rechte klimming in graden tonen in plaats van in uren"},
     "poller_slewing": {"en": "Mount is slewing...", "fr": "La monture pivote...",
                        "nl": "De montering zwenkt..."},
     "poller_checks_ok": {

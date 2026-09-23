@@ -42,24 +42,50 @@ def parse_dec(dec_str: str) -> Optional[float]:
     return None
 
 
+def _sexagesimal(valeur: float, precision: int, tour: int | None = None):
+    """Decompose en (entier, minutes, secondes) avec le report.
+
+    Sans report, une valeur qui arrondit a soixante secondes s'affiche
+    « 01:59:60.00 » au lieu de « 02:00:00.00 ». Le defaut ne se voit que
+    sur les valeurs qui tombent juste, ce qui le rend d'autant plus
+    surprenant quand il apparait a l'ecran.
+    """
+    d = int(valeur)
+    reste = (valeur - d) * 60.0
+    m = int(reste)
+    s = (reste - m) * 60.0
+    if round(s, precision) >= 60.0:
+        s = 0.0
+        m += 1
+    if m >= 60:
+        m = 0
+        d += 1
+    if tour is not None and d >= tour:
+        d -= tour
+    return d, m, s
+
+
 def format_ra(ra_hours: float, precision: int = 2) -> str:
     """Format decimal hours to HH:MM:SS.dd string."""
-    ra_hours = ra_hours % 24.0
-    h = int(ra_hours)
-    remainder = (ra_hours - h) * 60.0
-    m = int(remainder)
-    s = (remainder - m) * 60.0
+    h, m, s = _sexagesimal(ra_hours % 24.0, precision, tour=24)
     return f"{h:02d}:{m:02d}:{s:0{3 + precision}.{precision}f}"
+
+
+def format_ra_degrees(ra_hours: float, precision: int = 1) -> str:
+    """Format right ascension as DDD:MM:SS.d, in degrees of arc.
+
+    Right ascension is conventionally counted in hours, but a mount reports
+    encoder positions in degrees and some users would rather read both in the
+    same unit. One hour of right ascension is fifteen degrees of arc.
+    """
+    d, m, s = _sexagesimal((ra_hours % 24.0) * 15.0, precision, tour=360)
+    return f"{d:03d}:{m:02d}:{s:0{3 + precision}.{precision}f}"
 
 
 def format_dec(dec_degrees: float, precision: int = 1) -> str:
     """Format decimal degrees to +DD:MM:SS.d string."""
     sign = '+' if dec_degrees >= 0 else '-'
-    dec_abs = abs(dec_degrees)
-    d = int(dec_abs)
-    remainder = (dec_abs - d) * 60.0
-    m = int(remainder)
-    s = (remainder - m) * 60.0
+    d, m, s = _sexagesimal(abs(dec_degrees), precision)
     return f"{sign}{d:02d}:{m:02d}:{s:0{3 + precision}.{precision}f}"
 
 

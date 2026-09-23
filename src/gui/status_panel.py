@@ -16,7 +16,7 @@ from PyQt6.QtGui import QFont, QColor, QTextCursor
 
 from .theme import Colors
 from ..utils.i18n import T
-from ..utils.coordinates import format_ra, format_dec
+from ..utils.coordinates import format_ra, format_ra_degrees, format_dec
 from ..models.mount_data import MountSample, MountStatus
 
 
@@ -25,6 +25,11 @@ class StatusPanel(QWidget):
 
     def __init__(self, max_lines: int = 50, parent=None):
         super().__init__(parent)
+        try:
+            from ..config.settings import Settings
+            self._ra_en_degres = bool(Settings().get("ra_in_degrees"))
+        except Exception:
+            self._ra_en_degres = False
         self._max_lines = max_lines
         self._tolerance_ra_arcsec = 1.5
         self._tolerance_dec_arcsec = 1.5
@@ -140,7 +145,10 @@ class StatusPanel(QWidget):
 
     def update_mount_sample(self, sample: MountSample):
         """Update display with new mount data."""
-        self._ra_value.setText(sample.ra_raw_str or format_ra(sample.ra_hours))
+        if getattr(self, '_ra_en_degres', False):
+            self._ra_value.setText(format_ra_degrees(sample.ra_hours))
+        else:
+            self._ra_value.setText(sample.ra_raw_str or format_ra(sample.ra_hours))
         self._dec_value.setText(sample.dec_raw_str or format_dec(sample.dec_degrees))
         self._declination_deg = sample.dec_degrees
 
