@@ -1121,7 +1121,13 @@ class MainWindow(QMainWindow):
             mount_name=self._settings.get("mount_name"),
             protocol=ConnectionProtocol(self._settings.get("mount_protocol"))
                 if self._sim_mode == "none" else ConnectionProtocol.SIMULATION,
-            start_time=datetime.now(),
+            # Timezone-aware, from whatever the PC is set to. astimezone()
+            # with no argument is the one portable way to get the local
+            # offset on Windows, macOS and Linux alike, and it follows DST;
+            # time.timezone / time.altzone do not, and get it wrong twice a
+            # year. The offset travels with the file so that a replay in
+            # another timezone still reads the right local hours.
+            start_time=datetime.now().astimezone(),
         )
         # Always store the site as decimal degrees, longitude positive EAST.
         # The mount speaks sexagesimal LX200 with longitude positive WEST and
@@ -1187,7 +1193,13 @@ class MainWindow(QMainWindow):
                 mount_name=self._settings.get("mount_name"),
                 protocol=ConnectionProtocol.SIMULATION
                     if self._sim_mode != "none" else ConnectionProtocol(self._settings.get("mount_protocol")),
-                start_time=datetime.now(),
+                # Timezone-aware, from whatever the PC is set to. astimezone()
+            # with no argument is the one portable way to get the local
+            # offset on Windows, macOS and Linux alike, and it follows DST;
+            # time.timezone / time.altzone do not, and get it wrong twice a
+            # year. The offset travels with the file so that a replay in
+            # another timezone still reads the right local hours.
+            start_time=datetime.now().astimezone(),
             )
             self._file_logger.new_files(session)
             self._status_panel.add_message(T("new_log_files"))
