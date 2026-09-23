@@ -1,4 +1,8 @@
-PyQt6>=6.6.0
+# Cap below 6.10 on purpose. PyQt6 6.10 moved its Linux wheels from
+# manylinux_2_28 to manylinux_2_34, which drops Debian 11, Ubuntu 20.04 and
+# RHEL 8 -- four years of still-current distributions -- and MountMonitor
+# uses nothing that appeared in Qt 6.10 or 6.11.
+PyQt6>=6.6.0,<6.10
 pyqtgraph>=0.13.3
 numpy>=1.24.0
 pyserial>=3.5

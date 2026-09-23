@@ -8,6 +8,33 @@
 
 ---
 
+## Supported systems
+
+The published packages bundle their own Python and Qt: nothing else has to be
+installed. What they do require is a recent enough system, because the Qt
+binaries inside them do.
+
+| System | Minimum | Architecture |
+|---|---|---|
+| **Windows** | Windows 10 (1809) or later | x64 |
+| **macOS** | macOS 11 Big Sur or later | Apple Silicon **and** Intel — one package each |
+| **Linux** | glibc 2.28 — Debian 11, Ubuntu 20.04, RHEL 8 or later | x86\_64 |
+| **Linux ARM64** | glibc 2.39 — Ubuntu 24.04 or later | arm64 |
+
+The Linux ARM64 floor is higher than the x86\_64 one, and it is not our doing:
+PyQt6 publishes its aarch64 wheels against a much newer glibc than its x86\_64
+ones. On an older ARM system, install from source instead.
+
+Pick the macOS package that matches your Mac: `-macos-arm64.dmg` for Apple
+Silicon (M1 and later), `-macos-x86_64.dmg` for Intel. The bundled Python is
+architecture-specific even though Qt itself is universal, so the wrong one will
+not start at all.
+
+Running from source needs Python 3.10 or later and the packages in
+`requirements.txt`.
+
+---
+
 ## Features
 
 ### Real-time Monitoring
