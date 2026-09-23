@@ -1,0 +1,297 @@
+\part{Understanding}
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{Celestial coordinates}
+\label{ch:coords}
+
+\section{The celestial sphere}
+
+Seen from the ground, the night sky behaves like a sphere turning from east to
+west about an axis through the celestial poles. Stars lie at wildly different
+distances, but their position on that fictitious sphere is all one needs to
+find and follow them.
+
+The Earth completes one turn in \textbf{23~h 56~min 4~s} --- the
+\emph{sidereal day}, shorter than the 24 hours of the solar day. That, and not
+the clock, is the rate a mount must turn at.
+
+\section{Right ascension}
+
+\textbf{Right ascension} (RA) is the celestial equivalent of longitude. It is
+counted in \textbf{hours} rather than degrees, from 0~h to 24~h, starting at
+the vernal point.
+
+\begin{formula}
+\[
+1\,\text{h} = 15\degre \qquad 1\,\text{min} = 15' \qquad 1\,\text{s} = 15''
+\]
+So RA = 02~h 44~min 08~s is $2\times15\degre + 44\times0.25\degre +
+8\times\frac{15}{3600}\degre = 41.03\degre$.
+\end{formula}
+
+\begin{info}
+RA is the critical coordinate for tracking: a one-second timing error is worth
+15 arcseconds on the sky at the celestial equator. At 1.6\arcsec/pixel that is
+about ten pixels of trailing.
+\end{info}
+
+\section{Declination}
+
+\textbf{Declination} (DEC) is the equivalent of latitude: the angular distance
+north or south of the celestial equator, from $-90\degre$ to $+90\degre$. On a
+correctly aligned mount the declination axis does not move while tracking.
+
+\section{Hour angle}
+
+The \textbf{hour angle} measures how far an object stands from the local
+meridian. It grows continuously as the Earth turns.
+
+\begin{formula}
+\[
+\text{HA} = \text{local sidereal time} - \text{RA}
+\]
+An RA tolerance can be expressed in arcseconds or in seconds of time. The
+conversion depends on declination:
+\[
+\text{seconds of time} = \frac{\text{arcseconds}}{15 \cos(\text{DEC})}
+\]
+\end{formula}
+
+\begin{tip}
+Near the celestial pole an RA error barely moves the star on the sensor: the
+cosine of the declination damps it. Circumpolar objects are therefore more
+forgiving of RA tracking errors --- but not of declination ones.
+\end{tip}
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{Equatorial mounts}
+\label{ch:mounts}
+
+\section{Principle}
+
+An \textbf{equatorial mount} cancels the Earth's rotation by turning the tube
+about an axis parallel to the Earth's own: the polar axis.
+
+\begin{itemize}
+  \item \textbf{Polar axis (RA)}: turns at the sidereal rate.
+  \item \textbf{Declination axis}: still while tracking, in theory.
+\end{itemize}
+
+\begin{formula}
+\[
+\omega = \frac{1\,296\,000''}{86\,164.09\,\text{s}} \approx
+15.041\,\text{arcseconds per second}
+\]
+\end{formula}
+
+Any departure from that rate, and any misalignment of the polar axis, becomes a
+drift the image records.
+
+\section{10Micron mounts}
+
+10Micron mounts (GM1000 HPS and above) carry \textbf{absolute encoders}: they
+know where they point even after a power cut, where a relative encoder loses
+it. To that they add a worm drive, periodic-error correction and, above all, an
+internal \textbf{pointing model} built from several dozen stars.
+
+That model is what makes \textbf{unguided} imaging possible: the mount does not
+merely turn at the sidereal rate, it applies corrected rates that absorb
+flexure, refraction and the residual polar misalignment.
+
+\begin{warning}
+A direct consequence, often misunderstood: on a modelled mount the
+\textbf{polar alignment error lives inside the model} and is already
+compensated by the tracking rates. A residual declination drift therefore does
+not call for the azimuth screw, but for \textbf{more model points near the
+target}.
+\end{warning}
+
+These mounts speak an \textbf{extended LX200}: beyond the standard commands
+they expose raw axis positions, applied rates, model state and environmental
+data. MountMonitor uses those extensions where available.
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{What degrades tracking}
+\label{ch:errors}
+
+No mount tracks perfectly. The causes overlap, and each leaves a different
+signature in the record.
+
+\section{Periodic error}
+
+A worm is never perfectly round nor perfectly centred. Its defect repeats with
+every turn and produces an oscillation of fixed period --- a few minutes, most
+often. That is exactly what a Fourier analysis can pull out
+(chapter~\ref{ch:fft}).
+
+\section{Polar alignment}
+
+If the polar axis does not point exactly at the celestial pole, the star drifts
+slowly in declination, the faster the further one is from the meridian. On a
+mount without a model the answer is mechanical. On a modelled mount, see the
+warning in the previous chapter.
+
+\section{Atmospheric refraction}
+
+The atmosphere lifts objects the more they are low: some $34'$ at the horizon,
+$1'$ at $45\degre$ of altitude. Refraction therefore changes through the night,
+and its drift is easily mistaken for a misalignment.
+
+\section{Mechanical disturbance and vibration}
+
+Wind, a cable pulling, ground movement, a meridian flip: so many one-off jolts,
+none of them periodic. They show as isolated spikes, and that is what tells
+them apart.
+
+\section{Commanded moves}
+
+These are not errors at all. Between exposures the sequencer deliberately moves
+the mount --- \textbf{dither} to decorrelate noise, \textbf{re-centering} when
+the target has slipped --- and the mount \emph{stays} at its new position.
+Confusing them with tracking error is the costliest mistake one can make
+reading a record, and chapter~\ref{ch:stats} is devoted to it.
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{Reading the numbers}
+\label{ch:stats}
+
+\begin{warning}
+This is the most important chapter in the manual. A tracking record is read
+wrongly with disconcerting ease, and the figure that comes out is then wrong by
+a factor of several hundred.
+\end{warning}
+
+\section{The signal is a staircase}
+
+Here is what a night of unguided imaging actually records: the mount holds its
+position to a fraction of an arcsecond, then the sequencer dithers it, and it
+holds its new position just as well. The trace is not a noisy line about a
+mean: it is a \textbf{staircase}.
+
+A standard deviation taken over the whole night then measures the height of the
+steps, not the quality of the tracking. And removing a straight line --- what a
+classic detrending does --- does not remove a staircase.
+
+\begin{info}
+On a real eight-and-a-half hour session the raw combined RMS came out at
+\textbf{86.3\arcsec}, a damning verdict. The mount was in fact holding each
+position to \textbf{0.18\arcsec}. The two figures differ by a factor of 480.
+\end{info}
+
+\section{Jitter}
+
+\textbf{Jitter} is the spread the mount shows \emph{while} it holds a position.
+It is the only figure that smears a star on the sensor, and the one
+MountMonitor bases its rating on.
+
+It is measured between repositionings, never about a straight line. The program
+cuts the record at the steps, drops two samples after each --- the move itself
+is not tracking --- and takes the median of the per-step spreads.
+
+\begin{tip}
+This approach has a property worth noting: a sequence that dithers on every
+frame does not come out worse than one that never does. The figure describes
+the mount, not the sequencer.
+\end{tip}
+
+\section{Commanded moves}
+
+They are counted and classified separately:
+
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Class} & \textbf{What it is} \\
+\midrule
+Dither & A small move between exposures, to decorrelate noise. \\
+Re-centering & A larger move, bringing the target back where it belongs. \\
+Unsettled & The spread that follows stays several times the usual value. That
+is the one worth looking at. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{warning}
+A threshold crossing is not a move. A 70\arcsec{} re-centering takes several
+samples to complete and trips the threshold at each one: one night read as 98
+crossings for 53 actual moves, with a median amplitude ten times too small.
+MountMonitor groups crossings less than ten seconds apart.
+\end{warning}
+
+\section{Slow drift}
+
+It is quoted per hour and per exposure. On an unguided mount every dither
+cancels it: what matters is not the drift over the night, but the displacement
+it produces \emph{during one exposure}.
+
+\begin{formula}
+\[
+\text{displacement over one exposure} = \text{drift (\arcsec/h)} \times
+\frac{\text{exposure (s)}}{3600}
+\]
+A drift of $-16.8\arcsec$/h therefore moves the star by $0.84\arcsec$ over a
+180~s exposure.
+\end{formula}
+
+\section{Running standard deviation}
+
+Computed live over a 60 to 900 second window, it serves to see \emph{when}
+something happened, not to grade the night. After a target change, an
+acquisition gap or a repositioning, its window straddles the move and describes
+that rather than the tracking: those values are excluded from the report.
+
+\section{The rating}
+
+It rests on the combined jitter, with thresholds suited to the type of mount.
+An unguided 10Micron is judged on wider thresholds than a guided mount, because
+the orders of magnitude are not the same.
+
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{lXX}
+\toprule
+\textbf{Rating} & \textbf{Guided mount} & \textbf{Unguided precision} \\
+\midrule
+Excellent & $< 0.5\arcsec$ & $< 2.0\arcsec$ \\
+Good      & $< 1.5\arcsec$ & $< 4.0\arcsec$ \\
+Fair      & $< 3.0\arcsec$ & $< 8.0\arcsec$ \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{tip}
+Always relate the rating to your sampling. At 1.6\arcsec/pixel, a
+0.5\arcsec{} jitter shakes the star by a third of a pixel: invisible on the
+final image.
+\end{tip}
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{Fourier analysis}
+\label{ch:fft}
+
+\section{What it is for}
+
+A Fourier transform breaks a signal into a sum of sinusoids. On a tracking
+record it brings out what \emph{repeats} --- and a worm periodic error repeats
+by construction.
+
+MountMonitor looks in the \textbf{2 to 15 minute} band, where the worm periods
+of common mounts fall.
+
+\section{Two precautions}
+
+\begin{itemize}
+  \item The transform runs on \textbf{detrended} deviations. A linear drift is
+  not periodic, but over a finite window it produces a large low-frequency
+  component that would hide what is being looked for.
+  \item The \textbf{Nyquist limit} requires sampling at least twice per period.
+  At 2~Hz, periods below one second are out of reach --- no real inconvenience,
+  no mechanical error lives there.
+\end{itemize}
+
+\section{Reading a spectrum}
+
+A sharp peak at a stable period marks a periodic error. A flat spectrum means
+there is no detectable one --- the case of 10Micron mounts after correction.
+Broad, wandering peaks are noise, usually wind.

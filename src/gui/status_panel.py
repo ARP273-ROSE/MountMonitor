@@ -69,7 +69,7 @@ class StatusPanel(QWidget):
         ra_label = QLabel(T("label_ra"))
         ra_label.setFont(mono_font)
         ra_label.setStyleSheet(f"color: {Colors.GRAPH_RA.name()};")
-        ra_label.setToolTip("EN: Right Ascension\nFR: Ascension Droite")
+        ra_label.setToolTip(T("tt_ra"))
         values_layout.addWidget(ra_label, 1, 0)
 
         self._ra_value = QLabel("--:--:--.--")
@@ -89,7 +89,7 @@ class StatusPanel(QWidget):
         dec_label = QLabel(T("label_dec"))
         dec_label.setFont(mono_font)
         dec_label.setStyleSheet(f"color: {Colors.GRAPH_DEC.name()};")
-        dec_label.setToolTip("EN: Declination\nFR: Déclinaison")
+        dec_label.setToolTip(T("tt_dec"))
         values_layout.addWidget(dec_label, 2, 0)
 
         self._dec_value = QLabel("+--:--:--.--")
@@ -109,7 +109,7 @@ class StatusPanel(QWidget):
         self._freq_label = QLabel(f"0.0 Hz | 0 {T('samples')}")
         self._freq_label.setFont(QFont("Consolas", 9))
         self._freq_label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY.name()};")
-        self._freq_label.setToolTip("EN: Polling frequency and sample count\nFR: Fréquence d'acquisition et nombre d'échantillons")
+        self._freq_label.setToolTip(T("tt_freq"))
         values_layout.addWidget(self._freq_label, 3, 0, 1, 4)
 
         layout.addWidget(values_frame)

@@ -1,0 +1,120 @@
+\documentclass[a4paper,11pt,twoside]{report}
+
+% ─── Packages ────────────────────────────────────────────────────
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[english,french,dutch]{babel}
+\usepackage{geometry}
+\geometry{margin=2.2cm, top=2.5cm, bottom=2.5cm}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{colortbl}
+\usepackage{tcolorbox}
+\usepackage{fancyhdr}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{textcomp}
+\usepackage{multicol}
+\usepackage{titlesec}
+\usepackage{float}
+\usepackage{wrapfig}
+\usepackage{pifont}
+\usepackage{listings}
+
+% ─── Colors ──────────────────────────────────────────────────────
+\definecolor{darkblue}{HTML}{1a3a5c}
+\definecolor{accentblue}{HTML}{2c6fbb}
+\definecolor{lightblue}{HTML}{e8f0fa}
+\definecolor{darkgray}{HTML}{333333}
+\definecolor{midgray}{HTML}{666666}
+\definecolor{lightgray}{HTML}{f0f0f0}
+\definecolor{accentred}{HTML}{c85050}
+\definecolor{accentgreen}{HTML}{3a8a3a}
+\definecolor{accentmagenta}{HTML}{c864c8}
+\definecolor{warnbg}{HTML}{fff3e0}
+\definecolor{tipbg}{HTML}{e8f5e9}
+\definecolor{infobg}{HTML}{e3f2fd}
+\definecolor{codebg}{HTML}{f5f5f5}
+\definecolor{rowalt}{HTML}{f2f6fc}
+
+% ─── Hyperlinks ──────────────────────────────────────────────────
+\hypersetup{
+    colorlinks=true,
+    linkcolor=darkblue,
+    urlcolor=accentblue,
+    citecolor=darkblue,
+    pdfauthor={MountMonitor},
+    pdftitle={MountMonitor \VERSION{}},
+    pdfsubject={Telescope mount monitoring},
+}
+
+% ─── Headers/Footers ────────────────────────────────────────────
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[LE,RO]{\thepage}
+\fancyhead[LO]{\nouppercase{\rightmark}}
+\fancyhead[RE]{\nouppercase{\leftmark}}
+\fancyfoot[C]{\small\textcolor{midgray}{MountMonitor v\VERSION{} --- \PIEDPAGE}}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0.2pt}
+
+% ─── Section Styling ────────────────────────────────────────────
+\titleformat{\chapter}[display]
+    {\normalfont\huge\bfseries\color{darkblue}}
+    {\chaptertitlename\ \thechapter}{20pt}{\Huge}
+\titleformat{\section}
+    {\normalfont\Large\bfseries\color{darkblue}}
+    {\thesection}{1em}{}
+\titleformat{\subsection}
+    {\normalfont\large\bfseries\color{accentblue}}
+    {\thesubsection}{1em}{}
+
+% ─── TColorBox styles ───────────────────────────────────────────
+\tcbuselibrary{skins,breakable}
+
+\newtcolorbox{warning}{
+    colback=warnbg, colframe=accentred!70,
+    fonttitle=\bfseries, title={\ding{43} \TITREWARN},
+    breakable, left=4mm, right=4mm
+}
+\newtcolorbox{tip}{
+    colback=tipbg, colframe=accentgreen!70,
+    fonttitle=\bfseries, title={\ding{52} \TITRETIP},
+    breakable, left=4mm, right=4mm
+}
+\newtcolorbox{info}{
+    colback=infobg, colframe=accentblue!70,
+    fonttitle=\bfseries, title={$\mathbf{i}$ \TITREINFO},
+    breakable, left=4mm, right=4mm
+}
+\newtcolorbox{formula}{
+    colback=lightgray, colframe=darkblue!50,
+    fonttitle=\bfseries, title={\TITREFORM},
+    breakable, left=4mm, right=4mm
+}
+
+% ─── Unites d'angle ─────────────────────────────────────────────
+% \arcsec et \arcmin n'existent pas en LaTeX standard, et le caractere
+% degre n'est pas valide en mode mathematique : on les definit une fois,
+% utilisables dans les deux modes.
+\newcommand{\arcsec}{\ensuremath{^{\prime\prime}}}
+\newcommand{\arcmin}{\ensuremath{^{\prime}}}
+\providecommand{\degre}{}\renewcommand{\degre}{\ensuremath{^\circ}}
+
+% ─── Code listings ──────────────────────────────────────────────
+\lstset{
+    backgroundcolor=\color{codebg},
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    frame=single,
+    rulecolor=\color{midgray!40},
+    xleftmargin=4mm,
+}
+
+% colortbl fournit deja \rowcolor : le redefinir faisait echouer la
+% compilation. Les tableaux utilisent \rowcolors (avec s), de xcolor.
+

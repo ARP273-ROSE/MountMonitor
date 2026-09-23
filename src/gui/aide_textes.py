@@ -21,7 +21,7 @@ ephemeris cannot be computed.</li>
 </ol>"""),
 
         ("Arming the logger", """
-<p>With <i>Start recording when the mount starts tracking</i> enabled, the
+<p><i>Start recording when the mount starts tracking</i> is on by default, so the
 record button <b>arms</b> the logger instead of starting it: nothing is written
 until the mount actually tracks. A mount connected at noon for a night starting
 at seven no longer records seven hours of nothing. A second click disarms.</p>
@@ -111,8 +111,8 @@ aucun, et sans lui les éphémérides ne peuvent pas être calculées.</li>
 </ol>"""),
 
         ("Armer l'enregistreur", """
-<p>Avec l'option <i>Démarrer l'enregistrement quand la monture se met à
-suivre</i>, le bouton <b>arme</b> l'enregistreur au lieu de le démarrer : rien
+<p>L'option <i>Démarrer l'enregistrement quand la monture se met à suivre</i>
+est active par défaut : le bouton <b>arme</b> l'enregistreur au lieu de le démarrer : rien
 n'est écrit tant que la monture ne suit pas réellement. Une monture connectée à
 midi pour une nuit qui commence à 19 h n'enregistre plus sept heures de rien.
 Un second clic désarme.</p>
@@ -208,8 +208,8 @@ locatie kunnen de efemeriden niet worden berekend.</li>
 </ol>"""),
 
         ("De logger gereedzetten", """
-<p>Met de optie <i>Registratie starten zodra de montering begint te volgen</i>
-zet de opnameknop de logger <b>gereed</b> in plaats van hem te starten: er
+<p>De optie <i>Registratie starten zodra de montering begint te volgen</i> staat
+standaard aan: de opnameknop zet de logger <b>gereed</b> in plaats van hem te starten: er
 wordt niets geschreven zolang de montering niet werkelijk volgt. Een montering
 die om twaalf uur 's middags wordt aangesloten voor een nacht die om zeven uur
 begint, registreert niet langer zeven uur niets. Een tweede klik schakelt
