@@ -185,22 +185,14 @@ class AnalysisDialog(QDialog):
         header.setFont(QFont("Arial", 14, QFont.Weight.Bold))
         header.setStyleSheet("color: #88ccff; margin: 8px;")
         header.setText(R("titre_rapport", self._lang))
-        header.setToolTip(
-            "EN: Comprehensive analysis of the recorded session\n"
-            "FR: Analyse complète de la session enregistrée\n"
-            "NL: Volledige analyse van de opgenomen sessie"
-        )
+        header.setToolTip(T("tt_an_window"))
         layout.addWidget(header)
 
         # One tab per language. The report is written in ONE language at a
         # time — reading it in two, as before, made it twice as long for no
         # gain. The tab of the interface language is the one shown on opening.
         self._onglets = QTabWidget()
-        self._onglets.setToolTip(
-            "EN: The same report, in each language\n"
-            "FR: Le même rapport, dans chaque langue\n"
-            "NL: Hetzelfde rapport, in elke taal"
-        )
+        self._onglets.setToolTip(T("tt_an_tabs"))
         self._vues = {}
         for code, nom in LANGUES.items():
             vue = QTextEdit()
@@ -224,10 +216,7 @@ class AnalysisDialog(QDialog):
         btn_export = QPushButton(
             R("exporter_txt", self._lang)
         )
-        btn_export.setToolTip(
-            "EN: Export analysis report as text file\n"
-            "FR: Exporter le rapport d'analyse en fichier texte"
-        )
+        btn_export.setToolTip(T("tt_an_export"))
         btn_export.clicked.connect(self._export_report)
         btn_layout.addWidget(btn_export)
 
@@ -236,10 +225,7 @@ class AnalysisDialog(QDialog):
         btn_close = QPushButton(
             R("fermer", self._lang)
         )
-        btn_close.setToolTip(
-            "EN: Close analysis window\n"
-            "FR: Fermer la fenêtre d'analyse"
-        )
+        btn_close.setToolTip(T("tt_an_close"))
         btn_close.clicked.connect(self.accept)
         btn_layout.addWidget(btn_close)
 

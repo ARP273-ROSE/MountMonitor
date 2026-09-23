@@ -14,6 +14,300 @@ TX = {
     "menu_reset": {"en": "Reset", "fr": "Réinitialiser", "nl": "Resetten"},
     "menu_help": {"en": "Help", "fr": "Aide", "nl": "Help"},
     "menu_language": {"en": "Language", "fr": "Langue", "nl": "Taal"},
+
+    "tt_zoom_h": {
+        "en": "Set horizontal zoom to {zoom}x",
+        "fr": "Zoom horizontal {zoom}x",
+        "nl": "Horizontale zoom op {zoom}x zetten"},
+    "tt_bug_desc": {
+        "en": "Describe the issue here...",
+        "fr": "Décrivez le problème ici...",
+        "nl": "Beschrijf het probleem hier..."},
+    "tt_upd_source": {
+        "en": "Running from source — update with git.",
+        "fr": "Lancé depuis les sources — mettez à jour avec git.",
+        "nl": "Vanuit de broncode gestart — werk bij met git."},
+    "tt_upd_failed": {
+        "en": "The update could not be installed:\n{err}\n\n"
+              "Your current version stays in place and works.",
+        "fr": "La mise à jour n'a pas pu être installée :\n{err}\n\n"
+              "Votre version actuelle reste en place et fonctionne.",
+        "nl": "De update kon niet worden geïnstalleerd:\n{err}\n\n"
+              "Uw huidige versie blijft staan en werkt."},
+    "tt_an_window": {
+        "en": "Comprehensive analysis of the recorded session",
+        "fr": "Analyse complète de la session enregistrée",
+        "nl": "Volledige analyse van de opgenomen sessie"},
+    "tt_an_tabs": {
+        "en": "The same report, in each language",
+        "fr": "Le même rapport, dans chaque langue",
+        "nl": "Hetzelfde rapport, in elke taal"},
+    "tt_an_export": {
+        "en": "Export analysis report as text file",
+        "fr": "Exporter le rapport en fichier texte",
+        "nl": "Het rapport als tekstbestand exporteren"},
+    "tt_an_close": {
+        "en": "Close analysis window",
+        "fr": "Fermer la fenêtre d'analyse",
+        "nl": "Het analysevenster sluiten"},
+    # Tooltips. They were hard-coded as "EN: ...\nFR: ..." in the
+    # widgets, which showed both languages at once and none in Dutch.
+    "tt_connect": {
+        "en": "Connect to mount",
+        "fr": "Se connecter à la monture",
+        "nl": "Verbinding maken met de montering"},
+    "tt_disconnect": {
+        "en": "Disconnect from mount",
+        "fr": "Se déconnecter de la monture",
+        "nl": "Verbinding met de montering verbreken"},
+    "tt_open_log": {
+        "en": "Open and analyze a previous log file",
+        "fr": "Ouvrir et analyser un fichier log précédent",
+        "nl": "Een eerder logbestand openen en analyseren"},
+    "tt_open_log10m": {
+        "en": "Analyze 10micron mount internal log files (.log10m)",
+        "fr": "Analyser les fichiers log internes de la monture 10micron (.log10m)",
+        "nl": "Interne logbestanden van de 10Micron-montering analyseren (.log10m)"},
+    "tt_fft_win": {
+        "en": "Open FFT analysis window",
+        "fr": "Ouvrir la fenêtre d'analyse FFT",
+        "nl": "Het FFT-analysevenster openen"},
+    "tt_prefs": {
+        "en": "Open preferences",
+        "fr": "Ouvrir les préférences",
+        "nl": "De voorkeuren openen"},
+    "tt_doc_online": {
+        "en": "Open online documentation",
+        "fr": "Ouvrir la documentation en ligne",
+        "nl": "De online documentatie openen"},
+    "tt_bug_github": {
+        "en": "Report a bug via GitHub Issues",
+        "fr": "Signaler un bug via GitHub Issues",
+        "nl": "Een fout melden via GitHub Issues"},
+    "tt_check_upd": {
+        "en": "Check for new versions on GitHub",
+        "fr": "Vérifier les nouvelles versions sur GitHub",
+        "nl": "Op GitHub naar nieuwe versies zoeken"},
+    "tt_bug_prefilled": {
+        "en": "Open GitHub with pre-filled bug report",
+        "fr": "Ouvrir GitHub avec le rapport pré-rempli",
+        "nl": "GitHub openen met een vooraf ingevuld foutrapport"},
+    "tt_bug_cancel": {
+        "en": "Cancel bug report",
+        "fr": "Annuler le rapport",
+        "nl": "Foutmelding annuleren"},
+    "tt_upd_install": {
+        "en": "Download and install the update",
+        "fr": "Télécharger et installer la mise à jour",
+        "nl": "De update downloaden en installeren"},
+    "tt_upd_skip": {
+        "en": "Skip this update",
+        "fr": "Ignorer cette mise à jour",
+        "nl": "Deze update overslaan"},
+    "tt_obs_name": {
+        "en": "Observatory name",
+        "fr": "Nom de l'observatoire",
+        "nl": "Naam van de sterrenwacht"},
+    "tt_mount_name": {
+        "en": "Mount name",
+        "fr": "Nom de la monture",
+        "nl": "Naam van de montering"},
+    "tt_protocol": {
+        "en": "Communication protocol",
+        "fr": "Protocole de communication",
+        "nl": "Communicatieprotocol"},
+    "tt_mount_ip": {
+        "en": "Mount IP address",
+        "fr": "Adresse IP de la monture",
+        "nl": "IP-adres van de montering"},
+    "tt_mount_port": {
+        "en": "Mount TCP port",
+        "fr": "Port TCP de la monture",
+        "nl": "TCP-poort van de montering"},
+    "tt_serial_port": {
+        "en": "Serial port for mount",
+        "fr": "Port série de la monture",
+        "nl": "Seriële poort van de montering"},
+    "tt_serial_baud": {
+        "en": "Serial speed — must match the mount's own setting (9600 by default)",
+        "fr": "Vitesse de la liaison — elle doit être celle réglée dans la monture (9600 par défaut)",
+        "nl": "Snelheid van de verbinding — moet overeenkomen met de instelling in de montering zelf (standaard 9600)"},
+    "tt_ascom_id": {
+        "en": "ASCOM driver ID",
+        "fr": "Identifiant du driver ASCOM",
+        "nl": "Identificatie van het ASCOM-stuurprogramma"},
+    "tt_ascom_choose": {
+        "en": "Open ASCOM Chooser to select mount driver",
+        "fr": "Ouvrir le sélecteur ASCOM pour choisir le driver",
+        "nl": "De ASCOM-kiezer openen om het stuurprogramma te selecteren"},
+    "tt_ratio": {
+        "en": "Graph to text box height ratio",
+        "fr": "Ratio hauteur graphe/zone texte",
+        "nl": "Hoogteverhouding grafiek/tekstvak"},
+    "tt_language": {
+        "en": "Interface language",
+        "fr": "Langue de l'interface",
+        "nl": "Taal van de interface"},
+    "tt_polling": {
+        "en": "Polling frequency",
+        "fr": "Fréquence d'interrogation",
+        "nl": "Uitleesfrequentie"},
+    "tt_run_range": {
+        "en": "Running STDEV window length",
+        "fr": "Fenêtre de calcul écart-type glissant",
+        "nl": "Vensterlengte voor de lopende standaardafwijking"},
+    "tt_shift_graphs": {
+        "en": "Shift graphs to compensate for running range delay",
+        "fr": "Décaler les graphes pour compenser le délai de la plage glissante",
+        "nl": "Grafieken verschuiven om de vertraging van het lopende bereik te compenseren"},
+    "tt_reference": {
+        "en": "Reference for deviations",
+        "fr": "Référence pour les déviations",
+        "nl": "Referentie voor de afwijkingen"},
+    "tt_tol_ra": {
+        "en": "RA tolerance in arcseconds",
+        "fr": "Tolérance AD en secondes d'arc",
+        "nl": "RK-tolerantie in boogseconden"},
+    "tt_tol_dec": {
+        "en": "DEC tolerance in arcseconds",
+        "fr": "Tolérance DÉC en secondes d'arc",
+        "nl": "DEC-tolerantie in boogseconden"},
+    "tt_tol_ha": {
+        "en": "Display RA tolerance in seconds of time (hour angle)",
+        "fr": "Afficher la tolérance AD en secondes de temps (angle horaire)",
+        "nl": "De RK-tolerantie in tijdseconden tonen (uurhoek)"},
+    "tt_tol_sei": {
+        "en": "Seismic tolerance as percentage of range",
+        "fr": "Tolérance sismique en pourcentage de la plage",
+        "nl": "Seismische tolerantie als percentage van het bereik"},
+    "tt_log_mode": {
+        "en": "What to log",
+        "fr": "Quoi journaliser",
+        "nl": "Wat er geregistreerd wordt"},
+    "tt_site_auto": {
+        "en": "Left empty, the mount is asked (:Gt#)",
+        "fr": "Laissé vide, la monture est interrogée (:Gt#)",
+        "nl": "Leeg gelaten wordt de montering bevraagd (:Gt#)"},
+    "tt_site_lon": {
+        "en": "POSITIVE EAST. The LX200 protocol counts the other way; the conversion is done for you when the mount answers.",
+        "fr": "POSITIF VERS L'EST. Le protocole LX200 compte à l'envers ; la conversion est faite pour vous quand la monture répond.",
+        "nl": "POSITIEF NAAR HET OOSTEN. Het LX200-protocol telt andersom; de omrekening gebeurt voor u zodra de montering antwoordt."},
+    "tt_arm": {
+        "en": "The log button arms the logger; recording starts at the first TRACKING sample",
+        "fr": "Le bouton d'enregistrement arme l'enregistreur ; l'enregistrement démarre au premier échantillon en SUIVI",
+        "nl": "De opnameknop zet de logger gereed; de registratie start bij het eerste meetpunt in VOLGEN"},
+    "tt_pause": {
+        "en": "The session stays open and the file stays the same; samples simply stop. Tracking again resumes in place.",
+        "fr": "La session reste ouverte et le fichier reste le même ; les échantillons cessent, c'est tout. Le retour en suivi reprend sur place.",
+        "nl": "De sessie blijft open en het bestand blijft hetzelfde; de meetpunten stoppen eenvoudigweg. Zodra er weer gevolgd wordt, hervat de registratie ter plaatse."},
+    "tt_pause_delay": {
+        "en": "Grace delay -- slews and autofocus finish well inside it",
+        "fr": "Délai de grâce — slews et autofocus finissent largement avant",
+        "nl": "Respijttijd — zwenkbewegingen en autofocus zijn er ruim binnen klaar"},
+    "tt_sunrise": {
+        "en": "Needs a known site. Only daylight ends a night: a mount that parks at 02:00 and resumes at 03:00 stays one night, one file, one report.",
+        "fr": "Demande un site connu. Seul le jour termine une nuit : une monture qui parque à 02 h et repart à 03 h reste une seule nuit, un seul fichier, un seul rapport.",
+        "nl": "Vereist een bekende locatie. Alleen het daglicht beëindigt een nacht: een montering die om 02:00 parkeert en om 03:00 verdergaat, blijft één nacht, één bestand, één rapport."},
+    "tt_delay_slew": {
+        "en": "Wait time after slew before logging resumes",
+        "fr": "Délai après rotation avant reprise",
+        "nl": "Wachttijd na een zwenkbeweging voordat de registratie hervat"},
+    "tt_axial": {
+        "en": "Axial position monitoring mode",
+        "fr": "Mode de surveillance position axiale",
+        "nl": "Bewakingsmodus voor de aspositie"},
+    "tt_reset_mode": {
+        "en": "When to automatically reset buffers",
+        "fr": "Quand réinitialiser automatiquement les tampons",
+        "nl": "Wanneer de buffers automatisch worden gewist"},
+    "tt_dump_mode": {
+        "en": "When to automatically dump graphs to files",
+        "fr": "Quand exporter automatiquement les graphes",
+        "nl": "Wanneer de grafieken automatisch worden weggeschreven"},
+    "tt_close_mode": {
+        "en": "When to automatically close log files",
+        "fr": "Quand fermer automatiquement les fichiers log",
+        "nl": "Wanneer de logbestanden automatisch worden gesloten"},
+    "tt_history": {
+        "en": "Number of lines in the history text area",
+        "fr": "Nombre de lignes dans la zone d'historique",
+        "nl": "Aantal regels in het geschiedenisvak"},
+    "tt_ntp_on": {
+        "en": "Enable NTP time comparison",
+        "fr": "Activer la comparaison temps NTP",
+        "nl": "De tijdvergelijking met NTP inschakelen"},
+    "tt_ntp_server": {
+        "en": "NTP server address",
+        "fr": "Adresse du serveur NTP",
+        "nl": "Adres van de NTP-server"},
+    "tt_ntp_interval": {
+        "en": "NTP polling interval",
+        "fr": "Intervalle d'interrogation NTP",
+        "nl": "Uitleesinterval voor NTP"},
+    "tt_sei_on": {
+        "en": "Enable seismometer data display",
+        "fr": "Activer l'affichage sismomètre",
+        "nl": "De weergave van de seismometer inschakelen"},
+    "tt_sei_port": {
+        "en": "Serial port for seismometer",
+        "fr": "Port série du sismomètre",
+        "nl": "Seriële poort van de seismometer"},
+    "tt_sei_freq": {
+        "en": "Seismometer sampling frequency",
+        "fr": "Fréquence d'échantillonnage sismomètre",
+        "nl": "Bemonsteringsfrequentie van de seismometer"},
+    "tt_sei_offset": {
+        "en": "Offset to center data around zero",
+        "fr": "Décalage pour centrer les données sur zéro",
+        "nl": "Verschuiving om de gegevens rond nul te centreren"},
+    "tt_sei_range": {
+        "en": "Vertical range for seismic graph",
+        "fr": "Plage verticale du graphe sismique",
+        "nl": "Verticaal bereik van de seismische grafiek"},
+    "tt_chk_refr": {
+        "en": "Verify refraction correction at startup and after each slew",
+        "fr": "Vérifier la correction de réfraction au démarrage et après chaque rotation",
+        "nl": "De refractiecorrectie controleren bij het starten en na elke zwenkbeweging"},
+    "tt_chk_refr_mode": {
+        "en": "Expected refraction correction mode",
+        "fr": "Mode attendu de la correction de réfraction",
+        "nl": "Verwachte modus van de refractiecorrectie"},
+    "tt_chk_rate": {
+        "en": "Verify tracking rate matches expected value",
+        "fr": "Vérifier que la vitesse de suivi correspond à la valeur attendue",
+        "nl": "Controleren of de volgsnelheid overeenkomt met de verwachte waarde"},
+    "tt_chk_rate_val": {
+        "en": "Expected tracking rate",
+        "fr": "Vitesse de suivi attendue",
+        "nl": "Verwachte volgsnelheid"},
+    "tt_chk_gps": {
+        "en": "Verify GPS clock synchronization",
+        "fr": "Vérifier la synchronisation GPS",
+        "nl": "De gps-kloksynchronisatie controleren"},
+    "tt_chk_gps_val": {
+        "en": "Expected GPS sync state",
+        "fr": "État attendu de la synchro GPS",
+        "nl": "Verwachte staat van de gps-synchronisatie"},
+    "tt_chk_dual": {
+        "en": "Verify dual tracking status",
+        "fr": "Vérifier le statut du suivi dual",
+        "nl": "De status van dual tracking controleren"},
+    "tt_chk_dual_val": {
+        "en": "Expected dual tracking state",
+        "fr": "État attendu du suivi dual",
+        "nl": "Verwachte staat van dual tracking"},
+    "tt_ra": {
+        "en": "Right Ascension",
+        "fr": "Ascension Droite",
+        "nl": "Rechte klimming"},
+    "tt_dec": {
+        "en": "Declination",
+        "fr": "Déclinaison",
+        "nl": "Declinatie"},
+    "tt_freq": {
+        "en": "Polling frequency and sample count",
+        "fr": "Fréquence d'acquisition et nombre d'échantillons",
+        "nl": "Uitleesfrequentie en aantal meetpunten"},
     "consent_question": {
         "en": "Allow MountMonitor to report its own problems?",
         "fr": "Autoriser MountMonitor à signaler ses problèmes ?",

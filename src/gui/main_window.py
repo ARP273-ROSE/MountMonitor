@@ -174,14 +174,14 @@ class MainWindow(QMainWindow):
 
         connect_action = QAction(T("connecting").rstrip("..."), self)
         connect_action.setShortcut(QKeySequence("Ctrl+K"))
-        connect_action.setToolTip("EN: Connect to mount\nFR: Se connecter à la monture")
+        connect_action.setToolTip(T("tt_connect"))
         connect_action.triggered.connect(self._connect)
         file_menu.addAction(connect_action)
         self._connect_action = connect_action
 
         disconnect_action = QAction(T("disconnected"), self)
         disconnect_action.setShortcut(QKeySequence("Ctrl+D"))
-        disconnect_action.setToolTip("EN: Disconnect from mount\nFR: Se déconnecter de la monture")
+        disconnect_action.setToolTip(T("tt_disconnect"))
         disconnect_action.triggered.connect(self._disconnect)
         disconnect_action.setEnabled(False)
         file_menu.addAction(disconnect_action)
@@ -191,19 +191,13 @@ class MainWindow(QMainWindow):
 
         open_log_action = QAction(T("menu_open_log"), self)
         open_log_action.setShortcut(QKeySequence("Ctrl+O"))
-        open_log_action.setToolTip(
-            "EN: Open and analyze a previous log file\n"
-            "FR: Ouvrir et analyser un fichier log précédent"
-        )
+        open_log_action.setToolTip(T("tt_open_log"))
         open_log_action.triggered.connect(self._open_log_file)
         file_menu.addAction(open_log_action)
 
         open_log10m_action = QAction(T("menu_open_log10m"), self)
         open_log10m_action.setShortcut(QKeySequence("Ctrl+Shift+O"))
-        open_log10m_action.setToolTip(
-            "EN: Analyze 10micron mount internal log files (.log10m)\n"
-            "FR: Analyser les fichiers log internes de la monture 10micron (.log10m)"
-        )
+        open_log10m_action.setToolTip(T("tt_open_log10m"))
         open_log10m_action.triggered.connect(self._open_log10m_files)
         file_menu.addAction(open_log10m_action)
 
@@ -221,7 +215,7 @@ class MainWindow(QMainWindow):
         hz_menu = view_menu.addMenu(T("horizontal_zoom"))
         for zoom in [1, 2, 3, 5, 10]:
             action = QAction(f"{zoom}x", self)
-            action.setToolTip(f"EN: Set horizontal zoom to {zoom}x\nFR: Zoom horizontal {zoom}x")
+            action.setToolTip(T("tt_zoom_h").format(zoom=zoom))
             action.triggered.connect(lambda checked, z=zoom: self._set_horizontal_zoom(z))
             hz_menu.addAction(action)
 
@@ -241,7 +235,7 @@ class MainWindow(QMainWindow):
 
         fft_action = QAction(T("fft_title"), self)
         fft_action.setShortcut(QKeySequence("Ctrl+F"))
-        fft_action.setToolTip("EN: Open FFT analysis window\nFR: Ouvrir la fenêtre d'analyse FFT")
+        fft_action.setToolTip(T("tt_fft_win"))
         fft_action.triggered.connect(self._show_fft)
         view_menu.addAction(fft_action)
 
@@ -263,7 +257,7 @@ class MainWindow(QMainWindow):
         edit_menu = menubar.addMenu(T("menu_edit"))
         pref_action = QAction(T("menu_preferences"), self)
         pref_action.setShortcut(QKeySequence("Ctrl+,"))
-        pref_action.setToolTip("EN: Open preferences\nFR: Ouvrir les préférences")
+        pref_action.setToolTip(T("tt_prefs"))
         pref_action.triggered.connect(self._show_preferences)
         edit_menu.addAction(pref_action)
 
@@ -298,9 +292,7 @@ class MainWindow(QMainWindow):
         help_menu.addAction(help_action)
 
         online_help_action = QAction(T("menu_online_help"), self)
-        online_help_action.setToolTip(
-            "EN: Open online documentation\nFR: Ouvrir la documentation en ligne"
-        )
+        online_help_action.setToolTip(T("tt_doc_online"))
         online_help_action.triggered.connect(self._show_online_help)
         help_menu.addAction(online_help_action)
 
@@ -311,18 +303,12 @@ class MainWindow(QMainWindow):
         help_menu.addAction(about_action)
 
         bug_action = QAction(T("menu_report_bug"), self)
-        bug_action.setToolTip(
-            "EN: Report a bug via GitHub Issues\n"
-            "FR: Signaler un bug via GitHub Issues"
-        )
+        bug_action.setToolTip(T("tt_bug_github"))
         bug_action.triggered.connect(self._report_bug)
         help_menu.addAction(bug_action)
 
         update_action = QAction(T("menu_check_updates"), self)
-        update_action.setToolTip(
-            "EN: Check for new versions on GitHub\n"
-            "FR: Vérifier les nouvelles versions sur GitHub"
-        )
+        update_action.setToolTip(T("tt_check_upd"))
         update_action.triggered.connect(self._check_updates_manual)
         help_menu.addAction(update_action)
 
@@ -371,6 +357,7 @@ class MainWindow(QMainWindow):
 
         # Left: graphs stacked vertically
         graph_splitter = QSplitter(Qt.Orientation.Vertical)
+        self._graph_splitter = graph_splitter
 
         self._ra_graph = TrackingGraph(
             T("right_ascension"), Colors.GRAPH_RA
@@ -399,6 +386,7 @@ class MainWindow(QMainWindow):
 
         # Main horizontal splitter
         h_splitter = QSplitter(Qt.Orientation.Horizontal)
+        self._h_splitter = h_splitter
         h_splitter.addWidget(graph_splitter)
         h_splitter.addWidget(self._status_panel)
 
@@ -407,6 +395,11 @@ class MainWindow(QMainWindow):
         h_splitter.setSizes([ratio * 200, 200])
 
         main_layout.addWidget(h_splitter)
+
+        # Panel sizes survive a restart. The read-me has long promised
+        # "persistent layout"; the splitters were in fact rebuilt at their
+        # default proportions every time, so every resize was lost on close.
+        self._restaurer_panneaux()
 
     def _create_statusbar(self):
         """Create status bar."""
@@ -1448,6 +1441,7 @@ class MainWindow(QMainWindow):
         etait sauvegarde, et l'affichage n'en tenait aucun compte.
         """
         self._settings.set("horizontal_zoom", zoom)
+        self._settings.save()
         self._appliquer_zoom_horizontal(zoom)
 
     def _appliquer_zoom_horizontal(self, zoom: int):
@@ -1459,6 +1453,7 @@ class MainWindow(QMainWindow):
         self._ra_graph.set_vertical_zoom(mode)
         self._dec_graph.set_vertical_zoom(mode)
         self._settings.set("vertical_zoom_mode", mode)
+        self._settings.save()
 
     def _reset_minmax(self):
         self._processor.reset_minmax()
@@ -1855,10 +1850,7 @@ class MainWindow(QMainWindow):
 
         # Description text edit
         desc_edit = QTextEdit()
-        desc_edit.setPlaceholderText(
-            "EN: Describe the issue here...\n"
-            "FR: Décrivez le problème ici..."
-        )
+        desc_edit.setPlaceholderText(T("tt_bug_desc"))
         layout.addWidget(desc_edit)
 
         # Buttons
@@ -1866,16 +1858,11 @@ class MainWindow(QMainWindow):
         send_btn = buttons.addButton(
             T("bug_report_send"), QDialogButtonBox.ButtonRole.AcceptRole
         )
-        send_btn.setToolTip(
-            "EN: Open GitHub with pre-filled bug report\n"
-            "FR: Ouvrir GitHub avec le rapport pré-rempli"
-        )
+        send_btn.setToolTip(T("tt_bug_prefilled"))
         cancel_btn = buttons.addButton(
             T("bug_report_cancel"), QDialogButtonBox.ButtonRole.RejectRole
         )
-        cancel_btn.setToolTip(
-            "EN: Cancel bug report\nFR: Annuler le rapport"
-        )
+        cancel_btn.setToolTip(T("tt_bug_cancel"))
         layout.addWidget(buttons)
 
         def on_accept():
@@ -1935,8 +1922,7 @@ class MainWindow(QMainWindow):
         if trouve == 'sources':
             QMessageBox.information(
                 self, T("menu_check_updates"),
-                "EN: Running from source — update with git.\n"
-                "FR : Version de developpement — mise a jour par git.")
+                T("tt_upd_source"))
             return
 
         if not trouve:
@@ -1987,16 +1973,11 @@ class MainWindow(QMainWindow):
         download_btn = buttons.addButton(
             T("update_download"), QDialogButtonBox.ButtonRole.AcceptRole
         )
-        download_btn.setToolTip(
-            "EN: Download and install the update\n"
-            "FR: Télécharger et installer la mise à jour"
-        )
+        download_btn.setToolTip(T("tt_upd_install"))
         skip_btn = buttons.addButton(
             T("update_skip"), QDialogButtonBox.ButtonRole.RejectRole
         )
-        skip_btn.setToolTip(
-            "EN: Skip this update\nFR: Ignorer cette mise à jour"
-        )
+        skip_btn.setToolTip(T("tt_upd_skip"))
         layout.addWidget(buttons)
 
         def on_download():
@@ -2033,11 +2014,7 @@ class MainWindow(QMainWindow):
             dlg.close()
             QMessageBox.warning(
                 self, T("update_available"),
-                "EN: The update could not be installed:\n{err}\n\n"
-                "Your current version stays in place and works.\n\n"
-                "FR : La mise a jour n'a pas pu etre installee :\n{err}\n\n"
-                "Votre version actuelle reste en place et fonctionne."
-                .format(err=e))
+                T("tt_upd_failed").format(err=e))
             return
         dlg.close()
 
@@ -2067,6 +2044,24 @@ class MainWindow(QMainWindow):
 
     # ── Window lifecycle ─────────────────────────────────────────
 
+    def _restaurer_panneaux(self):
+        """Put the splitters back where the user last left them."""
+        from PyQt6.QtCore import QByteArray
+        for cle, sp in (("splitter_graphs", getattr(self, '_graph_splitter', None)),
+                        ("splitter_main", getattr(self, '_h_splitter', None))):
+            etat = self._settings.get(cle)
+            if sp is not None and etat:
+                try:
+                    sp.restoreState(QByteArray.fromBase64(etat.encode('ascii')))
+                except Exception as exc:
+                    logger.debug(f"Splitter {cle} not restored: {exc}")
+
+    def _enregistrer_panneaux(self):
+        for cle, sp in (("splitter_graphs", getattr(self, '_graph_splitter', None)),
+                        ("splitter_main", getattr(self, '_h_splitter', None))):
+            if sp is not None:
+                self._settings.set(cle, bytes(sp.saveState().toBase64()).decode('ascii'))
+
     def closeEvent(self, event):
         """Handle window close: save settings, stop everything."""
         # Save window geometry
@@ -2077,6 +2072,7 @@ class MainWindow(QMainWindow):
         if self._fft_window:
             self._settings.set("fft_width", self._fft_window.width())
             self._settings.set("fft_height", self._fft_window.height())
+        self._enregistrer_panneaux()
         self._settings.save()
 
         # Stop everything

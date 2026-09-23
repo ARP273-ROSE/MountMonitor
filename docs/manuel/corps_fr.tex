@@ -1,0 +1,568 @@
+\part{Comprendre}
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{Coordonnées célestes}
+\label{ch:coords}
+
+\section{La sphère céleste}
+
+Vue du sol, la voûte étoilée se comporte comme une sphère qui tourne d'est en
+ouest autour d'un axe passant par les pôles célestes. Les astres sont à des
+distances très différentes, mais il suffit de leur position sur cette sphère
+fictive pour les repérer et les suivre.
+
+La Terre boucle un tour sur elle-même en \textbf{23~h 56~min 4~s} --- le
+\emph{jour sidéral}, plus court que les 24~heures du jour solaire. C'est à
+cette cadence-là, et non à celle de l'horloge, qu'une monture doit tourner.
+
+\section{Ascension droite}
+
+L'\textbf{ascension droite} (AD, \emph{right ascension} en anglais) est
+l'équivalent céleste de la longitude. Elle se compte en \textbf{heures} et non
+en degrés, de 0~h à 24~h, depuis le point vernal.
+
+\begin{formula}
+\[
+1\,\text{h} = 15\degre{} \qquad 1\,\text{min} = 15' \qquad 1\,\text{s} = 15''
+\]
+Ainsi AD = 02~h 44~min 08~s vaut $2\times15\degre{} + 44\times0{,}25\degre{} +
+8\times\frac{15}{3600}\degre{} = 41{,}03\degre$.
+\end{formula}
+
+\begin{info}
+L'AD est la coordonnée critique pour le suivi : une erreur d'une seconde de
+temps vaut 15 secondes d'arc sur le ciel à l'équateur céleste. Sur un
+échantillonnage de 1,6\arcsec/pixel, cela fait une dizaine de pixels de
+traînée.
+\end{info}
+
+\section{Déclinaison}
+
+La \textbf{déclinaison} (DÉC) est l'équivalent de la latitude : la distance
+angulaire au nord ou au sud de l'équateur céleste, de $-90\degre$ à $+90\degre$. Sur une
+monture correctement alignée, l'axe de déclinaison ne bouge pas pendant le
+suivi.
+
+\section{Angle horaire}
+
+L'\textbf{angle horaire} mesure la distance d'un astre au méridien local. Il
+augmente sans cesse avec la rotation de la Terre.
+
+\begin{formula}
+\[
+\text{HA} = \text{temps sidéral local} - \text{AD}
+\]
+Une tolérance en AD s'exprime en secondes d'arc ou en secondes de temps. La
+conversion dépend de la déclinaison :
+\[
+\text{secondes de temps} = \frac{\text{secondes d'arc}}{15 \cos(\text{DÉC})}
+\]
+\end{formula}
+
+\begin{tip}
+Près du pôle céleste, une erreur en AD déplace très peu l'étoile sur le
+capteur : le cosinus de la déclinaison l'atténue. Les objets circumpolaires
+pardonnent donc davantage les défauts de suivi en AD --- mais pas ceux en
+déclinaison.
+\end{tip}
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{Montures équatoriales}
+\label{ch:mounts}
+
+\section{Principe}
+
+Une \textbf{monture équatoriale} annule la rotation terrestre en faisant
+tourner le tube autour d'un axe parallèle à celui de la Terre : l'axe polaire.
+
+\begin{itemize}
+  \item \textbf{Axe polaire (AD)} : tourne à la vitesse sidérale.
+  \item \textbf{Axe de déclinaison} : immobile pendant le suivi, en théorie.
+\end{itemize}
+
+\begin{formula}
+\[
+\omega = \frac{1\,296\,000''}{86\,164{,}09\,\text{s}} \approx
+15{,}041\,\text{secondes d'arc par seconde}
+\]
+\end{formula}
+
+Tout écart à cette vitesse, ou tout défaut d'alignement de l'axe polaire, se
+traduit par une dérive que l'image enregistre.
+
+\section{Les montures 10Micron}
+
+Les 10Micron (GM1000 HPS et au-delà) portent des \textbf{encodeurs absolus} :
+elles connaissent leur position même après une coupure, là où un encodeur
+relatif la perd. S'y ajoutent un entraînement par vis sans fin, une correction
+d'erreur périodique et surtout un \textbf{modèle de pointage} interne bâti sur
+plusieurs dizaines d'étoiles.
+
+C'est ce modèle qui rend possible l'imagerie \textbf{non guidée} : la monture
+ne se contente pas de tourner à la vitesse sidérale, elle applique des taux
+corrigés qui absorbent la flexion, la réfraction et le défaut résiduel
+d'alignement polaire.
+
+\begin{warning}
+Conséquence directe, et souvent mal comprise : sur une monture à modèle,
+\textbf{l'erreur d'alignement polaire est dans le modèle} et déjà compensée par
+les taux de suivi. Une dérive résiduelle en déclinaison n'appelle donc pas un
+coup de vis d'azimut, mais des \textbf{points de modèle supplémentaires près de
+la cible}.
+\end{warning}
+
+Ces montures parlent un \textbf{LX200 étendu} : au-delà des commandes standard,
+elles exposent les positions brutes d'axes, les taux appliqués, l'état du
+modèle et les données d'environnement. MountMonitor s'appuie sur ces
+extensions quand elles sont disponibles.
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{Ce qui dégrade le suivi}
+\label{ch:errors}
+
+Aucune monture ne suit parfaitement. Les causes se superposent, et chacune
+laisse une signature différente dans l'enregistrement.
+
+\section{Erreur périodique}
+
+La vis sans fin n'est jamais parfaitement ronde ni parfaitement centrée. Son
+défaut se répète à chaque tour et produit une oscillation de période fixe ---
+quelques minutes le plus souvent. C'est précisément ce qu'une analyse de
+Fourier sait extraire (chapitre~\ref{ch:fft}).
+
+\section{Alignement polaire}
+
+Si l'axe polaire ne vise pas exactement le pôle céleste, l'astre dérive
+lentement en déclinaison, d'autant plus vite que l'on s'éloigne du méridien.
+Sur une monture sans modèle, la réponse est mécanique. Sur une monture à
+modèle, voir l'avertissement du chapitre précédent.
+
+\section{Réfraction atmosphérique}
+
+L'atmosphère relève les astres d'autant plus qu'ils sont bas : environ
+$34'$ à l'horizon, $1'$ à $45\degre$ de hauteur. La réfraction varie donc pendant la
+nuit, et sa dérive se confond facilement avec un défaut d'alignement.
+
+\section{Perturbations mécaniques et vibrations}
+
+Vent, câbles qui tirent, sol qui bouge, passage du méridien : autant de
+secousses ponctuelles qui n'ont rien de périodique. Elles se voient comme des
+pics isolés, et c'est ce qui permet de les distinguer du reste.
+
+\section{Mouvements commandés}
+
+Ceux-là ne sont pas des erreurs du tout. Entre deux poses, le séquenceur
+déplace délibérément la monture --- \textbf{dither} pour décorréler le bruit,
+\textbf{recentrage} quand la cible a glissé --- et la monture \emph{reste} à sa
+nouvelle position. Les confondre avec de l'erreur de suivi est la faute la plus
+coûteuse qu'on puisse commettre en lisant un enregistrement, et le
+chapitre~\ref{ch:stats} y est consacré.
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{Lire les chiffres}
+\label{ch:stats}
+
+\begin{warning}
+Ce chapitre est le plus important du manuel. Un enregistrement de suivi se lit
+de travers avec une facilité déconcertante, et le chiffre qu'on en tire est
+alors faux d'un facteur plusieurs centaines.
+\end{warning}
+
+\section{Le signal est un escalier}
+
+Voici ce qu'enregistre réellement une nuit d'imagerie non guidée : la monture
+tient sa position à une fraction de seconde d'arc, puis le séquenceur la
+déplace d'un dither, et elle tient sa nouvelle position tout aussi bien. Le
+tracé n'est pas une ligne bruitée autour d'une moyenne : c'est un
+\textbf{escalier}.
+
+Un écart-type calculé sur toute la nuit mesure alors la hauteur des marches,
+pas la qualité du suivi. Et retirer une droite --- ce que fait un
+« détrendage » classique --- ne retire pas un escalier.
+
+\begin{info}
+Sur une session réelle de huit heures et demie, l'écart quadratique moyen brut
+donnait \textbf{86,3\arcsec}, un verdict désastreux. La monture tenait en
+réalité chaque position à \textbf{0,18\arcsec}. Le rapport entre les deux
+chiffres est de 480.
+\end{info}
+
+\section{Le jitter}
+
+Le \textbf{jitter} est la dispersion que montre la monture \emph{pendant}
+qu'elle tient une position. C'est le seul chiffre qui étale une étoile sur le
+capteur, et c'est celui sur lequel MountMonitor fonde sa note.
+
+Il se mesure entre deux repositionnements, jamais autour d'une droite. Le
+programme découpe l'enregistrement aux sauts, écarte deux échantillons après
+chacun --- le mouvement lui-même n'est pas du suivi --- et prend la médiane des
+dispersions par palier.
+
+\begin{tip}
+Cette façon de faire a une propriété qui vaut d'être notée : une séquence qui
+dithère à chaque pose ne sort pas moins bonne qu'une séquence qui n'en fait
+jamais. Le chiffre décrit la monture, pas le séquenceur.
+\end{tip}
+
+\section{Les mouvements commandés}
+
+Ils sont comptés et classés à part :
+
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Classe} & \textbf{Ce que c'est} \\
+\midrule
+Dither & Petit déplacement entre deux poses, pour décorréler le bruit. \\
+Recentrage & Déplacement plus ample, qui ramène la cible où elle doit être. \\
+Non stabilisé & La dispersion qui suit reste plusieurs fois la normale. C'est
+celui-là qui mérite un coup d'œil. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{warning}
+Un franchissement de seuil n'est pas un mouvement. Un recentrage de 70\arcsec{}
+met plusieurs échantillons à s'accomplir et déclenche le seuil à chacun : une
+nuit comptait ainsi 98 franchissements pour 53 mouvements réels, avec une
+amplitude médiane dix fois trop petite. MountMonitor regroupe les
+franchissements séparés de moins de dix secondes.
+\end{warning}
+
+\section{La dérive lente}
+
+Elle est donnée par heure et par pose. Sur une monture non guidée, chaque
+dither l'annule : ce qui compte n'est donc pas la dérive sur la nuit, mais le
+déplacement qu'elle produit \emph{pendant une pose}.
+
+\begin{formula}
+\[
+\text{déplacement sur une pose} = \text{dérive (\arcsec/h)} \times
+\frac{\text{durée de pose (s)}}{3600}
+\]
+Une dérive de $-16{,}8\arcsec$/h déplace donc l'étoile de $0{,}84\arcsec$ sur
+une pose de 180~s.
+\end{formula}
+
+\section{L'écart-type glissant}
+
+Calculé en direct sur une fenêtre de 60 à 900 secondes, il sert à voir
+\emph{quand} quelque chose s'est produit, pas à noter la nuit. Après un
+changement de cible, une coupure d'acquisition ou un repositionnement, sa
+fenêtre chevauche le mouvement et le décrit lui, pas le suivi : ces valeurs-là
+sont écartées du rapport.
+
+\section{La note}
+
+Elle est fondée sur le jitter combiné, avec des seuils adaptés au type de
+monture. Une 10Micron non guidée est jugée sur des seuils plus larges qu'une
+monture guidée, parce que ce ne sont pas les mêmes ordres de grandeur.
+
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{lXX}
+\toprule
+\textbf{Note} & \textbf{Monture guidée} & \textbf{Non guidée de précision} \\
+\midrule
+Excellent & $< 0{,}5\arcsec$ & $< 2{,}0\arcsec$ \\
+Bon       & $< 1{,}5\arcsec$ & $< 4{,}0\arcsec$ \\
+Correct   & $< 3{,}0\arcsec$ & $< 8{,}0\arcsec$ \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{tip}
+Rapportez toujours la note à votre échantillonnage. À 1,6\arcsec/pixel, un
+jitter de 0,5\arcsec{} fait trembler l'étoile d'un tiers de pixel : invisible
+sur l'image finale.
+\end{tip}
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{L'analyse de Fourier}
+\label{ch:fft}
+
+\section{À quoi elle sert}
+
+Une transformée de Fourier décompose un signal en somme de sinusoïdes. Sur un
+enregistrement de suivi, elle fait ressortir ce qui \emph{se répète} --- et une
+erreur périodique de vis sans fin se répète, par construction.
+
+MountMonitor cherche dans la plage de \textbf{2 à 15 minutes}, celle où tombent
+les périodes de vis des montures courantes.
+
+\section{Deux précautions}
+
+\begin{itemize}
+  \item La transformée porte sur les déviations \textbf{détrendées}. Une dérive
+  linéaire n'est pas périodique, mais sur une fenêtre finie elle produit une
+  grosse composante basse fréquence qui masquerait ce qu'on cherche.
+  \item La \textbf{limite de Nyquist} impose d'échantillonner au moins deux
+  fois par période. À 2~Hz, les périodes inférieures à la seconde sont hors de
+  portée --- ce qui n'est pas gênant, aucune erreur mécanique n'y loge.
+\end{itemize}
+
+\section{Lire un spectre}
+
+Un pic net à une période stable désigne une erreur périodique. Un spectre plat
+signifie qu'il n'y en a pas de décelable --- le cas des 10Micron après
+correction. Des pics larges et mouvants sont du bruit, du vent le plus souvent.
+
+% ═══════════════════════════════════════════════════════════════════
+\part{Utiliser}
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{Installation}
+\label{ch:install}
+
+\section{Systèmes pris en charge}
+
+Les paquets publiés embarquent leur propre Python et leur propre Qt : rien
+d'autre n'est à installer. En revanche ils exigent un système assez récent,
+parce que les binaires Qt qu'ils contiennent l'exigent.
+
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{lXl}
+\toprule
+\textbf{Système} & \textbf{Minimum} & \textbf{Architecture} \\
+\midrule
+Windows & Windows 10 (1809) & x64 \\
+macOS & macOS 11 Big Sur & Apple Silicon \emph{et} Intel \\
+Linux & glibc 2.28 --- Debian 11, Ubuntu 20.04, RHEL 8 & x86\_64 \\
+Linux ARM & glibc 2.39 --- Ubuntu 24.04 & arm64 \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{warning}
+Choisissez le paquet macOS qui correspond à votre machine :
+\texttt{-macos-arm64.dmg} pour un Mac Apple Silicon, \texttt{-macos-x86\_64.dmg}
+pour un Mac Intel. Le Python embarqué est propre à une architecture même si Qt,
+lui, est universel : le mauvais paquet ne démarrera pas du tout.
+\end{warning}
+
+\section{Poser le programme}
+
+Sur Windows, l'installeur s'occupe de tout. Sur macOS, glissez l'application
+dans le dossier Applications. Sur Linux, \texttt{installer.sh} l'installe dans
+le profil de l'utilisateur, sans \texttt{sudo} ni gestionnaire de paquets.
+
+Les mises à jour sont ensuite vérifiées discrètement à chaque démarrage et
+proposées quand il y en a.
+
+\section{Premier essai sans monture}
+
+Le mode simulation permet de tout parcourir sans matériel :
+
+\begin{lstlisting}[language=bash]
+MountMonitor --sim-all
+\end{lstlisting}
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{Réglages}
+\label{ch:config}
+
+\section{Connexion}
+
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Protocole} & \textbf{Quand l'employer} \\
+\midrule
+LX200 TCP/IP & 10Micron en réseau. Port 3492 par défaut. \\
+LX200 série & Liaison RS-232, 9600 8N1 d'origine sur les 10Micron. \\
+ASCOM & Windows uniquement, via le pilote du constructeur. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Le site d'observation}
+
+\begin{warning}
+Renseignez \textbf{latitude, longitude et altitude} dans les préférences. La
+monture est interrogée en premier (\texttt{:Gt\#} et \texttt{:Gg\#}), mais
+beaucoup d'installations ne lui ont jamais transmis leur site et elle ne répond
+alors rien. Sans site, les éphémérides de la nuit ne peuvent pas être
+calculées.
+
+La longitude se saisit \textbf{positive vers l'est}. Le protocole LX200 la
+compte à l'envers ; la conversion est faite pour vous quand la monture répond.
+\end{warning}
+
+\section{Tolérances et fenêtre glissante}
+
+La tolérance est un seuil d'alerte que vous fixez. Une règle simple : prenez
+votre échantillonnage en secondes d'arc par pixel. Une tolérance égale à
+l'échantillonnage est stricte, le double est confortable.
+
+La fenêtre de l'écart-type glissant se règle de 60 à 900 secondes. Soixante
+secondes réagissent vite, neuf cents lissent une longue session.
+
+\section{L'armement de l'enregistreur}
+
+Deux réglages commandent le comportement du bouton d'enregistrement.
+
+\textbf{Démarrer l'enregistrement quand la monture se met à suivre}, actif par
+défaut. Le bouton \emph{arme} alors l'enregistreur au lieu de le démarrer : rien n'est écrit tant
+que la monture ne suit pas. Une monture connectée à midi pour une nuit qui
+commence à 19~h n'enregistre plus sept heures de rien. Un second clic désarme.
+
+\textbf{Suspendre quand la monture cesse de suivre}, actif par défaut, avec un
+délai de grâce de deux minutes. Le délai existe pour une raison : un arrêt peut être
+passager --- retournement au méridien, autofocus, slew entre deux cibles ---
+et couper au premier échantillon percerait un trou à chaque dither.
+
+\textbf{Terminer la nuit au lever du Soleil}, actif par défaut. Une nuit est un
+tout : si la
+monture se parque à 2~h et repart à 3~h, l'enregistrement se suspend puis
+reprend \emph{dans le même fichier}. Seul le jour clôt la session et déclenche
+le rapport --- et seulement si le Soleil est réellement passé sous l'horizon
+pendant la session, pour qu'un essai de jour ne se referme pas sur lui-même.
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{Une nuit d'observation}
+\label{ch:usage}
+
+\section{Déroulement}
+
+\begin{enumerate}
+  \item Connecter la monture, vérifier que l'état passe en suivi.
+  \item Armer l'enregistreur --- ou le démarrer, si l'armement est désactivé.
+  \item Laisser tourner. Le rapport s'écrira tout seul à la fin.
+\end{enumerate}
+
+\section{Ce qu'il faut surveiller en direct}
+
+\begin{itemize}
+  \item \textbf{L'écart-type glissant}, plus que la déviation instantanée : il
+  dit si la monture tient sa position.
+  \item \textbf{Les alertes de tolérance}, qui signalent un dépassement.
+  \item \textbf{La marge au point de rosée}, si un capteur d'environnement est
+  branché.
+\end{itemize}
+
+\begin{tip}
+Un pic isolé n'est presque jamais la monture : c'est un coup de vent, un câble,
+un pas trop près du pied. Ce qui compte est le niveau \emph{entre} les pics.
+\end{tip}
+
+\section{Les éphémérides de la nuit}
+
+Calculées depuis le site, elles donnent le coucher, le crépuscule nautique, la
+nuit noire, le lever --- et surtout la part de nuit noire que la session a
+réellement couverte. Une nuit commencée une heure trop tard perd une heure
+qu'on ne rattrape pas, et c'est plus utile de le lire à côté des chiffres de
+suivi qu'après coup.
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{Les fichiers}
+\label{ch:files}
+
+\section{Ce qu'une session écrit}
+
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Extension} & \textbf{Contenu} \\
+\midrule
+\texttt{.dat} & Les échantillons : heure, AD, DÉC, écarts-types, état. \\
+\texttt{.dti} & Les mesures de synchronisation PC / monture. \\
+\texttt{.fft} & Les spectres enregistrés en cours de session. \\
+\texttt{.env} & Température, pression, humidité, quand la monture les donne. \\
+\texttt{.log} & Les événements : connexions, slews, alertes, suspensions. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+L'en-tête du \texttt{.dat} porte le site et le décalage horaire. C'est ce qui
+permet de recalculer les crépuscules en relecture, longtemps après que la
+monture a été débranchée.
+
+\section{Le rapport de nuit}
+
+Il est écrit automatiquement en fin de session, à côté du \texttt{.dat}, en
+\textbf{un fichier par langue}. On n'a rien à demander.
+
+\section{La relecture}
+
+\textbf{Fichier $\rightarrow$ Ouvrir un log} relit une session terminée et
+reconstruit toute l'analyse : statistiques par cible, mouvements commandés,
+dérive, spectres, éphémérides. Les onglets de langue permettent de lire le même
+rapport dans les trois langues.
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{Quand quelque chose ne va pas}
+\label{ch:trouble}
+
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Symptôme} & \textbf{Piste} \\
+\midrule
+Pas de connexion réseau & Vérifier l'adresse et le port 3492, et que rien
+d'autre ne tient déjà la session --- une 10Micron n'en accepte qu'une. \\
+Liaison série muette & Les deux bouts doivent s'accorder sur la vitesse. Les
+10Micron sortent d'usine en 9600 bauds, et le menu de la monture permet d'en
+changer. \\
+Dérive en déclinaison & Sur une monture à modèle, ajouter des points près de la
+cible. La vis d'azimut n'est pas la réponse. \\
+Note médiocre, monture calme & Lire le chapitre~\ref{ch:stats} : c'est souvent
+la lecture qui est fausse, pas la monture. \\
+Écart-type glissant absurde & Il est normal juste après un slew ou un
+repositionnement : sa fenêtre enjambe le mouvement. Le rapport écarte ces
+valeurs. \\
+Pas d'éphémérides & Le site n'est pas renseigné. Préférences, section site. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{Référence}
+\label{ch:ref}
+
+\section{Raccourcis}
+
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Touches} & \textbf{Action} \\
+\midrule
+\texttt{F1} & Aide \\
+\texttt{Ctrl+,} & Préférences \\
+\texttt{Ctrl+O} & Ouvrir un log \\
+\texttt{Ctrl+Q} & Quitter \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Langue}
+
+Le menu \textbf{Langue} propose le français, l'anglais et le néerlandais, plus
+la détection automatique depuis le système. Chaque entrée est écrite dans sa
+propre langue : qui se retrouve dans la mauvaise ne peut pas lire la langue
+courante pour s'en sortir. Le changement prend effet au démarrage suivant.
+
+\section{Signalement des incidents}
+
+Si le programme plante, se fige ou refuse de démarrer, il peut le signaler
+lui-même. La question vous est posée une seule fois, et rien d'autre n'est
+jamais envoyé : ni vos données de suivi, ni vos noms de fichiers, ni votre nom
+d'utilisateur. Tous les chemins sont anonymisés.
+
+\section{Historique des versions}
+
+Le détail des changements, avec les chiffres mesurés qui les justifient, se
+trouve dans le fichier \texttt{CHANGELOG.md} livré avec le programme.
+
+\section{Origine}
+
+MountMonitor est une réécriture indépendante en Python et PyQt6 du
+MountMonitor v3.37 de \textbf{Nicolàs de Hilster} (2018--2021), écrit en Java.
+Aucun code du programme d'origine n'y figure. La licence MIT du présent
+programme ne couvre que cette réécriture ; l'\oe uvre originale reste soumise
+aux conditions de son auteur.
