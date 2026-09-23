@@ -6,6 +6,108 @@ behaviour changes, the patch number when only a defect is fixed.
 
 Figures quoted below were measured on real sessions, not estimated.
 
+## 1.28.0 — 2026-09-24
+
+### Fixed
+- **The graphs stopped scrolling.** A regression of my own: when the horizontal
+  zoom was added, the window start returned 0.0 for any zoom of 1 or less --
+  the beginning of the buffer. Zoom 1 being the default, the axis started at
+  zero and stretched as the night went on, crushing the data into the middle.
+  After seven hours it reached 26 ks and displayed a 1960" standard deviation
+  while the side panel gave the true figures: 0.06" in RA, 0.14" in DEC.
+- Two poller messages were hard-coded in English, and one of them was wrong.
+  "Logging started." does not announce a recording: it reports that the mount
+  checks passed after a slew. Returning at every dither, it made the session
+  look as though it restarted every twenty seconds.
+
+## 1.27.0 — 2026-09-24
+
+### Added
+- **The program now chains nights unattended.** At sunrise it closed the night
+  and stayed connected but idle: someone had to click every evening. It
+  re-arms itself after the morning close.
+- A daylight guard breaks a loop the first version created: the mount is often
+  still tracking at sunrise, so re-arming restarted within the second --
+  closing the night and immediately reopening a file in broad daylight.
+- The morning analysis window no longer blocks: it was modal, and would have
+  frozen the event loop on the first unattended morning.
+
+## 1.26.0 — 2026-09-24
+
+### Fixed
+- **In the morning, the ephemeris described the night that had just ended.** A
+  09:16 connection announced 21:35 -> 05:48 where tonight's values are
+  21:32 -> 05:50. Starting from the local noon before the reference is right
+  for a session opened at 02:00; at nine in the morning one is looking ahead.
+  The Sun settles it.
+
+## 1.25.0 — 2026-09-23
+
+### Fixed
+- **An analysis window opened on connection.** The automatic analysis fired on
+  any PARKED status and analysed the newest .dat on disk, so connecting to an
+  already-parked mount opened a report on an unrelated night.
+- **The French tab showed Dutch.** On an empty session, two early returns in
+  `_run_analysis` wrote into the current view without checking the requested
+  language. The tabs call it once per language, so the last call -- Dutch --
+  overwrote the tab of the application's own language.
+- Release notes are written in all three languages, each under its own
+  heading, and the update window shows only the user's. Their download table
+  also listed `-macos.dmg` and `-linux.tar.gz`, which no longer exist.
+
+## 1.24.0 — 2026-09-23
+
+### Fixed
+- **Recording started even on a parked mount.** Arming covered the button
+  only; connection called `_start_logging` directly.
+- **Longitude flipped west.** ASCOM counts `SiteLongitude` positive EAST, the
+  LX200 protocol west, and the driver's string was read with the LX200
+  convention: a site 2.76 deg east became 2.76 deg west. It does not announce
+  itself -- it moves the observatory, and shifted every twilight by 22
+  minutes.
+- **"Tracking rate: Sidereal OK" on a parked mount.** The check read the
+  configured rate, not the actual state.
+- The status log mixed two languages: sixteen more labels translated.
+
+## 1.23.0 — 2026-09-23
+
+### Fixed
+- **A test was protecting the defect it should have reported.** It asked for a
+  French report, then checked it contained "Rating" and "Combined jitter".
+- Twelve tests added for the day's corrections. The suite has 65.
+
+### Removed
+- `docs/GUIDE_UTILISATEUR.md`, 1075 lines, superseded by the manual.
+
+## 1.22.0 — 2026-09-23
+
+### Changed
+- **The manual was rewritten and translated.** Its statistics chapter still
+  taught the reading that has since been refuted: a raw standard deviation as
+  a measure of tracking. Every paragraph was also doubled by its English
+  translation in italics, so the document was a real manual in neither
+  language. Three separate documents now, one per language, 19 to 20 pages.
+- The Help menu gained a "Manual (PDF)" entry.
+
+## 1.21.0 — 2026-09-23
+
+### Fixed
+- **72 tooltips showed two languages at once** and none in Dutch.
+- **Settings did not survive a restart**: horizontal zoom and vertical zoom
+  mode were never saved, and panel positions were neither saved nor restored
+  although the read-me promised a "persistent layout".
+
+### Changed
+- The three session settings are on by default.
+
+## 1.20.0 — 2026-09-23
+
+### Changed
+- **The built-in help described version 1.6.** Two hard-coded strings, English
+  and French; a Dutch user got English. It now lives in `aide_textes.py`,
+  eleven sections in three languages.
+- This CHANGELOG created; the read-me had not mentioned anything since 1.7.0.
+
 ## 1.19.0 — 2026-09-23
 
 ### Fixed
