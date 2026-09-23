@@ -26,6 +26,12 @@ DEFAULTS = {
     "tolerance_seismic_percent": 5.0,
     "axial_mode": "off",  # off, velocity, displacement
     "log_mode": "all",  # all, tracking_only
+    # Arm the logger instead of starting it: the mount can be connected at
+    # noon and only start tracking in the evening, and everything in between
+    # is dead weight in the .dat and in the night report.
+    "autostart_on_tracking": False,
+    "autostop_on_park": False,
+    "autostop_park_delay_s": 120,
     "delay_after_slew_seconds": 0,
     "history_lines": 50,
     "reset_mode": "manual",  # manual, slewing
