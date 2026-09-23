@@ -569,8 +569,16 @@ class MainWindow(QMainWindow):
             if sei.start():
                 self._seismometer = sei
 
-        # Auto-start logging
-        self._start_logging()
+        # Logging starts on connection -- but ARMED if that is what the user
+        # asked for. This call used to go straight to _start_logging, which
+        # bypassed the arming entirely: connecting to a parked mount at 08:38
+        # began recording at once, which is precisely what arming exists to
+        # avoid.
+        if (self._settings.get("autostart_on_tracking")
+                and self._prev_mount_status != MountStatus.TRACKING):
+            self._armer()
+        else:
+            self._start_logging()
 
         self._update_title()
         self._status_panel.add_message(T("connected"), Colors.STATUS_OK)
@@ -742,23 +750,24 @@ class MainWindow(QMainWindow):
         elevation = info.get('elevation')
 
         self._status_panel.add_message(
-            f"Mount: {product}", Colors.STATUS_OK
+            f"{T('pan_mount')} : {product}", Colors.STATUS_OK
         )
         self._status_panel.add_message(
-            f"Firmware: {firmware}"
+            f"{T('pan_firmware')} : {firmware}"
         )
         if mount_id:
-            self._status_panel.add_message(f"ID: {mount_id}")
+            self._status_panel.add_message(f"{T('pan_id')} : {mount_id}")
         if pier_side and hasattr(pier_side, 'value'):
-            self._status_panel.add_message(f"Pier: {pier_side.value}")
+            self._status_panel.add_message(f"{T('pan_pier')} : {pier_side.value}")
         if azimuth is not None and altitude is not None:
             self._status_panel.add_message(
                 f"Az: {azimuth:.1f}\u00b0  Alt: {altitude:.1f}\u00b0"
             )
         if latitude and longitude:
-            elev_str = f"  Elev: {elevation:.0f}m" if elevation is not None else ""
+            elev_str = (f"  {T('pan_elev')} {elevation:.0f} m"
+                        if elevation is not None else "")
             self._status_panel.add_message(
-                f"Site: {latitude} {longitude}{elev_str}"
+                f"{T('pan_site')} : {latitude} {longitude}{elev_str}"
             )
             self._site_monture = (latitude, longitude, elevation)
             self._annoncer_nuit()
@@ -1691,6 +1700,13 @@ class MainWindow(QMainWindow):
         warnings = []
         ok_checks = []
 
+        # A parked mount still reports its CONFIGURED tracking rate, so the
+        # check passed and printed « Tracking rate: Sidereal OK » next to a
+        # mount that was not tracking at all. The reading was true and the
+        # impression false. Rate-dependent checks are skipped unless the
+        # mount is actually tracking.
+        suit = getattr(self, '_prev_mount_status', None) == MountStatus.TRACKING
+
         # Check refraction mode (3-way: not_updating, not_updating_tracking, continuously_updating)
         if self._settings.get("check_refraction_enabled"):
             expected = self._settings.get("check_refraction_value")
@@ -1698,31 +1714,33 @@ class MainWindow(QMainWindow):
             if mode is not None:
                 if mode == expected:
                     mode_display = mode.replace('_', ' ')
-                    ok_checks.append(f"Refraction: {mode_display} \u2713")
+                    ok_checks.append(T("chk_refraction_ok").format(v=mode_display) + " \u2713")
                 else:
                     mode_display = mode.replace('_', ' ')
                     expected_display = expected.replace('_', ' ')
                     warnings.append(
-                        f"Refraction is '{mode_display}', expected '{expected_display}'"
+                        T("chk_refraction_ko").format(a=mode_display, e=expected_display)
                     )
             else:
                 # Fallback to simple enabled/disabled check
                 refraction = self._connection.is_refraction_enabled()
                 if refraction is not None:
                     actual = "enabled" if refraction else "disabled"
-                    ok_checks.append(f"Refraction: {actual} (simple check)")
+                    ok_checks.append(T("chk_refraction_simple").format(v=actual))
 
         # Check tracking rate
-        if self._settings.get("check_tracking_rate"):
+        if not suit:
+            ok_checks.append(T("chk_parked"))
+        if suit and self._settings.get("check_tracking_rate"):
             expected_val = self._settings.get("check_tracking_rate_value")
             rate = self._connection.get_tracking_rate()
             if rate is not None:
                 rate_lower = str(rate).lower().strip()
                 if expected_val.lower() in rate_lower or rate_lower.startswith("60"):
-                    ok_checks.append(f"Tracking rate: {rate} \u2713")
+                    ok_checks.append(T("chk_rate_ok").format(v=rate) + " \u2713")
                 else:
                     warnings.append(
-                        f"Tracking rate is {rate}, expected {expected_val}"
+                        T("chk_rate_ko").format(a=rate, e=expected_val)
                     )
 
         # Check GPS sync
@@ -1732,10 +1750,10 @@ class MainWindow(QMainWindow):
             if gps is not None:
                 actual = "synchronising" if gps else "not synchronising"
                 if actual == expected_val:
-                    ok_checks.append(f"GPS: {actual} \u2713")
+                    ok_checks.append(T("chk_gps_ok").format(v=actual) + " \u2713")
                 else:
                     warnings.append(
-                        f"GPS is {actual}, expected {expected_val}"
+                        T("chk_gps_ko").format(a=actual, e=expected_val)
                     )
 
         # Check dual tracking
@@ -1745,10 +1763,10 @@ class MainWindow(QMainWindow):
             if dual is not None:
                 actual = "enabled" if dual else "disabled"
                 if actual == expected_val:
-                    ok_checks.append(f"Dual tracking: {actual} \u2713")
+                    ok_checks.append(T("chk_dual_ok").format(v=actual) + " \u2713")
                 else:
                     warnings.append(
-                        f"Dual tracking is {actual}, expected {expected_val}"
+                        T("chk_dual_ko").format(a=actual, e=expected_val)
                     )
 
         # Display results
