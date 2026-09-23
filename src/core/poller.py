@@ -5,6 +5,7 @@ status, and axial data. Emits signals for the GUI to consume.
 """
 
 import time
+from ..utils.i18n import T
 import logging
 from datetime import datetime, timezone
 from typing import Optional
@@ -215,7 +216,7 @@ class MountPoller(QThread):
             if status == MountStatus.SLEWING:
                 self._slew_delay_active = True
                 self._slew_delay_start = time.time()
-                self.log_message.emit("Mount is slewing...")
+                self.log_message.emit(T("poller_slewing"))
 
         # Get mount time
         mount_time_str = self._connection.get_mount_time()
@@ -324,10 +325,15 @@ class MountPoller(QThread):
         try:
             warnings = self._connection.check_mount_settings()
             for warning in warnings:
-                self.log_message.emit(f"WRONG SET-UP: {warning}")
+                self.log_message.emit(f'{T("poller_wrong_setup")}: {warning}')
                 logger.warning(f"Mount settings issue: {warning}")
             if not warnings:
-                self.log_message.emit("Logging started.")
+                # Ce message annoncait « Logging started. » — herite du Java,
+                # il ne decrit pas un demarrage d'enregistrement mais le
+                # resultat des controles apres une rotation. Il revenait a
+                # chaque slew et donnait a croire que la session redemarrait
+                # en boucle.
+                self.log_message.emit(T("poller_checks_ok"))
         except Exception as e:
             logger.debug(f"Mount settings check failed: {e}")
 

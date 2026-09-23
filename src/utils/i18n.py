@@ -14,6 +14,14 @@ TX = {
     "menu_reset": {"en": "Reset", "fr": "Réinitialiser", "nl": "Resetten"},
     "menu_help": {"en": "Help", "fr": "Aide", "nl": "Help"},
     "menu_language": {"en": "Language", "fr": "Langue", "nl": "Taal"},
+    "poller_slewing": {"en": "Mount is slewing...", "fr": "La monture pivote...",
+                       "nl": "De montering zwenkt..."},
+    "poller_checks_ok": {
+        "en": "Mount settings checked after slew.",
+        "fr": "Réglages de la monture vérifiés après la rotation.",
+        "nl": "Instellingen van de montering gecontroleerd na de zwenking."},
+    "poller_wrong_setup": {"en": "WRONG SET-UP", "fr": "RÉGLAGE INCORRECT",
+                           "nl": "ONJUISTE INSTELLING"},
 
     # Panneau d'etat : ces lignes etaient ecrites en anglais en dur, si bien
     # que le journal melangeait la langue de l'utilisateur et l'anglais.
