@@ -317,6 +317,16 @@ class FileLogger:
         f.write(f"Mount ID:\t{self._sanitize(info.mount_id)}\n")
         f.write(f"Firmware:\t{self._sanitize(info.firmware)}\n")
 
+        # Site and local time offset. Without these the night ephemeris
+        # cannot be recomputed when the file is reopened for replay: the
+        # mount is long disconnected by then, and a .dat that does not
+        # carry its own site is a .dat whose twilights are lost.
+        if info.latitude and info.longitude:
+            elev = f"\t{info.elevation}" if info.elevation else ""
+            f.write(f"Site:\t{info.latitude}\t{info.longitude}{elev}\n")
+        if info.start_time is not None:
+            f.write(f"Start:\t{info.start_time.astimezone().isoformat()}\n")
+
         # Telescope pointing info (pier side, azimuth, altitude)
         pier_side_str = info.pier_side.value if info.pier_side else "Unknown"
         f.write(f"Telescopes are {pier_side_str} of the mount, "
