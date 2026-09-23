@@ -29,9 +29,20 @@ DEFAULTS = {
     # Arm the logger instead of starting it: the mount can be connected at
     # noon and only start tracking in the evening, and everything in between
     # is dead weight in the .dat and in the night report.
+    # Site, for the night ephemeris. Left empty, the mount is asked
+    # (:Gt# / :Gg#); these are the fallback when it does not answer --
+    # which is the common case, plenty of setups never get their site
+    # pushed to the mount.
+    "site_latitude": "",
+    "site_longitude": "",
+    "site_elevation_m": "",
     "autostart_on_tracking": False,
-    "autostop_on_park": False,
-    "autostop_park_delay_s": 120,
+    # Suspend rather than stop: one night, one file, one report. Closing on
+    # a park would split a night that merely paused.
+    "pause_when_not_tracking": False,
+    "pause_delay_s": 120,
+    # Only daylight ends a night.
+    "close_at_sunrise": False,
     "delay_after_slew_seconds": 0,
     "history_lines": 50,
     "reset_mode": "manual",  # manual, slewing

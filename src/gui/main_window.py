@@ -98,6 +98,17 @@ class MainWindow(QMainWindow):
         # hours are dead weight in the .dat and noise in the night report.
         self._logging_armed = False
         self._park_timer = None
+        # Suspended: the session stays OPEN and the file stays the same, but
+        # samples stop being written. A mount parked for three hours at 2 Hz
+        # would otherwise lay down 20,000 samples of nothing, and closing the
+        # session instead would split one night across two files and two
+        # reports. The night is defined by the Sun, not by a park.
+        self._logging_suspendu = False
+        self._nuit_vue = False          # the Sun went below the horizon while recording
+        self._aube_timer = None
+        # Site as the mount reports it, when it does. Plenty of setups never
+        # push their site to the mount -- hence the preference fallback.
+        self._site_monture = None
         self._mount_info = {}
         self._prev_mount_status = MountStatus.UNKNOWN
 
@@ -608,7 +619,7 @@ class MainWindow(QMainWindow):
         self._status_panel.update_mount_sample(sample)
 
         # Log to file
-        if self._logging_active:
+        if self._ecrit_echantillons():
             self._file_logger.log_mount_sample(sample)
 
         # Update frequency display
@@ -623,7 +634,7 @@ class MainWindow(QMainWindow):
         if self._ntp_client:
             sample.pc_ntp_diff_ms = self._ntp_client.offset_ms
         self._processor.process_time_sample(sample)
-        if self._logging_active:
+        if self._ecrit_echantillons():
             self._file_logger.log_time_sample(sample)
 
     @pyqtSlot(object)
@@ -641,18 +652,22 @@ class MainWindow(QMainWindow):
         if self._logging_active:
             self._file_logger.log_event(f"Mount status: {status.name}")
 
-        # ── Armed logger: start on the first TRACKING, stop on a real park ──
+        # ── Armed logger: start on tracking, suspend when tracking stops ──
         if status == MountStatus.TRACKING:
             self._annuler_arret_park()
             if self._logging_armed:
                 self._demarrer_sur_suivi()
-        elif status == MountStatus.PARKED:
-            if (self._logging_active and self._park_timer is None
-                    and self._settings.get("autostop_on_park")):
-                delai = int(self._settings.get("autostop_park_delay_s") or 120)
+            else:
+                self._reprendre()
+        elif self._logging_active and self._settings.get("pause_when_not_tracking"):
+            # Any status other than TRACKING -- parked, idle, slewing --
+            # starts the grace delay. Slews and autofocus finish well inside
+            # it; only a real stop outlasts it.
+            if self._park_timer is None and not self._logging_suspendu:
+                delai = int(self._settings.get("pause_delay_s") or 120)
                 self._park_timer = QTimer(self)
                 self._park_timer.setSingleShot(True)
-                self._park_timer.timeout.connect(self._arreter_sur_park)
+                self._park_timer.timeout.connect(self._suspendre)
                 self._park_timer.start(delai * 1000)
 
         # Detect transition from slewing to tracking
@@ -745,6 +760,8 @@ class MainWindow(QMainWindow):
             self._status_panel.add_message(
                 f"Site: {latitude} {longitude}{elev_str}"
             )
+            self._site_monture = (latitude, longitude, elevation)
+            self._annoncer_nuit()
 
         # Log to file
         if self._logging_active:
@@ -758,7 +775,7 @@ class MainWindow(QMainWindow):
     def _on_environment(self, sample):
         """Handle environment/diagnostics data from the poller."""
         # Log to file
-        if self._logging_active:
+        if self._ecrit_echantillons():
             self._file_logger.log_environment(sample)
 
         # Log significant changes to status panel
@@ -783,7 +800,7 @@ class MainWindow(QMainWindow):
             )
 
         # Log to event file
-        if self._logging_active:
+        if self._ecrit_echantillons():
             if sample.temperature_ext is not None:
                 # Chaque champ peut être None indépendamment (la monture ne
                 # renvoie pas toujours pression/température interne) — et un
@@ -991,7 +1008,7 @@ class MainWindow(QMainWindow):
             )
 
         # Log FFT data to .fft file
-        if self._logging_active:
+        if self._ecrit_echantillons():
             if ra_freqs is not None and len(ra_freqs) > 0:
                 self._file_logger.log_fft_snapshot("RA", freq, ra_freqs, ra_mags)
             if dec_freqs is not None and len(dec_freqs) > 0:
@@ -1034,24 +1051,65 @@ class MainWindow(QMainWindow):
         self._start_logging()
         self._status_panel.add_message(T("logging_autostart"), Colors.STATUS_OK)
 
+    def _ecrit_echantillons(self) -> bool:
+        """Whether samples should go to the file right now."""
+        return self._logging_active and not self._logging_suspendu
+
     def _annuler_arret_park(self):
         if self._park_timer is not None:
             self._park_timer.stop()
             self._park_timer = None
 
-    def _arreter_sur_park(self):
-        """Mount parked long enough: close the session and write the report.
+    def _suspendre(self):
+        """Mount stopped tracking long enough: stop writing, keep the session.
 
-        A grace delay is used because a park can be transient -- a meridian
-        flip, a sequence that parks between two targets and resumes. Stopping
-        on the first PARKED sample would cut the night in two and write a
-        report on half of it.
+        A grace delay is used because a stop can be transient -- a meridian
+        flip, a slew between two targets, an autofocus run. Suspending on the
+        first non-tracking sample would punch a hole in every dither.
         """
         self._annuler_arret_park()
+        if not self._logging_active or self._logging_suspendu:
+            return
+        self._logging_suspendu = True
+        self._file_logger.log_event("Logging suspended: mount not tracking")
+        self._status_panel.add_message(T("logging_suspendu"))
+
+    def _reprendre(self):
+        """Tracking resumed: same file, same night."""
+        if not self._logging_active or not self._logging_suspendu:
+            return
+        self._logging_suspendu = False
+        self._file_logger.log_event("Logging resumed: mount tracking again")
+        self._status_panel.add_message(T("logging_repris"), Colors.STATUS_OK)
+
+    def _surveiller_aube(self):
+        """Close the session once the Sun is up, and only then.
+
+        The night is one unit: a mount that parks at 02:00 and resumes at
+        03:00 is still the same night, and must stay in one file with one
+        report. Only daylight ends it -- and only after the Sun has actually
+        been down during the session, so that a daytime test does not close
+        itself the moment it starts.
+        """
         if not self._logging_active:
             return
-        self._stop_logging()
-        self._status_panel.add_message(T("logging_autostop"), Colors.STATUS_OK)
+        site = self._site()
+        if not site:
+            return
+        from ..core.ephemerides import hauteur_soleil, HORIZON
+        from datetime import datetime, timezone
+        lat, lon, _ = site
+        try:
+            h = hauteur_soleil(datetime.now(timezone.utc), lat, lon)
+        except Exception as exc:
+            logger.error(f"Sun altitude failed: {exc}")
+            return
+        if h <= HORIZON:
+            self._nuit_vue = True
+            return
+        if self._nuit_vue:
+            self._status_panel.add_message(T("logging_autostop"), Colors.STATUS_OK)
+            self._stop_logging()
 
     def _start_logging(self):
         """Start data logging to files."""
@@ -1065,17 +1123,42 @@ class MainWindow(QMainWindow):
                 if self._sim_mode == "none" else ConnectionProtocol.SIMULATION,
             start_time=datetime.now(),
         )
+        # Always store the site as decimal degrees, longitude positive EAST.
+        # The mount speaks sexagesimal LX200 with longitude positive WEST and
+        # the preferences hold plain decimals: writing either verbatim would
+        # put two incompatible conventions under the same header key, and the
+        # reader would have to guess -- guessing wrong flips the hemisphere.
+        _site = self._site()
+        if _site:
+            session.latitude = f"{_site[0]:.5f}"
+            session.longitude = f"{_site[1]:.5f}"
+            session.elevation = f"{_site[2]:.0f}"
         self._file_logger.start_session(session)
         self._logging_active = True
+        self._logging_suspendu = False
+        self._nuit_vue = False
+        if self._settings.get("close_at_sunrise"):
+            self._aube_timer = QTimer(self)
+            self._aube_timer.timeout.connect(self._surveiller_aube)
+            self._aube_timer.start(60_000)
+            self._surveiller_aube()
         self._btn_logging.setText(T("btn_stop_log"))
         # Start FFT timer for logging even if FFT window is not open
         if not self._fft_timer.isActive():
             self._fft_timer.start()
         self._status_panel.add_message(T("logging_started"), Colors.STATUS_OK)
+        # Also announce the night when the site comes from the preferences:
+        # _on_mount_info only fires when the mount answers, which is exactly
+        # the case the preferences exist to cover.
+        self._annoncer_nuit()
 
     def _stop_logging(self):
         """Stop data logging."""
         self._annuler_arret_park()
+        if self._aube_timer is not None:
+            self._aube_timer.stop()
+            self._aube_timer = None
+        self._logging_suspendu = False
         if not self._logging_active:
             return
         chemin_dat = getattr(self._file_logger, 'dat_path', None)
@@ -1383,6 +1466,65 @@ class MainWindow(QMainWindow):
         self._status_panel.add_message(T("reset_both"))
 
     # ── Preferences ──────────────────────────────────────────────
+
+    def _site(self):
+        """Observing site as (lat, lon east, elevation), or None.
+
+        The mount is trusted first and the preferences fill in. Note the
+        sign: LX200 reports longitude positive WEST, so a site east of
+        Greenwich comes back negative and must be flipped -- getting it
+        wrong moves the observatory and shifts every twilight.
+        """
+        from ..core.ephemerides import parse_latitude_lx200, parse_longitude_lx200
+        if self._site_monture:
+            lat_t, lon_t, elev = self._site_monture
+            lat = parse_latitude_lx200(lat_t)
+            lon = parse_longitude_lx200(lon_t)
+            if lat is not None and lon is not None:
+                return lat, lon, (elev if elev is not None else 0.0)
+        lat_p = self._settings.get("site_latitude")
+        lon_p = self._settings.get("site_longitude")
+        if lat_p not in (None, "") and lon_p not in (None, ""):
+            try:
+                elev = float(self._settings.get("site_elevation_m") or 0.0)
+            except (TypeError, ValueError):
+                elev = 0.0
+            return float(lat_p), float(lon_p), elev
+        return None
+
+    def _annoncer_nuit(self):
+        """Post tonight's twilights to the status panel."""
+        site = self._site()
+        if not site:
+            return
+        from ..core.ephemerides import nuit_autour
+        from datetime import datetime, timezone
+        lat, lon, _ = site
+        try:
+            n = nuit_autour(datetime.now(timezone.utc), lat, lon)
+        except Exception as exc:
+            logger.error(f"Ephemeris failed: {exc}")
+            return
+
+        def hl(t):
+            return t.astimezone().strftime('%H:%M') if t else '--:--'
+
+        if n.soleil_toujours_haut:
+            self._status_panel.add_message(T("nuit_jour_permanent"))
+            return
+        self._status_panel.add_message(
+            f"{T('nuit_coucher')} {hl(n.coucher)}  |  "
+            f"{T('nuit_nautique')} {hl(n.nautique)}  |  "
+            f"{T('nuit_lever')} {hl(n.lever)}")
+        if n.nuit_noire:
+            d = n.duree_noire
+            heures = int(d.total_seconds() // 3600)
+            mins = int((d.total_seconds() % 3600) // 60)
+            self._status_panel.add_message(
+                f"{T('nuit_noire')} {hl(n.astro_debut)} \u2192 {hl(n.astro_fin)} "
+                f"({heures} h {mins:02d})", Colors.STATUS_OK)
+        else:
+            self._status_panel.add_message(T("nuit_pas_de_nuit_noire"))
 
     def _choisir_langue(self, code: str):
         """Change the interface language.

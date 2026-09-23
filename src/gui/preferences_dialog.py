@@ -289,6 +289,29 @@ class PreferencesDialog(QDialog):
         self._log_mode.setToolTip("EN: What to log\nFR: Quoi journaliser")
         log_form.addRow(T("pref_log_mode_label"), self._log_mode)
 
+        # Observing site. Only used when the mount does not report one --
+        # and it often does not: a .dat without a site is a .dat whose
+        # twilights cannot be recomputed on replay.
+        self._site_lat = QLineEdit(str(self._settings.get("site_latitude") or ""))
+        self._site_lat.setPlaceholderText("49.3061")
+        self._site_lat.setToolTip(
+            "EN: Left empty, the mount is asked (:Gt#)\n"
+            "FR: Laissé vide, la monture est interrogée (:Gt#)")
+        log_form.addRow(T("pref_site_lat"), self._site_lat)
+
+        self._site_lon = QLineEdit(str(self._settings.get("site_longitude") or ""))
+        self._site_lon.setPlaceholderText("2.7553")
+        self._site_lon.setToolTip(
+            "EN: POSITIVE EAST. The LX200 protocol counts the other way; "
+            "the conversion is done for you when the mount answers.\n"
+            "FR: POSITIF VERS L'EST. Le protocole LX200 compte à l'envers ; "
+            "la conversion est faite pour vous quand la monture répond.")
+        log_form.addRow(T("pref_site_lon"), self._site_lon)
+
+        self._site_elev = QLineEdit(str(self._settings.get("site_elevation_m") or ""))
+        self._site_elev.setPlaceholderText("57")
+        log_form.addRow(T("pref_site_elev"), self._site_elev)
+
         # Arming. Put next to the log mode because it answers the same
         # question -- what ends up in the file -- and because a mount
         # connected at noon for a night that starts at 19:00 writes seven
@@ -302,23 +325,36 @@ class PreferencesDialog(QDialog):
             "l'enregistrement démarre au premier échantillon en SUIVI")
         log_form.addRow(self._autostart)
 
-        self._autostop = QCheckBox(T("pref_autostop"))
-        self._autostop.setChecked(bool(self._settings.get("autostop_on_park")))
+        self._autostop = QCheckBox(T("pref_pause"))
+        self._autostop.setChecked(bool(self._settings.get("pause_when_not_tracking")))
         self._autostop.setToolTip(
-            "EN: A grace delay avoids stopping on a transient park\n"
-            "FR: Un délai de grâce évite de couper sur un park passager")
+            "EN: The session stays open and the file stays the same; samples "
+            "simply stop. Tracking again resumes in place.\n"
+            "FR: La session reste ouverte et le fichier reste le même ; les "
+            "échantillons cessent, c'est tout. Le retour en suivi reprend sur place.")
         log_form.addRow(self._autostop)
 
         self._park_delay = QSpinBox()
         self._park_delay.setRange(0, 3600)
-        self._park_delay.setValue(int(self._settings.get("autostop_park_delay_s") or 120))
+        self._park_delay.setValue(int(self._settings.get("pause_delay_s") or 120))
         self._park_delay.setSuffix(" s")
         self._park_delay.setToolTip(
-            "EN: How long the mount must stay parked before the session is closed\n"
-            "FR: Durée pendant laquelle la monture doit rester parquée avant fermeture")
+            "EN: Grace delay -- slews and autofocus finish well inside it\n"
+            "FR: Délai de grâce — slews et autofocus finissent largement avant")
         self._park_delay.setEnabled(self._autostop.isChecked())
         self._autostop.toggled.connect(self._park_delay.setEnabled)
         log_form.addRow("    ↳", self._park_delay)
+
+        self._close_sunrise = QCheckBox(T("pref_close_sunrise"))
+        self._close_sunrise.setChecked(bool(self._settings.get("close_at_sunrise")))
+        self._close_sunrise.setToolTip(
+            "EN: Needs a known site. Only daylight ends a night: a mount that "
+            "parks at 02:00 and resumes at 03:00 stays one night, one file, "
+            "one report.\n"
+            "FR: Demande un site connu. Seul le jour termine une nuit : une "
+            "monture qui parque à 02 h et repart à 03 h reste une seule nuit, "
+            "un seul fichier, un seul rapport.")
+        log_form.addRow(self._close_sunrise)
 
         self._delay_slew = QDoubleSpinBox()
         self._delay_slew.setRange(0, 60)
@@ -602,9 +638,13 @@ class PreferencesDialog(QDialog):
         s.set("graph_textbox_ratio", self._graph_ratio.value())
         i = self._language.currentIndex()
         s.set("language", self._codes_langue[i] if 0 <= i < len(self._codes_langue) else "auto")
+        s.set("site_latitude", self._site_lat.text().strip())
+        s.set("site_longitude", self._site_lon.text().strip())
+        s.set("site_elevation_m", self._site_elev.text().strip())
         s.set("autostart_on_tracking", self._autostart.isChecked())
-        s.set("autostop_on_park", self._autostop.isChecked())
-        s.set("autostop_park_delay_s", self._park_delay.value())
+        s.set("pause_when_not_tracking", self._autostop.isChecked())
+        s.set("pause_delay_s", self._park_delay.value())
+        s.set("close_at_sunrise", self._close_sunrise.isChecked())
 
         # Processing
         s.set("polling_frequency_hz", self._polling_freq.value())
