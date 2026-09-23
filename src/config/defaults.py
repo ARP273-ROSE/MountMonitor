@@ -23,6 +23,8 @@ DEFAULTS = {
     "tolerance_ra_arcsec": 1.5,
     "tolerance_dec_arcsec": 1.5,
     "tolerance_as_ha_seconds": False,
+    # Afficher l'ascension droite en degres d'arc plutot qu'en heures.
+    "ra_in_degrees": False,
     "tolerance_seismic_percent": 5.0,
     "axial_mode": "off",  # off, velocity, displacement
     "log_mode": "all",  # all, tracking_only
