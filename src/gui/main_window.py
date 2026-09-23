@@ -15,7 +15,8 @@ import numpy as np
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
     QMenuBar, QMenu, QToolBar, QPushButton, QLabel, QMessageBox,
-    QApplication, QStatusBar, QFileDialog
+    QApplication, QStatusBar, QFileDialog,
+    QDialog, QTextBrowser, QDialogButtonBox
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSlot, pyqtSignal
 from PyQt6.QtGui import QAction, QActionGroup, QFont, QIcon, QKeySequence
@@ -1780,252 +1781,29 @@ class MainWindow(QMainWindow):
     # ── Help ─────────────────────────────────────────────────────
 
     def _show_help(self):
-        """Show help dialog with detailed bilingual help."""
+        """Show the help document, in the user's language.
+
+        The text lived here as two hard-coded strings, English and French,
+        still describing version 1.6. It now sits in aide_textes, in three
+        languages, and is scrollable: a QMessageBox silently truncates a
+        document this long.
+        """
+        from .aide_textes import aide_html, TITRE
         lang = get_language()
-        if lang == "fr":
-            title = "Aide - MountMonitor"
-            text = self._get_help_text_fr()
-        else:
-            title = "Help - MountMonitor"
-            text = self._get_help_text_en()
 
-        msg = QMessageBox(self)
-        msg.setWindowTitle(title)
-        msg.setTextFormat(Qt.TextFormat.RichText)
-        msg.setText(text)
-        msg.setStandardButtons(QMessageBox.StandardButton.Ok)
-        msg.exec()
-
-    def _get_help_text_en(self) -> str:
-        return """
-        <h2>MountMonitor v{version}</h2>
-        <p><b>Real-time telescope mount monitoring for astrophotography.</b></p>
-
-        <h3>Quick Start</h3>
-        <ol>
-        <li>Set your mount connection in <b>Preferences</b> (IP, port, protocol)</li>
-        <li>Click <b>Connect</b> to start monitoring</li>
-        <li>Data logging starts automatically</li>
-        </ol>
-
-        <h3>Graphs</h3>
-        <ul>
-        <li><b>RA graph (magenta)</b>: Right Ascension deviation from reference</li>
-        <li><b>DEC graph (red)</b>: Declination deviation from reference</li>
-        <li><b>Time graph</b>: PC-Mount time difference, loop times, NTP offset</li>
-        <li><b>Seismic graph</b>: Seismometer data (if connected)</li>
-        </ul>
-        <p>Blue line = running standard deviation. Green lines = tolerance limits.</p>
-
-        <h3>FFT Analysis</h3>
-        <p>View > FFT or Ctrl+F. Shows frequency and period domain of RA/DEC/seismic data.
-        Useful for identifying vibration sources.</p>
-
-        <h3>Night Report &amp; Adaptive Scoring (v1.6.0)</h3>
-        <p>The night analysis report now <b>automatically detects unguided precision mounts</b>
-        (10Micron, Planewave, ASA DDM) and adapts scoring thresholds accordingly:</p>
-        <ul>
-        <li><b>Guided mounts</b>: Excellent &lt;0.5" | Good &lt;1.5" | Fair &lt;3.0"</li>
-        <li><b>Unguided precision</b>: Excellent &lt;2.0" | Good &lt;4.0" | Fair &lt;8.0"</li>
-        </ul>
-        <p>Detection uses mount name, ASCOM driver, and firmware fields.</p>
-
-        <h3>Performance (v1.6.0)</h3>
-        <ul>
-        <li>Numpy array caching with dirty flags (no redundant copies)</li>
-        <li>Graph downsampling: max 5,000 points displayed from 50K+ buffer</li>
-        <li>250ms refresh timer (4 fps) — smooth and CPU-efficient</li>
-        <li>Lightweight QPlainTextEdit status panel</li>
-        <li>Stylesheet caching, STDEV computed outside lock, cached pen/font objects</li>
-        </ul>
-        <p>Stable for 8h+ sessions without any degradation.</p>
-
-        <h3>Security (v1.6.0)</h3>
-        <ul>
-        <li>LX200 response buffer limited to 4,096 bytes (anti-DoS)</li>
-        <li>Log header sanitization (anti-injection)</li>
-        <li>Periodic flush every 20 writes (NAS-optimized)</li>
-        </ul>
-
-        <h3>Keyboard Shortcuts</h3>
-        <ul>
-        <li><b>Ctrl+K</b>: Connect</li>
-        <li><b>Ctrl+D</b>: Disconnect</li>
-        <li><b>Ctrl+O</b>: Open log (replay + analysis)</li>
-        <li><b>Ctrl+F</b>: FFT window</li>
-        <li><b>Ctrl+,</b>: Preferences</li>
-        <li><b>F1</b>: This help</li>
-        </ul>
-
-        <h3>Protocols</h3>
-        <ul>
-        <li><b>LX200</b>: TCP/IP for 10Micron and compatible mounts</li>
-        <li><b>ASCOM</b>: Windows ASCOM drivers (requires comtypes)</li>
-        <li><b>Simulation</b>: Test mode with simulated data</li>
-        </ul>
-
-        <h3>Log Files</h3>
-        <p>Stored in <code>Logs/</code> folder. Six file types:
-        .log (events), .dat (mount data), .dti (time data), .sei (seismic),
-        .fft (FFT snapshots), .env (environment/diagnostics).</p>
-        <p>Logging starts automatically on connection.</p>
-
-        <h3>Log Replay &amp; Analysis</h3>
-        <p><b>File → Open Log</b> or <b>Ctrl+O</b>: Load a previous .dat file to replay in graphs
-        and get a comprehensive analysis report (quality rating, FFT, drift, tolerance stats).</p>
-        <p><b>Auto-analysis on park</b>: When the mount parks, an automatic analysis of the
-        night session is generated.</p>
-
-        <h3>NAS / Multi-PC Portability (v1.6.1)</h3>
-        <p>MountMonitor can be stored on a <b>NAS or synced folder</b> and used from
-        multiple PCs without conflict:</p>
-        <ul>
-        <li>The <b>virtual environment</b> is stored locally
-        (<code>%LOCALAPPDATA%\\MountMonitor\\venv</code> on Windows,
-        <code>~/.local/share/MountMonitor/venv</code> on Linux)</li>
-        <li>The <b>desktop shortcut</b> targets <code>launch.bat</code> (not a specific Python path),
-        so it works on any PC</li>
-        <li>If the project folder moves, the shortcut <b>auto-detects</b> the stale path
-        and offers to update itself</li>
-        <li>The icon is <b>copied locally</b> so it displays correctly even from network paths</li>
-        </ul>
-
-        <h3>Auto-Update (v1.7.0)</h3>
-        <p>MountMonitor checks for updates automatically at startup (silent, background).
-        You can also check manually via <b>Help → Check for Updates</b>.</p>
-        <ul>
-        <li>Compares local version with latest GitHub Release</li>
-        <li>Shows changelog and offers to download &amp; install</li>
-        <li>Secure download with size limits and zip validation</li>
-        <li>Never overwrites user data (settings, logs, graphs)</li>
-        <li>Automatic restart after successful update</li>
-        </ul>
-
-        <h3>Bug Reports &amp; Crash Reports (v1.7.0)</h3>
-        <ul>
-        <li><b>Help → Report a Bug</b>: Opens a dialog to describe the issue, then opens
-        a pre-filled GitHub Issue with anonymized system info and recent errors</li>
-        <li><b>Crash detection</b>: If MountMonitor crashes, the next startup offers
-        to report it on GitHub with full anonymized traceback</li>
-        <li>All file paths in reports are <b>completely anonymized</b> (home dir → ~)</li>
-        </ul>
-        """.format(version=self._version)
-
-    def _get_help_text_fr(self) -> str:
-        return """
-        <h2>MountMonitor v{version}</h2>
-        <p><b>Surveillance en temps réel de monture télescope pour l'astrophotographie.</b></p>
-
-        <h3>Démarrage rapide</h3>
-        <ol>
-        <li>Configurez la connexion dans les <b>Préférences</b> (IP, port, protocole)</li>
-        <li>Cliquez sur <b>Connecter</b> pour démarrer la surveillance</li>
-        <li>L'enregistrement démarre automatiquement</li>
-        </ol>
-
-        <h3>Graphiques</h3>
-        <ul>
-        <li><b>Graphe AD (magenta)</b> : Déviation en Ascension Droite par rapport à la référence</li>
-        <li><b>Graphe DÉC (rouge)</b> : Déviation en Déclinaison par rapport à la référence</li>
-        <li><b>Graphe temps</b> : Différence PC-Monture, temps de boucle, décalage NTP</li>
-        <li><b>Graphe sismique</b> : Données sismomètre (si connecté)</li>
-        </ul>
-        <p>Ligne bleue = écart-type glissant. Lignes vertes = limites de tolérance.</p>
-
-        <h3>Analyse FFT</h3>
-        <p>Affichage > FFT ou Ctrl+F. Montre le domaine fréquentiel et temporel des données AD/DÉC/sismiques.
-        Utile pour identifier les sources de vibration.</p>
-
-        <h3>Rapport de nuit et scoring adaptatif (v1.6.0)</h3>
-        <p>Le rapport d'analyse détecte automatiquement les <b>montures de précision non-guidées</b>
-        (10Micron, Planewave, ASA DDM) et adapte les seuils de notation :</p>
-        <ul>
-        <li><b>Monture guidée</b> : Excellent &lt;0.5" | Bon &lt;1.5" | Correct &lt;3.0"</li>
-        <li><b>Précision non-guidée</b> : Excellent &lt;2.0" | Bon &lt;4.0" | Correct &lt;8.0"</li>
-        </ul>
-        <p>Détection via nom de monture, driver ASCOM et firmware.</p>
-
-        <h3>Performance (v1.6.0)</h3>
-        <ul>
-        <li>Cache numpy avec dirty flags (pas de copies redondantes)</li>
-        <li>Downsampling graphiques : max 5 000 points affichés sur 50K+ en buffer</li>
-        <li>Timer de rafraîchissement 250ms (4 fps) — fluide et économe en CPU</li>
-        <li>Panneau de statut QPlainTextEdit léger</li>
-        <li>Cache CSS, STDEV calculé hors verrou, pen/font cachés</li>
-        </ul>
-        <p>Stable pour des sessions de 8h+ sans dégradation.</p>
-
-        <h3>Sécurité (v1.6.0)</h3>
-        <ul>
-        <li>Buffer réponse LX200 limité à 4 096 octets (anti-DoS)</li>
-        <li>Sanitisation des en-têtes log (anti-injection)</li>
-        <li>Flush périodique toutes les 20 écritures (optimisé NAS)</li>
-        </ul>
-
-        <h3>Raccourcis clavier</h3>
-        <ul>
-        <li><b>Ctrl+K</b> : Connecter</li>
-        <li><b>Ctrl+D</b> : Déconnecter</li>
-        <li><b>Ctrl+O</b> : Ouvrir un log (relecture + analyse)</li>
-        <li><b>Ctrl+F</b> : Fenêtre FFT</li>
-        <li><b>Ctrl+,</b> : Préférences</li>
-        <li><b>F1</b> : Cette aide</li>
-        </ul>
-
-        <h3>Protocoles</h3>
-        <ul>
-        <li><b>LX200</b> : TCP/IP pour montures 10Micron et compatibles</li>
-        <li><b>ASCOM</b> : Drivers ASCOM Windows (nécessite comtypes)</li>
-        <li><b>Simulation</b> : Mode test avec données simulées</li>
-        </ul>
-
-        <h3>Fichiers log</h3>
-        <p>Stockés dans le dossier <code>Logs/</code>. Six types :
-        .log (événements), .dat (données monture), .dti (temps), .sei (sismique),
-        .fft (FFT), .env (environnement/diagnostic).</p>
-        <p>L'enregistrement démarre automatiquement à la connexion.</p>
-
-        <h3>Relecture et analyse des logs</h3>
-        <p><b>Fichier → Ouvrir un log</b> ou <b>Ctrl+O</b> : charger un fichier .dat pour
-        revisualiser les graphiques et obtenir un rapport d'analyse complet
-        (qualité, FFT, dérive, tolérance).</p>
-        <p><b>Analyse auto au parcage</b> : quand la monture se parque, l'analyse
-        de la nuit se lance automatiquement.</p>
-
-        <h3>Portabilité NAS / Multi-PC (v1.6.1)</h3>
-        <p>MountMonitor peut être stocké sur un <b>NAS ou dossier synchronisé</b> et utilisé
-        depuis plusieurs PC sans conflit :</p>
-        <ul>
-        <li>L'<b>environnement virtuel</b> est stocké localement
-        (<code>%LOCALAPPDATA%\\MountMonitor\\venv</code> sous Windows,
-        <code>~/.local/share/MountMonitor/venv</code> sous Linux)</li>
-        <li>Le <b>raccourci bureau</b> cible <code>launch.bat</code> (pas un chemin Python spécifique),
-        donc il fonctionne sur n'importe quel PC</li>
-        <li>Si le dossier du projet est déplacé, le raccourci <b>détecte automatiquement</b>
-        l'ancien chemin et propose de se mettre à jour</li>
-        <li>L'icône est <b>copiée localement</b> pour s'afficher correctement même depuis un chemin réseau</li>
-        </ul>
-
-        <h3>Mise à jour automatique (v1.7.0)</h3>
-        <p>MountMonitor vérifie les mises à jour automatiquement au démarrage (silencieux, en arrière-plan).
-        Vous pouvez aussi vérifier manuellement via <b>Aide → Vérifier les mises à jour</b>.</p>
-        <ul>
-        <li>Compare la version locale avec la dernière Release GitHub</li>
-        <li>Affiche le changelog et propose de télécharger &amp; installer</li>
-        <li>Téléchargement sécurisé avec limites de taille et validation zip</li>
-        <li>Ne remplace jamais les données utilisateur (paramètres, logs, graphes)</li>
-        <li>Redémarrage automatique après mise à jour réussie</li>
-        </ul>
-
-        <h3>Rapports de bugs et de crash (v1.7.0)</h3>
-        <ul>
-        <li><b>Aide → Signaler un bug</b> : ouvre un dialogue pour décrire le problème, puis
-        ouvre un GitHub Issue pré-rempli avec infos système anonymisées et erreurs récentes</li>
-        <li><b>Détection de crash</b> : si MountMonitor plante, le prochain démarrage propose
-        de signaler le crash sur GitHub avec le traceback anonymisé complet</li>
-        <li>Tous les chemins de fichiers sont <b>complètement anonymisés</b> (répertoire home → ~)</li>
-        </ul>
-        """.format(version=self._version)
+        dlg = QDialog(self)
+        dlg.setWindowTitle(f"{TITRE.get(lang, TITRE['en'])} — MountMonitor")
+        dlg.resize(760, 620)
+        lay = QVBoxLayout(dlg)
+        vue = QTextBrowser(dlg)
+        vue.setOpenExternalLinks(False)
+        vue.setHtml(aide_html(lang, self._version))
+        lay.addWidget(vue)
+        boutons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, parent=dlg)
+        boutons.rejected.connect(dlg.reject)
+        boutons.accepted.connect(dlg.accept)
+        lay.addWidget(boutons)
+        dlg.exec()
 
     def _show_about(self):
         """Show about dialog."""
