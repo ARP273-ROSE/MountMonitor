@@ -11,6 +11,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from tests.test_analyse_suivi import _exige_qt
+
 from src.logging_module.log_parser import (
     _baseline, _mouvements, _settled_stdevs, _DELAI_APRES_SLEW,
 )
@@ -196,3 +198,108 @@ def test_les_reglages_de_disposition_existent():
 
     for cle in ("splitter_graphs", "splitter_main", "horizontal_zoom"):
         assert cle in DEFAULTS, cle
+
+
+# ── Les notes de version ────────────────────────────────────────────
+
+def test_les_notes_de_version_sont_triees_par_langue():
+    """La fenetre de mise a jour montrait les notes brutes.
+
+    Elles etaient ecrites en francais seulement, puis dans les trois
+    langues a la fois : un utilisateur neerlandais lisait de toute facon
+    autre chose que sa langue.
+    """
+    import updater
+
+    corps = (
+        "## English\n\n### Download\nWindows file here.\n\n"
+        "## Francais\n\n### Telechargement\nLe fichier Windows ici.\n\n"
+        "## Nederlands\n\n### Downloaden\nHet Windows-bestand hier."
+    )
+    marqueurs = {"en": "Windows file", "fr": "Le fichier", "nl": "Het Windows"}
+    for langue, attendu in marqueurs.items():
+        rendu = updater.notes_dans_la_langue(corps, langue)
+        assert attendu in rendu
+        autres = [m for lg, m in marqueurs.items() if lg != langue and m in rendu]
+        assert not autres, f"{langue} montre aussi {autres}"
+
+
+def test_des_notes_sans_section_sont_rendues_entieres():
+    """Mieux vaut trop que rien : une release ancienne reste lisible."""
+    import updater
+
+    assert updater.notes_dans_la_langue("texte simple", "fr") == "texte simple"
+    assert updater.notes_dans_la_langue("", "fr") == ""
+
+
+def test_les_noms_de_paquets_annonces_existent_vraiment():
+    """Le tableau d'installation citait des fichiers disparus.
+
+    Depuis que les paquets portent leur architecture, « -macos.dmg » et
+    « -linux.tar.gz » ne sont plus produits par personne.
+    """
+    from pathlib import Path
+
+    wf = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "release.yml"
+    texte = wf.read_text(encoding="utf-8")
+    corps = texte.split("body: |", 1)[1]
+    for disparu in ("-macos.dmg", "-linux.tar.gz"):
+        assert disparu not in corps, f"le corps de release cite {disparu}"
+    for attendu in ("macos-arm64.dmg", "macos-x86_64.dmg",
+                    "linux-x86_64.tar.gz", "linux-arm64.tar.gz"):
+        assert attendu in corps, f"{attendu} manque au corps de release"
+
+
+# ── Les onglets de langue ───────────────────────────────────────────
+
+def test_chaque_onglet_porte_sa_propre_langue_sur_une_session_vide():
+    """L'onglet francais affichait du neerlandais.
+
+    Les sorties anticipees de _run_analysis — celles qui servent justement
+    quand une session est vide — ecrivaient dans la vue courante sans
+    regarder la langue demandee. Les onglets appelant la methode une fois
+    par langue, le dernier appel, le neerlandais, ecrasait l'onglet de la
+    langue de l'application.
+    """
+    _exige_qt()
+    from src.gui.analysis_dialog import AnalysisDialog
+    from src.logging_module.log_parser import ParsedSession
+
+    vide = ParsedSession()
+    dlg = AnalysisDialog.__new__(AnalysisDialog)
+    dlg._session = vide
+    dlg._lang = "fr"
+    dlg._report = None
+    dlg._rapports = {}
+
+    rendus = {lg: dlg._run_analysis(lg) for lg in ("en", "fr", "nl")}
+    assert rendus["fr"] != rendus["nl"], "l'onglet francais rend du neerlandais"
+    assert rendus["fr"] != rendus["en"]
+    # et chacun porte bien sa langue
+    assert "analyser" in rendus["fr"] or "suivi" in rendus["fr"]
+
+
+def test_une_langue_explicite_ne_touche_pas_la_vue_courante():
+    """Demander le rapport neerlandais ne doit rien changer a l'affichage."""
+    _exige_qt()
+    from src.gui.analysis_dialog import AnalysisDialog
+    from src.logging_module.log_parser import ParsedSession
+
+    class _Vue:
+        def __init__(self):
+            self.texte = "intact"
+
+        def setPlainText(self, t):
+            self.texte = t
+
+        def moveCursor(self, *a):
+            pass
+
+    dlg = AnalysisDialog.__new__(AnalysisDialog)
+    dlg._session = ParsedSession()
+    dlg._lang = "fr"
+    dlg._report = _Vue()
+    dlg._rapports = {}
+
+    dlg._run_analysis("nl")
+    assert dlg._report.texte == "intact"

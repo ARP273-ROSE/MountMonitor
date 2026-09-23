@@ -110,6 +110,35 @@ def plateforme() -> str:
     return 'linux'
 
 
+SECTIONS = {'en': 'English', 'fr': 'Francais', 'nl': 'Nederlands'}
+
+
+def notes_dans_la_langue(corps: str, langue: str) -> str:
+    """Extrait la section de la langue demandee dans les notes de version.
+
+    Les notes publiees portent les trois langues, chacune sous un titre de
+    niveau 2. Sans ce tri, un utilisateur neerlandais lisait les trois d'un
+    coup — et avant que les notes ne soient traduites, il lisait du francais.
+    Si le decoupage echoue, on rend le texte entier : mieux vaut trop que
+    rien.
+    """
+    if not corps:
+        return corps
+    titres = {nom: lang for lang, nom in SECTIONS.items()}
+    blocs, courant, lignes = {}, None, []
+    for ligne in corps.splitlines():
+        nu = ligne.strip()
+        if nu.startswith('## ') and nu[3:].strip() in titres:
+            if courant:
+                blocs[courant] = '\n'.join(lignes).strip()
+            courant, lignes = titres[nu[3:].strip()], []
+        elif courant:
+            lignes.append(ligne)
+    if courant:
+        blocs[courant] = '\n'.join(lignes).strip()
+    return blocs.get(langue) or blocs.get('en') or corps
+
+
 def check(current_version):
     """Interroge GitHub. Renvoie un dict decrivant la mise a jour, ou None."""
     if not current_version:
