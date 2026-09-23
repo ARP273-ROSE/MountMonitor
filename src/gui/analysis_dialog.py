@@ -596,11 +596,19 @@ class AnalysisDialog(QDialog):
             lines.append("=" * 70)
             lines.append("")
 
+            # Detrended deviations, i.e. the same basis as the jitter and the
+            # rating. Using the RAW deviations here made the report contradict
+            # itself: the 2026-09-22 session was rated EXCELLENT on a 0.171"
+            # jitter and then announced that 70% of samples exceeded 2" -- that
+            # 70% was the slow drift and the dither steps, neither of which
+            # blurs a frame.
+            _ra_tol = s.ra_residual if len(s.ra_residual) else s.ra_deviations
+            _dec_tol = s.dec_residual if len(s.dec_residual) else s.dec_deviations
             for tol in [0.5, 1.0, 1.5, 2.0, 3.0, 5.0]:
-                ra_exceed = np.sum(np.abs(s.ra_deviations) > tol)
-                dec_exceed = np.sum(np.abs(s.dec_deviations) > tol)
-                ra_pct = ra_exceed / len(s.ra_deviations) * 100
-                dec_pct = dec_exceed / len(s.dec_deviations) * 100
+                ra_exceed = np.sum(np.abs(_ra_tol) > tol)
+                dec_exceed = np.sum(np.abs(_dec_tol) > tol)
+                ra_pct = ra_exceed / len(_ra_tol) * 100
+                dec_pct = dec_exceed / len(_dec_tol) * 100
                 lines.append(
                     f"  > {tol:.1f}\"  :  RA {ra_exceed:>6} ({ra_pct:>5.1f}%)  "
                     f"|  DEC {dec_exceed:>6} ({dec_pct:>5.1f}%)"
