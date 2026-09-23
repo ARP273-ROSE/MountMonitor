@@ -261,8 +261,19 @@ def test_le_rapport_de_nuit_s_ecrit_tout_seul(tmp_path):
     sortie = sauver_rapport(copie, "fr")
     assert sortie is not None and sortie.exists()
     texte = sortie.read_text(encoding="utf-8")
-    assert "Rating" in texte and "Combined jitter" in texte
+    # Le rapport demande en francais doit etre en francais. Ce test
+    # exigeait « Rating » et « Combined jitter » dans un rapport francais :
+    # il constatait donc le defaut plutot que de le denoncer, et une dizaine
+    # de messages restaient effectivement en anglais.
+    assert "Note" in texte and "Jitter combiné" in texte
+    assert "Rating" not in texte and "Combined jitter" not in texte
     assert len(texte) > 5000
+
+    # Et les trois langues sont ecrites cote a cote.
+    for langue, marqueur in (("en", "Rating"), ("nl", "Beoordeling")):
+        autre = sauver_rapport(copie, langue)
+        assert autre is not None and autre.exists()
+        assert marqueur in autre.read_text(encoding="utf-8")
 
 
 def test_sauver_rapport_ne_leve_jamais(tmp_path):
