@@ -1,0 +1,574 @@
+\part{Begrijpen}
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{Hemelcoördinaten}
+\label{ch:coords}
+
+\section{De hemelbol}
+
+Vanaf de grond gezien gedraagt de sterrenhemel zich als een bol die van oost
+naar west draait om een as door de hemelpolen. De sterren staan op zeer
+uiteenlopende afstanden, maar hun plaats op die denkbeeldige bol volstaat om
+ze te vinden en te volgen.
+
+De Aarde draait in \textbf{23~u 56~min 4~s} eenmaal om haar as --- de
+\emph{sterrendag}, korter dan de 24 uur van de zonnedag. Dát is het tempo
+waarop een montering moet draaien, en niet dat van de klok.
+
+\section{Rechte klimming}
+
+De \textbf{rechte klimming} (RK) is het hemelse equivalent van de lengtegraad.
+Zij wordt geteld in \textbf{uren} en niet in graden, van 0~u tot 24~u, vanaf
+het lentepunt.
+
+\begin{formula}
+\[
+1\,\text{u} = 15\degre \qquad 1\,\text{min} = 15' \qquad 1\,\text{s} = 15''
+\]
+Zo is RK = 02~u 44~min 08~s gelijk aan $2\times15\degre + 44\times0{,}25\degre +
+8\times\frac{15}{3600}\degre = 41{,}03\degre$.
+\end{formula}
+
+\begin{info}
+RK is de kritieke coördinaat voor het volgen: een fout van één tijdseconde is
+aan de hemelequator 15 boogseconden waard. Bij 1,6\arcsec/pixel is dat ongeveer
+tien pixels streep.
+\end{info}
+
+\section{Declinatie}
+
+De \textbf{declinatie} (DEC) is het equivalent van de breedtegraad: de
+hoekafstand ten noorden of ten zuiden van de hemelequator, van $-90\degre$ tot
+$+90\degre$. Op een correct opgestelde montering beweegt de declinatieas niet
+tijdens het volgen.
+
+\section{Uurhoek}
+
+De \textbf{uurhoek} meet hoe ver een object van de plaatselijke meridiaan
+staat. Hij groeit onophoudelijk met de draaiing van de Aarde.
+
+\begin{formula}
+\[
+\text{uurhoek} = \text{plaatselijke sterrentijd} - \text{RK}
+\]
+Een RK-tolerantie laat zich uitdrukken in boogseconden of in tijdseconden. De
+omrekening hangt af van de declinatie:
+\[
+\text{tijdseconden} = \frac{\text{boogseconden}}{15 \cos(\text{DEC})}
+\]
+\end{formula}
+
+\begin{tip}
+Dicht bij de hemelpool verplaatst een RK-fout de ster nauwelijks op de sensor:
+de cosinus van de declinatie dempt haar. Circumpolaire objecten zijn dus
+toegeeflijker voor volgfouten in RK --- maar niet voor die in declinatie.
+\end{tip}
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{Equatoriale monteringen}
+\label{ch:mounts}
+
+\section{Beginsel}
+
+Een \textbf{equatoriale montering} heft de draaiing van de Aarde op door de
+buis te draaien om een as evenwijdig aan die van de Aarde zelf: de poolas.
+
+\begin{itemize}
+  \item \textbf{Poolas (RK)}: draait op sterrensnelheid.
+  \item \textbf{Declinatieas}: staat stil tijdens het volgen, in theorie.
+\end{itemize}
+
+\begin{formula}
+\[
+\omega = \frac{1\,296\,000''}{86\,164{,}09\,\text{s}} \approx
+15{,}041\,\text{boogseconden per seconde}
+\]
+\end{formula}
+
+Elke afwijking van dat tempo, en elke scheefstand van de poolas, wordt een
+drift die de opname vastlegt.
+
+\section{10Micron-monteringen}
+
+De 10Micron-monteringen (GM1000 HPS en hoger) dragen \textbf{absolute
+encoders}: zij weten waar zij staan, zelfs na een stroomonderbreking, waar een
+relatieve encoder dat kwijtraakt. Daar komen een wormwielaandrijving, correctie
+van de periodieke fout en vooral een intern \textbf{aanwijsmodel} bij, opgebouwd
+uit enkele tientallen sterren.
+
+Dat model maakt \textbf{ongegidst} fotograferen mogelijk: de montering draait
+niet louter op sterrensnelheid, zij past gecorrigeerde snelheden toe die
+doorbuiging, refractie en de resterende poolscheefstand opvangen.
+
+\begin{warning}
+Een rechtstreeks gevolg, dat vaak verkeerd begrepen wordt: op een montering met
+model \textbf{zit de poolopstellingsfout ín het model} en wordt zij al door de
+volgsnelheden gecompenseerd. Een resterende declinatiedrift vraagt dus niet om
+de azimutschroef, maar om \textbf{meer modelpunten in de buurt van het doel}.
+\end{warning}
+
+Deze monteringen spreken een \textbf{uitgebreid LX200}: naast de standaard
+commando's geven zij ruwe asposities, toegepaste snelheden, de staat van het
+model en omgevingsgegevens door. MountMonitor gebruikt die uitbreidingen waar
+ze beschikbaar zijn.
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{Wat het volgen verslechtert}
+\label{ch:errors}
+
+Geen enkele montering volgt volmaakt. De oorzaken stapelen zich op, en elk
+laat een eigen handtekening in de registratie achter.
+
+\section{Periodieke fout}
+
+Een wormwiel is nooit volmaakt rond en nooit volmaakt gecentreerd. Zijn afwijking
+herhaalt zich bij elke omwenteling en levert een trilling met vaste periode op
+--- meestal enkele minuten. Dat is precies wat een Fourier-analyse eruit kan
+halen (hoofdstuk~\ref{ch:fft}).
+
+\section{Poolopstelling}
+
+Wijst de poolas niet precies naar de hemelpool, dan drift de ster langzaam in
+declinatie, en des te sneller naarmate men verder van de meridiaan staat. Op
+een montering zonder model is het antwoord mechanisch. Op een montering mét
+model: zie de waarschuwing in het vorige hoofdstuk.
+
+\section{Atmosferische refractie}
+
+De dampkring tilt objecten des te meer op naarmate zij lager staan: zo'n $34'$
+aan de horizon, $1'$ op $45\degre$ hoogte. De refractie verandert dus in de
+loop van de nacht, en haar drift wordt gemakkelijk voor een scheefstand
+aangezien.
+
+\section{Mechanische verstoring en trillingen}
+
+Wind, een trekkende kabel, bewegende ondergrond, een meridiaanommekeer: even
+zovele eenmalige schokken, geen van alle periodiek. Zij tonen zich als
+losstaande pieken, en juist daaraan zijn ze te herkennen.
+
+\section{Aangestuurde bewegingen}
+
+Dit zijn in het geheel geen fouten. Tussen twee opnames verplaatst de sequencer
+de montering met opzet --- \textbf{dither} om de ruis te decorreleren,
+\textbf{hercentrering} wanneer het doel is weggegleden --- en de montering
+\emph{blijft} op haar nieuwe plaats. Ze verwarren met volgfouten is de duurste
+vergissing die men bij het lezen van een registratie kan maken, en
+hoofdstuk~\ref{ch:stats} is eraan gewijd.
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{De cijfers lezen}
+\label{ch:stats}
+
+\begin{warning}
+Dit is het belangrijkste hoofdstuk van de handleiding. Een volgregistratie
+wordt met ontstellend gemak verkeerd gelezen, en het cijfer dat er dan uit komt
+is een factor enkele honderden mis.
+\end{warning}
+
+\section{Het signaal is een trap}
+
+Dit is wat een nacht ongegidst fotograferen werkelijk vastlegt: de montering
+houdt haar positie op een fractie van een boogseconde, dan verplaatst de
+sequencer haar met een dither, en zij houdt haar nieuwe positie even goed. Het
+spoor is geen ruizige lijn om een gemiddelde: het is een \textbf{trap}.
+
+Een standaardafwijking over de hele nacht meet dan de hoogte van de treden, en
+niet de kwaliteit van het volgen. En het verwijderen van een rechte lijn ---
+wat een klassieke ontdrifting doet --- verwijdert geen trap.
+
+\begin{info}
+Bij een werkelijke sessie van achtenhalf uur gaf de ruwe gecombineerde RMS
+\textbf{86,3\arcsec}, een vernietigend oordeel. De montering hield in
+werkelijkheid elke positie op \textbf{0,18\arcsec}. Tussen beide cijfers zit
+een factor 480.
+\end{info}
+
+\section{De jitter}
+
+De \textbf{jitter} is de spreiding die de montering vertoont \emph{terwijl} zij
+een positie vasthoudt. Het is het enige cijfer dat een ster op de sensor
+uitsmeert, en het cijfer waarop MountMonitor zijn oordeel baseert.
+
+Hij wordt tussen twee herpositioneringen gemeten, nooit om een rechte lijn
+heen. Het programma knipt de registratie bij de sprongen, laat twee meetpunten
+na elke sprong weg --- de beweging zelf is geen volgen --- en neemt de mediaan
+van de spreidingen per trede.
+
+\begin{tip}
+Deze werkwijze heeft een eigenschap die vermelding verdient: een reeks die bij
+elke opname dithert, komt er niet slechter uit dan een reeks die dat nooit
+doet. Het cijfer beschrijft de montering, niet de sequencer.
+\end{tip}
+
+\section{De aangestuurde bewegingen}
+
+Zij worden apart geteld en ingedeeld:
+
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Klasse} & \textbf{Wat het is} \\
+\midrule
+Dither & Kleine verplaatsing tussen twee opnames, om de ruis te decorreleren. \\
+Hercentrering & Ruimere verplaatsing, die het doel terugbrengt waar het hoort. \\
+Niet gestabiliseerd & De spreiding die erop volgt blijft meerdere malen de
+gewone waarde. Juist die verdient aandacht. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{warning}
+Een drempeloverschrijding is geen beweging. Een hercentrering van 70\arcsec{}
+heeft meerdere meetpunten nodig om te voltooien en overschrijdt de drempel bij
+elk daarvan: één nacht las zo 98 overschrijdingen voor 53 werkelijke
+bewegingen, met een mediane amplitude die tien keer te klein was. MountMonitor
+groepeert overschrijdingen die minder dan tien seconden uiteenliggen.
+\end{warning}
+
+\section{De langzame drift}
+
+Hij wordt per uur en per opname gegeven. Bij een ongegidste montering heft elke
+dither hem op: wat telt is niet de drift over de nacht, maar de verplaatsing
+die hij \emph{tijdens één opname} veroorzaakt.
+
+\begin{formula}
+\[
+\text{verplaatsing per opname} = \text{drift (\arcsec/u)} \times
+\frac{\text{opnameduur (s)}}{3600}
+\]
+Een drift van $-16{,}8\arcsec$/u verplaatst de ster dus over $0{,}84\arcsec$
+bij een opname van 180~s.
+\end{formula}
+
+\section{De lopende standaardafwijking}
+
+Live berekend over een venster van 60 tot 900 seconden, dient zij om te zien
+\emph{wanneer} er iets is gebeurd, niet om de nacht te beoordelen. Na een
+doelwisseling, een onderbreking in de registratie of een herpositionering
+overspant haar venster de beweging en beschrijft zij díe, niet het volgen: die
+waarden blijven buiten het rapport.
+
+\section{Het oordeel}
+
+Het berust op de gecombineerde jitter, met drempels die bij het type montering
+passen. Een ongegidste 10Micron wordt op ruimere drempels beoordeeld dan een
+gegidste montering, want het zijn niet dezelfde ordes van grootte.
+
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{lXX}
+\toprule
+\textbf{Oordeel} & \textbf{Gegidste montering} & \textbf{Ongegidst, precisie} \\
+\midrule
+Uitstekend & $< 0{,}5\arcsec$ & $< 2{,}0\arcsec$ \\
+Goed       & $< 1{,}5\arcsec$ & $< 4{,}0\arcsec$ \\
+Redelijk   & $< 3{,}0\arcsec$ & $< 8{,}0\arcsec$ \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{tip}
+Betrek het oordeel altijd op uw bemonstering. Bij 1,6\arcsec/pixel laat een
+jitter van 0,5\arcsec{} de ster een derde pixel trillen: onzichtbaar op de
+uiteindelijke opname.
+\end{tip}
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{De Fourier-analyse}
+\label{ch:fft}
+
+\section{Waartoe zij dient}
+
+Een Fourier-transformatie ontleedt een signaal in een som van sinussen. Op een
+volgregistratie brengt zij naar voren wat zich \emph{herhaalt} --- en een
+periodieke wormfout herhaalt zich per definitie.
+
+MountMonitor zoekt in het bereik van \textbf{2 tot 15 minuten}, waarin de
+wormperiodes van gangbare monteringen vallen.
+
+\section{Twee voorzorgen}
+
+\begin{itemize}
+  \item De transformatie werkt op \textbf{ontdrifte} afwijkingen. Een lineaire
+  drift is niet periodiek, maar over een eindig venster levert zij een grote
+  laagfrequente component op die zou verbergen waarnaar gezocht wordt.
+  \item De \textbf{grens van Nyquist} eist minstens twee metingen per periode.
+  Bij 2~Hz zijn periodes onder de seconde buiten bereik --- geen bezwaar, geen
+  enkele mechanische fout huist daar.
+\end{itemize}
+
+\section{Een spectrum lezen}
+
+Een scherpe piek bij een stabiele periode wijst op een periodieke fout. Een vlak
+spectrum betekent dat er geen aantoonbare is --- het geval van de
+10Micron-monteringen na correctie. Brede, zwervende pieken zijn ruis, meestal
+wind.
+
+% ═══════════════════════════════════════════════════════════════════
+\part{Gebruiken}
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{Installatie}
+\label{ch:install}
+
+\section{Ondersteunde systemen}
+
+De uitgegeven pakketten dragen hun eigen Python en hun eigen Qt mee: verder
+hoeft er niets geïnstalleerd te worden. Wat zij wél vragen is een voldoende
+recent systeem, omdat de Qt-binaries erin dat vragen.
+
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{lXl}
+\toprule
+\textbf{Systeem} & \textbf{Minimaal} & \textbf{Architectuur} \\
+\midrule
+Windows & Windows 10 (1809) & x64 \\
+macOS & macOS 11 Big Sur & Apple Silicon \emph{en} Intel \\
+Linux & glibc 2.28 --- Debian 11, Ubuntu 20.04, RHEL 8 & x86\_64 \\
+Linux ARM & glibc 2.39 --- Ubuntu 24.04 & arm64 \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{warning}
+Kies het macOS-pakket dat bij uw machine past: \texttt{-macos-arm64.dmg} voor
+een Mac met Apple Silicon, \texttt{-macos-x86\_64.dmg} voor een Intel-Mac. De
+meegeleverde Python is architectuurgebonden, ook al is Qt zelf universeel: het
+verkeerde pakket start in het geheel niet.
+\end{warning}
+
+\section{Het programma plaatsen}
+
+Onder Windows regelt het installatieprogramma alles. Onder macOS sleept u de
+toepassing naar de map Programma's. Onder Linux installeert
+\texttt{installer.sh} haar in het gebruikersprofiel, zonder \texttt{sudo} en
+zonder pakketbeheerder.
+
+Updates worden daarna bij elke start stil gecontroleerd en aangeboden zodra er
+zijn.
+
+\section{Een eerste proef zonder montering}
+
+Met de simulatiemodus loopt u alles door zonder apparatuur:
+
+\begin{lstlisting}[language=bash]
+MountMonitor --sim-all
+\end{lstlisting}
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{Instellingen}
+\label{ch:config}
+
+\section{Verbinding}
+
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Protocol} & \textbf{Wanneer te gebruiken} \\
+\midrule
+LX200 TCP/IP & Een 10Micron op het netwerk. Standaard poort 3492. \\
+LX200 serieel & RS-232-verbinding, af fabriek 9600 8N1 bij 10Micron. \\
+ASCOM & Alleen Windows, via het stuurprogramma van de fabrikant. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{De waarnemingslocatie}
+
+\begin{warning}
+Vul \textbf{breedtegraad, lengtegraad en hoogte} in bij de voorkeuren. Eerst
+wordt de montering bevraagd (\texttt{:Gt\#} en \texttt{:Gg\#}), maar veel
+opstellingen hebben haar nooit hun locatie doorgegeven en dan antwoordt zij
+niets. Zonder locatie kunnen de efemeriden van de nacht niet worden berekend.
+
+De lengtegraad voert u \textbf{positief naar het oosten} in. Het
+LX200-protocol telt andersom; de omrekening gebeurt voor u zodra de montering
+antwoordt.
+\end{warning}
+
+\section{Toleranties en lopend venster}
+
+De tolerantie is een alarmdrempel die u zelf bepaalt. Een eenvoudige regel:
+neem uw bemonstering in boogseconden per pixel. Een tolerantie gelijk aan de
+bemonstering is streng, het dubbele is comfortabel.
+
+Het venster van de lopende standaardafwijking stelt u in tussen 60 en 900
+seconden. Zestig reageert snel, negenhonderd vlakt een lange sessie af.
+
+\section{De logger gereedzetten}
+
+Drie instellingen sturen de opnameknop aan. Alle drie staan \textbf{standaard
+aan}.
+
+\textbf{Registratie starten zodra de montering begint te volgen.} De knop zet
+de logger dan \emph{gereed} in plaats van hem te starten: er wordt niets
+geschreven zolang de montering niet volgt. Een montering die om twaalf uur
+'s middags wordt aangesloten voor een nacht die om 19~u begint, registreert
+niet langer zeven uur niets. Een tweede klik schakelt uit.
+
+\textbf{Onderbreken zodra de montering stopt met volgen}, met een respijttijd
+van twee minuten. Die respijttijd bestaat met reden: een onderbreking kan van
+voorbijgaande aard zijn --- een meridiaanommekeer, een autofocus, een zwenking
+tussen twee doelen --- en afbreken bij het eerste meetpunt zou bij elke dither
+een gat slaan.
+
+\textbf{De nacht beëindigen bij zonsopkomst.} Een nacht is één geheel:
+parkeert de montering om 02~u en gaat zij om 03~u verder, dan wordt de
+registratie onderbroken en hervat \emph{in hetzelfde bestand}. Alleen het
+daglicht sluit de sessie af en zet het rapport in gang --- en alleen wanneer de
+zon tijdens de sessie werkelijk onder de horizon is geweest, zodat een proef
+overdag zichzelf niet afsluit.
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{Een nacht waarnemen}
+\label{ch:usage}
+
+\section{Het verloop}
+
+\begin{enumerate}
+  \item De montering verbinden en nagaan of de status op volgen springt.
+  \item De logger gereedzetten --- of starten, als gereedzetten uitstaat.
+  \item Laten lopen. Het rapport schrijft zichzelf aan het eind.
+\end{enumerate}
+
+\section{Waarop live te letten}
+
+\begin{itemize}
+  \item \textbf{De lopende standaardafwijking}, eerder dan de momentane
+  afwijking: zij zegt of de montering haar positie vasthoudt.
+  \item \textbf{De tolerantiemeldingen}, die een overschrijding aangeven.
+  \item \textbf{De marge tot het dauwpunt}, als er een omgevingssensor is
+  aangesloten.
+\end{itemize}
+
+\begin{tip}
+Een losstaande piek is vrijwel nooit de montering: het is een windvlaag, een
+kabel, een voetstap te dicht bij de zuil. Wat telt is het niveau \emph{tussen}
+de pieken.
+\end{tip}
+
+\section{De efemeriden van de nacht}
+
+Berekend vanuit de locatie geven zij zonsondergang, nautische schemering,
+astronomische nacht en zonsopkomst --- en vooral hoeveel van de donkere nacht
+de sessie werkelijk heeft bestreken. Een nacht die een uur te laat begint,
+verliest een uur dat niet in te halen is, en dat leest nuttiger naast de
+volgcijfers dan achteraf.
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{De bestanden}
+\label{ch:files}
+
+\section{Wat een sessie schrijft}
+
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Extensie} & \textbf{Inhoud} \\
+\midrule
+\texttt{.dat} & De meetpunten: tijd, RK, DEC, standaardafwijkingen, status. \\
+\texttt{.dti} & De synchronisatiemetingen tussen pc en montering. \\
+\texttt{.fft} & De tijdens de sessie vastgelegde spectra. \\
+\texttt{.env} & Temperatuur, luchtdruk, vochtigheid, als de montering ze
+geeft. \\
+\texttt{.log} & De gebeurtenissen: verbindingen, zwenkingen, meldingen,
+onderbrekingen. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+De kop van het \texttt{.dat}-bestand draagt de locatie en de tijdzone. Dat is
+wat toelaat de schemeringen bij het terugkijken opnieuw te berekenen, lang
+nadat de montering is losgekoppeld.
+
+\section{Het nachtrapport}
+
+Het wordt aan het eind van een sessie automatisch geschreven, naast het
+\texttt{.dat}-bestand, als \textbf{één bestand per taal}. Er hoeft niets voor
+gevraagd te worden.
+
+\section{Terugkijken}
+
+\textbf{Bestand $\rightarrow$ Logbestand openen} leest een afgeronde sessie en
+bouwt de volledige analyse opnieuw op: statistieken per doel, aangestuurde
+bewegingen, drift, spectra, efemeriden. De taaltabbladen tonen hetzelfde
+rapport in alle drie de talen.
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{Als er iets misgaat}
+\label{ch:trouble}
+
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Verschijnsel} & \textbf{Waar te kijken} \\
+\midrule
+Geen netwerkverbinding & Controleer het adres en poort 3492, en of niet iets
+anders de sessie al bezet houdt --- een 10Micron aanvaardt er maar één. \\
+Seriële verbinding stil & Beide uiteinden moeten het over de snelheid eens
+zijn. 10Micron-monteringen komen af fabriek op 9600 baud, en het menu van de
+montering kan dat wijzigen. \\
+Drift in declinatie & Voeg op een montering met model punten toe in de buurt
+van het doel. De azimutschroef is niet het antwoord. \\
+Matig oordeel, rustige montering & Lees hoofdstuk~\ref{ch:stats}: vaak is het
+de lezing die fout is, niet de montering. \\
+Onzinnige lopende STDEV & Normaal vlak na een zwenking of een
+herpositionering: haar venster overspant de beweging. Het rapport laat die
+waarden buiten beschouwing. \\
+Geen efemeriden & De locatie is niet ingevuld. Voorkeuren, deel locatie. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{Naslag}
+\label{ch:ref}
+
+\section{Sneltoetsen}
+
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Toetsen} & \textbf{Handeling} \\
+\midrule
+\texttt{F1} & Hulp \\
+\texttt{Ctrl+,} & Voorkeuren \\
+\texttt{Ctrl+O} & Logbestand openen \\
+\texttt{Ctrl+Q} & Afsluiten \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Taal}
+
+Het menu \textbf{Taal} biedt Nederlands, Engels en Frans, plus automatische
+herkenning vanuit het systeem. Elke regel staat in haar eigen taal geschreven:
+wie in de verkeerde taal belandt, kan de huidige niet lezen om eruit te komen.
+De wijziging gaat in bij de volgende start.
+
+\section{Melden van problemen}
+
+Loopt het programma vast, blokkeert het of wil het niet starten, dan kan het
+dat zelf melden. De vraag wordt u eenmaal gesteld, en er wordt nooit iets
+anders verstuurd: niet uw volggegevens, niet uw bestandsnamen, niet uw
+gebruikersnaam. Alle paden worden geanonimiseerd.
+
+\section{Versiegeschiedenis}
+
+Het volledige overzicht van de wijzigingen, met de gemeten cijfers die ze
+staven, staat in het bestand \texttt{CHANGELOG.md} dat met het programma wordt
+meegeleverd.
+
+\section{Herkomst}
+
+MountMonitor is een zelfstandige herschrijving in Python en PyQt6 van
+MountMonitor v3.37 van \textbf{Nicolàs de Hilster} (2018--2021), geschreven in
+Java. Er staat geen regel code uit het oorspronkelijke programma in. De
+MIT-licentie van dit programma dekt uitsluitend deze herschrijving; het
+oorspronkelijke werk blijft onderworpen aan de voorwaarden van zijn auteur.
