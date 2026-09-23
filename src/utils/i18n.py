@@ -14,6 +14,43 @@ TX = {
     "menu_reset": {"en": "Reset", "fr": "Réinitialiser", "nl": "Resetten"},
     "menu_help": {"en": "Help", "fr": "Aide", "nl": "Help"},
     "menu_language": {"en": "Language", "fr": "Langue", "nl": "Taal"},
+    "consent_question": {
+        "en": "Allow MountMonitor to report its own problems?",
+        "fr": "Autoriser MountMonitor à signaler ses problèmes ?",
+        "nl": "MountMonitor toestaan zijn eigen problemen te melden?"},
+    "consent_detail": {
+        "en": "If the application crashes, freezes or fails to start, it can "
+              "report it by itself to whoever maintains it. You will have "
+              "nothing to do, and nothing else is ever sent: not your tracking "
+              "data, not your file names, not your user name.",
+        "fr": "Si l'application plante, se fige ou refuse de démarrer, elle peut "
+              "l'annoncer toute seule à celui qui la maintient. Vous n'aurez rien "
+              "à faire, et rien d'autre n'est envoyé : ni vos données de suivi, "
+              "ni vos noms de fichiers, ni votre nom d'utilisateur.",
+        "nl": "Als de toepassing vastloopt, blokkeert of niet wil starten, kan "
+              "zij dat zelf melden aan wie haar onderhoudt. U hoeft niets te "
+              "doen, en er wordt niets anders verstuurd: niet uw volggegevens, "
+              "niet uw bestandsnamen, niet uw gebruikersnaam."},
+    "consent_oui": {"en": "Allow", "fr": "Autoriser", "nl": "Toestaan"},
+    "crash_titre": {"en": "Crash report", "fr": "Rapport de plantage",
+                    "nl": "Crashrapport"},
+    "crash_texte": {
+        "en": "MountMonitor crashed during the last session.",
+        "fr": "MountMonitor a planté lors de la dernière session.",
+        "nl": "MountMonitor is tijdens de vorige sessie vastgelopen."},
+    "crash_erreur": {"en": "Error", "fr": "Erreur", "nl": "Fout"},
+    "crash_question": {
+        "en": "Would you like to report this crash on GitHub?",
+        "fr": "Voulez-vous signaler ce plantage sur GitHub ?",
+        "nl": "Wilt u deze crash melden op GitHub?"},
+    "crash_anonyme": {
+        "en": "(all paths are anonymized)",
+        "fr": "(tous les chemins sont anonymisés)",
+        "nl": "(alle paden worden geanonimiseerd)"},
+    "crash_signaler": {"en": "Report on GitHub", "fr": "Signaler sur GitHub",
+                       "nl": "Melden op GitHub"},
+    "crash_ignorer": {"en": "Dismiss", "fr": "Ignorer", "nl": "Negeren"},
+    "consent_non": {"en": "No thanks", "fr": "Non merci", "nl": "Nee, bedankt"},
     "nuit_coucher": {"en": "Sunset", "fr": "Coucher", "nl": "Zonsondergang"},
     "nuit_nautique": {"en": "Naut. twilight", "fr": "Crép. nautique",
                       "nl": "Nautische schemering"},
