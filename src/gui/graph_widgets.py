@@ -72,14 +72,20 @@ def fenetre_horizontale(widget, rel_times, t_end, zoom):
     cinq fois moins de donnees — mais en detail.
 
     Le menu « Zoom horizontal » existait et ne faisait rien : le reglage
-    etait enregistre, jamais applique. La plage affichee partait toujours de
-    zero, c'est-a-dire du debut du tampon.
+    etait enregistre, jamais applique.
+
+    🔴 La regle vaut AUSSI au zoom 1. Une premiere version rendait 0.0 dans
+    ce cas — donc le debut du tampon — et le zoom 1 etant le defaut, les
+    courbes ne defilaient plus du tout : l'axe partait de zero et s'etirait
+    a mesure que la nuit avancait, tassant les donnees au milieu. Sur une
+    session de sept heures l'axe atteignait 26 ks et l'ecart-type affiche
+    montait a 1960 arcsec, alors que la monture tenait a 0,06.
     """
     try:
-        zoom = int(zoom)
+        zoom = max(1, int(zoom))
     except (TypeError, ValueError):
         zoom = 1
-    if zoom <= 1 or len(rel_times) == 0:
+    if len(rel_times) == 0:
         return 0.0
     largeur = max(200, int(widget.width()))
     points_visibles = max(10, largeur // zoom)

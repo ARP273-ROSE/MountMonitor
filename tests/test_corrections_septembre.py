@@ -388,3 +388,43 @@ def test_le_garde_fou_de_jour_empeche_la_boucle():
         assert w._fait_jour() is False
     finally:
         E.hauteur_soleil = vraie
+
+
+# ── L'affichage des graphes ─────────────────────────────────────────
+
+def test_les_courbes_defilent_au_zoom_par_defaut():
+    """Au zoom 1 l'axe partait de zero et ne defilait plus.
+
+    Le zoom 1 etant le defaut, les graphes faisaient du surplace : l'axe
+    s'etirait a mesure que la nuit avancait et tassait les donnees au
+    milieu. Apres sept heures il atteignait 26 ks et annoncait un
+    ecart-type de 1960 arcsec pour une monture qui tenait a 0,06.
+    """
+    import numpy as np
+
+    from src.gui.graph_widgets import fenetre_horizontale
+
+    class _Faux:
+        def width(self):
+            return 1200
+
+    w = _Faux()
+    # sept heures a 1,9 Hz
+    t = np.linspace(0, 25000, 47500)
+
+    x0 = fenetre_horizontale(w, t, t[-1], 1)
+    assert x0 > 0, "au zoom 1, la fenetre doit suivre la fin des donnees"
+    affiche = t[-1] - x0
+    assert 300 < affiche < 1200, f"{affiche:.0f} s affichees, attendu ~600"
+
+    # plus on zoome, moins on voit de temps
+    largeurs = [t[-1] - fenetre_horizontale(w, t, t[-1], z) for z in (1, 2, 5, 10)]
+    assert largeurs == sorted(largeurs, reverse=True), largeurs
+
+    # tant qu'il y a moins de points que de pixels, on montre tout
+    court = np.linspace(0, 100, 300)
+    assert fenetre_horizontale(w, court, court[-1], 1) == 0.0
+
+    # un zoom absurde ne casse rien
+    assert fenetre_horizontale(w, t, t[-1], 0) > 0
+    assert fenetre_horizontale(w, t, t[-1], None) > 0
