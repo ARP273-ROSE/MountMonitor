@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 _TARGET_CHANGE_ARCSEC = 300.0     # 5 arcmin from the target = new target
 _MIN_SEGMENT_SAMPLES = 20         # Minimum samples to consider a segment valid
 _REF_WINDOW = 256                 # samples used to refresh the reference position
+_STDEV_SETTLE_S = 60.0            # running-STDEV window: see _settled_stdevs()
 
 # ── Excursion rejection inside a segment ──────────────────────────────────
 # Dithers, re-centering slews and autofocus moves happen WHILE the mount still
@@ -51,6 +52,11 @@ class TargetSegment:
     dec_degrees: np.ndarray = field(default_factory=lambda: np.array([]))
     ra_stdevs: np.ndarray = field(default_factory=lambda: np.array([]))
     dec_stdevs: np.ndarray = field(default_factory=lambda: np.array([]))
+    # Deviation from the position the mount is actually holding (drift and
+    # repositioning steps taken out). This -- not the raw deviation -- is what
+    # blurs a frame, and it is the basis the jitter and the rating use.
+    ra_residual: np.ndarray = field(default_factory=lambda: np.array([]))
+    dec_residual: np.ndarray = field(default_factory=lambda: np.array([]))
     excursions_removed: int = 0       # dithers / re-centering excluded from stats
     excursion_max_arcsec: float = 0.0 # largest excursion seen, for the report
 
@@ -208,6 +214,8 @@ class ParsedSession:
     deviation_timestamps: np.ndarray = field(default_factory=lambda: np.array([]))
     deviation_ra_stdevs: np.ndarray = field(default_factory=lambda: np.array([]))
     deviation_dec_stdevs: np.ndarray = field(default_factory=lambda: np.array([]))
+    ra_residual: np.ndarray = field(default_factory=lambda: np.array([]))
+    dec_residual: np.ndarray = field(default_factory=lambda: np.array([]))
 
     # TRACKING-only filtered arrays (for analysis)
     tracking_mask: np.ndarray = field(default_factory=lambda: np.array([], dtype=bool))
@@ -345,6 +353,72 @@ def _sep_arcsec(ra1_h, dec1_d, ra2_h, dec2_d) -> float:
     return float(np.hypot(dra, ddec))
 
 
+def _settled_stdevs(t: np.ndarray, stdevs: np.ndarray,
+                    dev: np.ndarray | None = None) -> np.ndarray:
+    """Blank the running STDEV values that still contain the previous slew.
+
+    The running STDEV is computed live over a sliding window (60 s by
+    default). For the first window-length after a target change, that window
+    still straddles the slew, so the value describes the slew and not the
+    tracking. On a short target the contamination is total: on the
+    2026-09-22 session, target #2 lasted 33 s and reported a mean running
+    STDEV of 69.9" while its whole peak-to-peak was 0.64".
+
+    Contaminated samples are set to 0, which is the value the report already
+    treats as "no data".
+    """
+    out = np.asarray(stdevs, dtype=np.float64).copy()
+    if len(out) == 0 or len(t) != len(out):
+        return out
+    out[t < t[0] + _STDEV_SETTLE_S] = 0.0
+    # Same problem inside a segment: an autofocus run or a filter change
+    # interrupts acquisition, and the window straddles the gap afterwards.
+    if len(t) > 2:
+        dt = np.diff(t)
+        pas = float(np.median(dt))
+        if pas > 0:
+            for i in np.flatnonzero(dt > 5.0 * pas):
+                out[(t > t[i]) & (t < t[i + 1] + _STDEV_SETTLE_S)] = 0.0
+    # And around every repositioning: the mount is MOVED between exposures,
+    # so for one window length afterwards the running STDEV measures the step
+    # height, not how well the mount holds. This is the same reasoning the
+    # jitter already applies by splitting on steps.
+    if dev is not None and len(dev) == len(t) > 8:
+        d = np.abs(np.diff(np.asarray(dev, dtype=np.float64)))
+        ech = float(np.median(d))
+        seuil = max(8.0 * ech, 0.5)
+        for i in np.flatnonzero(d > seuil):
+            out[(t >= t[i]) & (t < t[i] + _STDEV_SETTLE_S)] = 0.0
+    return out
+
+
+def _baseline(t: np.ndarray, v: np.ndarray, block_s: float = 180.0) -> np.ndarray:
+    """Slowly varying baseline of ``v``: the position the mount is holding.
+
+    Median over ``block_s`` blocks, linearly interpolated back onto ``t``.
+    A median is used rather than a mean so that a dither sitting inside a
+    block cannot pull the baseline towards itself, and blocks rather than a
+    polynomial so that a re-centering step is followed instead of smeared
+    across the whole segment.
+    """
+    n = len(v)
+    if n < 8 or t[-1] <= t[0]:
+        return np.full(n, float(np.median(v)) if n else 0.0)
+    edges = np.arange(t[0], t[-1] + block_s, block_s)
+    if len(edges) < 2:
+        return np.full(n, float(np.median(v)))
+    idx = np.clip(np.searchsorted(edges, t, side='right') - 1, 0, len(edges) - 2)
+    centres, meds = [], []
+    for b in range(len(edges) - 1):
+        m = idx == b
+        if int(np.sum(m)) >= 3:
+            centres.append(float(np.mean(t[m])))
+            meds.append(float(np.median(v[m])))
+    if len(centres) < 2:
+        return np.full(n, float(np.median(v)))
+    return np.interp(t, np.array(centres), np.array(meds))
+
+
 def _segment_tracking_data(
     ra_hours: np.ndarray, dec_degrees: np.ndarray,
     timestamps: np.ndarray, ra_stdevs: np.ndarray, dec_stdevs: np.ndarray,
@@ -405,10 +479,32 @@ def _segment_tracking_data(
         dec_dev = (seg_dec - dec_median) * 3600.0
 
         # ── 2. drop commanded excursions (dither, re-centering, AF) ────────
-        sep = np.hypot(ra_dev, dec_dev)
+        #
+        # The threshold must be applied to the deviation AFTER the slow drift
+        # has been taken out, never to the raw distance from the segment
+        # median. An unguided mount left on one target for hours drifts far
+        # beyond _EXCURSION_ARCSEC without anything being commanded: on the
+        # 2026-09-22 session, target #1 held 8 h with a DEC drift of
+        # -16.8"/h, i.e. ~134" end to end. Thresholding the raw separation
+        # threw away 36,336 of its 54,388 samples -- 59% of the whole night --
+        # and labelled pure tracking as "commanded excursions".
+        #
+        # The fit is done twice: once on everything to get a first drift
+        # estimate, then again on the samples that survived, so that a real
+        # dither cannot drag the slope towards itself.
+        seg_t = timestamps[start:end]
+
+        # The baseline is a block median, not a straight line. Over 8 h the
+        # drift of an unguided mount CURVES (it depends on hour angle), and a
+        # re-centering leaves a permanent step; a linear fit follows neither.
+        # A median over ~3 min blocks follows both, while a dither -- a few
+        # seconds at most -- cannot move it.
+        ra_res = ra_dev - _baseline(seg_t, ra_dev)
+        dec_res = dec_dev - _baseline(seg_t, dec_dev)
+        sep = np.hypot(ra_res, dec_res)
         keep = sep <= _EXCURSION_ARCSEC
-        n_out = int(np.sum(~keep))
         sep_max = float(sep.max()) if len(sep) else 0.0
+        n_out = int(np.sum(~keep))
         if n_out and int(np.sum(keep)) >= _MIN_SEGMENT_SAMPLES:
             # recompute the median on the clean samples, then the deviations
             ra_median = float(np.median(seg_ra[keep]))
@@ -416,9 +512,6 @@ def _segment_tracking_data(
             cos_dec = np.cos(np.radians(dec_median))
             ra_dev = np.array([_ra_diff_hours(r, ra_median) for r in seg_ra]) * 15.0 * 3600.0 * cos_dec
             dec_dev = (seg_dec - dec_median) * 3600.0
-            sep = np.hypot(ra_dev, dec_dev)
-            keep = sep <= _EXCURSION_ARCSEC
-            n_out = int(np.sum(~keep))
         else:
             keep = np.ones(len(seg_ra), dtype=bool)
             n_out = 0
@@ -435,8 +528,10 @@ def _segment_tracking_data(
             timestamps=timestamps[idx],
             ra_hours=seg_ra[keep],
             dec_degrees=seg_dec[keep],
-            ra_stdevs=ra_stdevs[idx],
-            dec_stdevs=dec_stdevs[idx],
+            ra_stdevs=_settled_stdevs(timestamps[idx], ra_stdevs[idx], ra_dev[keep]),
+            dec_stdevs=_settled_stdevs(timestamps[idx], dec_stdevs[idx], dec_dev[keep]),
+            ra_residual=ra_res[keep],
+            dec_residual=dec_res[keep],
             excursions_removed=n_out,
             excursion_max_arcsec=sep_max,
         )
@@ -610,6 +705,8 @@ def parse_dat_file(dat_path: Path) -> ParsedSession:
             # Drift-free deviations: this is what actually blurs an exposure.
             session.ra_detrended = np.concatenate([seg.ra_detrended for seg in segments])
             session.dec_detrended = np.concatenate([seg.dec_detrended for seg in segments])
+            session.ra_residual = np.concatenate([seg.ra_residual for seg in segments])
+            session.dec_residual = np.concatenate([seg.dec_residual for seg in segments])
             # Jitter weighted by sample count: the figure the rating is based on.
             _w = float(sum(g.sample_count for g in segments)) or 1.0
             session.ra_jitter = sum(g.ra_jitter * g.sample_count for g in segments) / _w

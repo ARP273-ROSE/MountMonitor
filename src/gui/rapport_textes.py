@@ -143,8 +143,8 @@ TR = {
         "fr": "(dither, recentrage, autofocus — mouvement commandé, pas erreur de suivi)",
         "nl": "(dither, hercentrering, autofocus — opgedragen beweging, geen volgfout)"},
     "slews_ecartes": {
-        "en": "Slew samples excluded", "fr": "Échantillons de slew écartés",
-        "nl": "Zwenk-meetpunten uitgesloten"},
+        "en": "Samples outside any target", "fr": "Échantillons hors cible",
+        "nl": "Meetpunten buiten elk doel"},
     "type_monture": {"en": "Mount type", "fr": "Type de monture", "nl": "Type montering"},
     "non_guidee_precision": {
         "en": "Precision unguided", "fr": "Précision non guidée",
