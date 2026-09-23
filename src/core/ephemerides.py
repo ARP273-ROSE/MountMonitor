@@ -134,12 +134,20 @@ def nuit_autour(reference: datetime, lat: float, lon: float) -> Nuit:
         reference = reference.replace(tzinfo=timezone.utc)
     reference = reference.astimezone(timezone.utc)
 
-    # Start the search from local noon before the reference, so that a
-    # session opened at 02:00 describes the night it is IN, not the next.
+    # Which night to describe. A session opened at 02:00 is IN a night and
+    # wants that one; someone connecting at 09:16 in the morning is looking
+    # ahead to the evening, not back at the night that just ended. The Sun
+    # itself settles it: if it is up, the interesting night is the next one.
     midi_local = reference.replace(hour=12, minute=0, second=0, microsecond=0) \
         - timedelta(hours=lon / 15.0)
-    if midi_local > reference:
+    recule = midi_local > reference
+    if recule:
         midi_local -= timedelta(days=1)
+    if recule and hauteur_soleil(reference, lat, lon) > HORIZON:
+        # Morning, after sunrise: the night that just ended is over, and the
+        # one being prepared is tonight's. Only this case needs the jump --
+        # an afternoon reference already points at the right window.
+        midi_local += timedelta(days=1)
     fin = midi_local + timedelta(days=1)
 
     n = Nuit()

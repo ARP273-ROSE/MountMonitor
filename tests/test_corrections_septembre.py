@@ -303,3 +303,40 @@ def test_une_langue_explicite_ne_touche_pas_la_vue_courante():
 
     dlg._run_analysis("nl")
     assert dlg._report.texte == "intact"
+
+
+def test_le_matin_on_annonce_la_nuit_qui_vient():
+    """A 09 h 16 le module decrivait la nuit qui venait de finir.
+
+    Quelqu'un qui se connecte le matin prepare sa soiree ; il ne revient pas
+    sur la nuit ecoulee. La difference se voyait a peine — trois minutes sur
+    le debut de nuit noire — et c'est bien ce qui la rendait sournoise.
+    """
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from src.core.ephemerides import nuit_autour
+
+    tz = ZoneInfo("Europe/Paris")
+    lat, lon = 49.30611, 2.75528
+
+    # le matin, apres le lever : la nuit A VENIR
+    matin = nuit_autour(datetime(2026, 9, 23, 9, 16, tzinfo=tz), lat, lon)
+    assert matin.astro_debut.astimezone(tz).day == 23
+    assert matin.astro_debut.astimezone(tz).strftime("%H:%M") == "21:32"
+
+    # l'apres-midi vise la meme nuit, sans sauter un jour de plus
+    aprem = nuit_autour(datetime(2026, 9, 23, 15, 0, tzinfo=tz), lat, lon)
+    assert aprem.astro_debut == matin.astro_debut
+
+    # en pleine nuit, c'est la nuit EN COURS
+    creux = nuit_autour(datetime(2026, 9, 24, 2, 0, tzinfo=tz), lat, lon)
+    assert creux.astro_debut == matin.astro_debut
+
+    # avant l'aube aussi : la nuit qui se termine reste la bonne
+    aube = nuit_autour(datetime(2026, 9, 24, 6, 30, tzinfo=tz), lat, lon)
+    assert aube.astro_debut == matin.astro_debut
+
+    # et le lendemain matin, on passe a la suivante
+    suivant = nuit_autour(datetime(2026, 9, 24, 9, 0, tzinfo=tz), lat, lon)
+    assert suivant.astro_debut > matin.astro_debut
