@@ -244,6 +244,10 @@ class PreferencesDialog(QDialog):
         self._tol_dec.setToolTip(T("tt_tol_dec"))
         tol_form.addRow(T("pref_tolerance_dec"), self._tol_dec)
 
+        self._ra_degres = QCheckBox(T("pref_ra_degrees"))
+        self._ra_degres.setChecked(bool(self._settings.get("ra_in_degrees")))
+        tol_form.addRow(self._ra_degres)
+
         self._tol_ha = QCheckBox(T("pref_show_ra_ha"))
         self._tol_ha.setChecked(self._settings.get("tolerance_as_ha_seconds"))
         self._tol_ha.setToolTip(T("tt_tol_ha"))
@@ -565,6 +569,7 @@ class PreferencesDialog(QDialog):
         s.set("graph_textbox_ratio", self._graph_ratio.value())
         i = self._language.currentIndex()
         s.set("language", self._codes_langue[i] if 0 <= i < len(self._codes_langue) else "auto")
+        s.set("ra_in_degrees", self._ra_degres.isChecked())
         s.set("site_latitude", self._site_lat.text().strip())
         s.set("site_longitude", self._site_lon.text().strip())
         s.set("site_elevation_m", self._site_elev.text().strip())

@@ -28,7 +28,7 @@ from PyQt6.QtGui import QFont, QTextCursor
 from ..logging_module.log_parser import ParsedSession, TargetSegment
 from ..utils.i18n import T, get_language, LANGUES
 from .rapport_textes import R
-from ..utils.coordinates import format_ra, format_dec
+from ..utils.coordinates import format_ra, format_dec, format_ra_degrees
 
 logger = logging.getLogger(__name__)
 
@@ -153,6 +153,16 @@ class AnalysisDialog(QDialog):
         super().__init__(parent)
         self._session = session
         self._lang = get_language()
+        # L'ascension droite se compte en heures par convention, mais une
+        # monture rend des positions d'encodeur en degres : le reglage permet
+        # de lire les deux dans la meme unite. Lu sans jamais lever : ce
+        # dialogue est aussi construit par __new__ pour sauver un rapport
+        # hors interface.
+        try:
+            from ..config.settings import Settings
+            self._ra_en_degres = bool(Settings().get("ra_in_degrees"))
+        except Exception:
+            self._ra_en_degres = False
         self._rapports = {}
         self._setup_ui()
         self._remplir_les_langues()
@@ -436,7 +446,13 @@ class AnalysisDialog(QDialog):
         # ═══════════════════════════════════════════════════════════
         for seg_idx, seg in enumerate(s.target_segments):
             lines.append("=" * 70)
-            ra_str = format_ra(seg.ra_median_hours)
+            # __dict__ et non getattr : sur un QDialog construit par __new__
+            # — ce que fait sauver_rapport — Qt intercepte l'acces et leve
+            # RuntimeError au lieu d'AttributeError, si bien que la valeur
+            # par defaut de getattr ne sert a rien.
+            en_degres = self.__dict__.get('_ra_en_degres', False)
+            ra_str = (format_ra_degrees(seg.ra_median_hours) if en_degres
+                      else format_ra(seg.ra_median_hours))
             dec_str = format_dec(seg.dec_median_degrees)
             lines.append(f"  {_('t_cible')} #{seg_idx + 1}  —  {T('ra_short', lg)} {ra_str}  "
                          f"{T('dec_short', lg)} {dec_str}  "

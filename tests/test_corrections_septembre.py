@@ -428,3 +428,35 @@ def test_les_courbes_defilent_au_zoom_par_defaut():
     # un zoom absurde ne casse rien
     assert fenetre_horizontale(w, t, t[-1], 0) > 0
     assert fenetre_horizontale(w, t, t[-1], None) > 0
+
+
+# ── Les coordonnees ─────────────────────────────────────────────────
+
+def test_le_report_des_secondes_ne_donne_plus_soixante():
+    """« 01:59:60.00 » au lieu de « 02:00:00.00 ».
+
+    Defaut preexistant des trois formateurs : sans report, une valeur qui
+    arrondit a soixante secondes s'affiche telle quelle. Il ne se voit que
+    sur les valeurs qui tombent juste, ce qui le rend d'autant plus
+    surprenant a l'ecran.
+    """
+    from src.utils.coordinates import format_dec, format_ra, format_ra_degrees
+
+    assert format_ra(1 + 59 / 60 + 59.999 / 3600) == "02:00:00.00"
+    assert format_ra(23.999999) == "00:00:00.00"          # et le tour complet
+    assert format_dec(41 + 1 / 60 + 59.999 / 3600) == "+41:02:00.0"
+    assert format_dec(-30.9999999) == "-31:00:00.0"
+    assert format_ra_degrees(23.999999) == "359:59:59.9"
+
+    for f, v in ((format_ra, 2.735555556), (format_dec, 61.8),
+                 (format_ra_degrees, 12.0)):
+        assert ":60" not in f(v), f(v)
+
+
+def test_l_ascension_droite_se_lit_aussi_en_degres():
+    """Demande de Nicolàs de Hilster : une heure vaut quinze degres."""
+    from src.utils.coordinates import format_ra_degrees
+
+    assert format_ra_degrees(0.0) == "000:00:00.0"
+    assert format_ra_degrees(12.0) == "180:00:00.0"
+    assert format_ra_degrees(2 + 44 / 60 + 8 / 3600) == "041:02:00.0"
