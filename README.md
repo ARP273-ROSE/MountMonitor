@@ -45,11 +45,28 @@ Running from source needs Python 3.10 or later and the packages in
 - NTP time server integration for absolute time accuracy
 - Automatic mount settings verification at startup and after each slew
 
+### Session Control
+- **Armed logging**: the logger waits for the mount to start tracking instead
+  of recording the hours between connection and nightfall
+- **A night is one unit**: a park mid-night suspends recording and resumes in
+  the same file; only sunrise closes the session and writes the report
+- **Night ephemeris** from the site the mount reports — sunset, twilights,
+  sunrise, and how much of the astronomical night the session covered
+
 ### Communication Protocols
 - **LX200 TCP/IP** — Native protocol for 10Micron and compatible mounts
 - **LX200 Serial** — Serial connection (RS-232, 9600 8N1)
 - **ASCOM** — Windows ASCOM drivers via COM interface with native Chooser dialog
 - **Simulation** — Built-in mount and seismometer simulation for testing
+
+### Tracking Analysis
+- **Jitter measured between repositionings**, not around a straight line: a
+  deviation record is a staircase, not a noisy line, and removing a drift does
+  not remove a staircase
+- **Commanded moves grouped and classified** — dither, re-centering, or
+  unsettled — and reported apart from the tracking figures
+- Slow drift, commanded moves and tracking jitter each reported on their own
+  terms, so none of them contaminates the others
 
 ### Advanced Analysis
 - **FFT Analysis** — Frequency and period domain for RA, DEC, and seismic data
@@ -94,89 +111,53 @@ Running from source needs Python 3.10 or later and the packages in
 ### Modern Interface
 - Dark astronomy-friendly theme (preserves night vision)
 - High-performance real-time graphs (pyqtgraph with OpenGL)
-- Bilingual interface (English / French)
+- **Trilingual interface (English / French / Dutch)**, detected from the system
+  and switchable from the Language menu — every dialog, report and message
 - Keyboard shortcuts for all operations
 - Resizable panels with persistent layout
 - Custom logo and icon
 
 ---
 
-## What's New in v1.7.0
+## What's New in v1.19.0
 
-### Auto-Update from GitHub
-MountMonitor now checks for updates **automatically at startup** (silent, background, non-blocking):
-- Compares local `VERSION` with latest GitHub Release tag
-- Shows changelog and offers to **download & install** with one click
-- Manual check via **Help → Check for Updates**
-- Secure download: size limits (100 MB), zip validation, anti-path-traversal, anti-symlink, anti-zip-bomb
-- **File whitelist**: only updates `.py`, `.md`, `.bat`, `.sh`, `.png`, `.ico`, `.pdf` etc. — never overwrites user data (settings, logs, graphs, venv, .git)
-- Atomic writes (temp file + fsync + replace) for safe file replacement
-- Automatic restart after successful update
+The full history, with the measured figures behind each change, is in
+[CHANGELOG.md](CHANGELOG.md). The last few versions, in short:
 
-### Crash Detection & Reporting
-- **Automatic crash capture**: `sys.excepthook` saves a JSON crash report with anonymized traceback
-- On next startup, MountMonitor detects the crash report and offers to **report it on GitHub** (pre-filled Issue with system info)
-- All file paths are **completely anonymized** — home directory replaced with `~`, username patterns removed
+### The tracking figures now describe tracking
+The excursion filter used to discard **59% of a night**: it thresholded the raw
+distance from the session median, and an unguided mount left eight hours on one
+target drifts far past any fixed threshold without anything being commanded.
+99.5% of samples are now kept instead of 41.1% — and the jitter barely moved,
+which is what confirmed the figure had been right and the sample selection had
+not.
 
-### Bug Report Dialog
-- **Help → Report a Bug**: opens a dialog to describe the issue
-- Submits a **pre-filled GitHub Issue** with anonymized system info, Python version, architecture, and recent error log entries
-- No telemetry — everything is offline, only sent voluntarily via GitHub Issues
+Commanded moves are grouped and classified — dither, re-centering, or
+unsettled — and reported apart from the tracking. A sequence that dithers every
+frame does not score worse than one that never does.
 
-### Privacy & Anonymization
-- New `anonymize_path()` function strips home directory, username, and drive-letter patterns from all reports
-- Works cross-platform (Windows case-insensitive path matching, Unix home detection)
-- OS version details removed from crash reports (only OS name kept)
-- Recent error log entries included in bug reports are also anonymized
+### A night is one unit
+The logger can be **armed** rather than started: it waits for the mount to
+begin tracking, so a mount connected at noon no longer writes seven hours of
+nothing. If the mount parks at two in the morning and resumes at three,
+recording suspends and resumes **in the same file**. Only sunrise ends the
+night and triggers the report.
 
----
+### Night ephemeris
+Sunset, twilights and sunrise are computed from the site the mount itself
+reports, and the report states how much of the astronomical night the session
+actually covered. Checked against skyfield/DE421 over five sites and 36 dates:
+worst case 23.8 seconds.
 
-## What's New in v1.6.1
+### Three languages, everywhere
+English, French and Dutch — in the interface, in the report, in the consent
+question and in the crash dialog. A **Language menu** now sits in the menu bar,
+each entry written in its own language. All 373 translation keys are complete.
 
-### NAS / Multi-PC Portability
-MountMonitor can now be stored on a **NAS or synced folder** and used from multiple PCs without conflict:
-- **Local venv**: The virtual environment is stored locally (`%LOCALAPPDATA%\MountMonitor\venv` on Windows, `~/.local/share/MountMonitor/venv` on Linux) instead of inside the project folder
-- **Portable shortcut**: Desktop shortcut targets `launch.bat`/`launch.sh` instead of a specific Python path — works on any PC regardless of Python install location
-- **Auto-detect stale paths**: If the project folder moves, the shortcut detects the old path and offers to update itself
-- **Local icon copy**: The icon is copied to local storage so it displays correctly even from network/UNC paths
+### Six packages
+Windows, macOS on Apple Silicon **and** Intel, Linux on x86_64 **and** ARM,
+each with an installer and automatic updates.
 
----
-
-## What's New in v1.6.0
-
-### Performance — UI Freeze Fix
-Seven compounding causes of progressive UI freeze identified and fixed:
-- **Numpy array caching** with dirty flags — no redundant copies of 50K+ element buffers
-- **Graph downsampling** — max 5,000 points displayed, preserving extremes
-- **250ms refresh timer** (was 100ms) — 4 fps, halving CPU load with no visible difference
-- **QPlainTextEdit** status panel — 10x faster than QTextEdit HTML rendering
-- **Stylesheet caching** — CSS only recalculated when state actually changes
-- **STDEV outside lock** — heavy computation no longer blocks the main thread
-- **Cached pen/font** — QPen and QFont objects reused across refreshes
-
-Stable for 8h+ sessions without any degradation.
-
-### Adaptive Night Report Scoring
-Automatic detection of **unguided precision mounts** (10Micron, Planewave, ASA DDM) with adapted thresholds:
-
-| Rating | Guided (standard) | Unguided precision |
-|---|---|---|
-| Excellent | < 0.5" | < 2.0" |
-| Good | < 1.5" | < 4.0" |
-| Fair | < 3.0" | < 8.0" |
-
-Detection combines mount name, ASCOM driver, and firmware fields. Recommendations are also adapted (pointing model vs. polar alignment).
-
-### Security Hardening
-- LX200 response buffer limited to 4,096 bytes (anti-DoS)
-- Log header sanitization (anti-newline/tab injection)
-- Periodic flush every 20 writes (NAS performance: 95% fewer flush calls)
-- Mount driver parsed from .dat files for enriched detection
-
-### Environment Logging
-New `.env` log file type — temperature, pressure, alignment model quality, extended mount status, meridian flip countdown. Six log file types total.
-
----
 
 ## Overview
 
