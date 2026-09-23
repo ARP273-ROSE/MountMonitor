@@ -107,6 +107,9 @@ class MainWindow(QMainWindow):
         # reports. The night is defined by the Sun, not by a park.
         self._logging_suspendu = False
         self._nuit_vue = False          # the Sun went below the horizon while recording
+        # Chemin du .dat que CE lancement a ferme. Tant qu'il est None, il n'y
+        # a rien a analyser automatiquement.
+        self._derniere_session = None
         self._aube_timer = None
         # Site as the mount reports it, when it does. Plenty of setups never
         # push their site to the mount -- hence the preference fallback.
@@ -701,8 +704,12 @@ class MainWindow(QMainWindow):
             if self._settings.get("close_files_mode") in ("slewing", "parking"):
                 self._stop_logging()
 
-            # Auto-analysis on park: analyze the night session
-            self._auto_analyze_on_park()
+            # Auto-analysis on park: only for a session THIS run recorded.
+            # It used to fire on any PARKED status and analyse the newest
+            # .dat lying on disk, so connecting to an already-parked mount
+            # opened a report on a night that had nothing to do with it.
+            if getattr(self, '_derniere_session', None) is not None:
+                self._auto_analyze_on_park()
 
         # After slew ends and tracking resumes → run checks + get target coords
         if was_slewing and now_tracking:
@@ -1177,6 +1184,7 @@ class MainWindow(QMainWindow):
         if not self._logging_active:
             return
         chemin_dat = getattr(self._file_logger, 'dat_path', None)
+        self._derniere_session = chemin_dat
         self._file_logger.close()
         self._logging_active = False
         self._btn_logging.setText(T("btn_start_log"))
@@ -1415,17 +1423,11 @@ class MainWindow(QMainWindow):
         Finds the most recent .dat log file and runs the full analysis.
         """
         try:
-            log_dir = self._file_logger.log_dir
-            sessions = list_log_sessions(log_dir)
-            if not sessions:
+            dat_path = self._derniere_session
+            if dat_path is None or not Path(dat_path).exists():
                 return
-
-            # Use the most recent log file
-            latest = sessions[0]
-            dat_path = latest['path']
-
-            # Only analyze if file has meaningful data (> 1 KB)
-            if latest['size_kb'] < 1.0:
+            # Une session d'une poignee d'octets n'a rien a dire.
+            if Path(dat_path).stat().st_size < 1024:
                 return
 
             self._status_panel.add_message(
@@ -2016,7 +2018,8 @@ class MainWindow(QMainWindow):
             layout.addWidget(changelog_label)
             changelog = QTextEdit()
             changelog.setReadOnly(True)
-            changelog.setPlainText(body)
+            changelog.setPlainText(
+                updater.notes_dans_la_langue(body, get_language()))
             layout.addWidget(changelog)
 
         # Buttons
