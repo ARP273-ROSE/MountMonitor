@@ -28,6 +28,10 @@ _TARGET_CHANGE_ARCSEC = 300.0     # 5 arcmin from the target = new target
 _MIN_SEGMENT_SAMPLES = 20         # Minimum samples to consider a segment valid
 _REF_WINDOW = 256                 # samples used to refresh the reference position
 _STDEV_SETTLE_S = 60.0            # running-STDEV window: see _settled_stdevs()
+_FUSION_S = 10.0                  # crossings closer than this are one move
+_FENETRE_APRES = 60               # samples examined after a move
+_MARGE_MOUVEMENT = 2              # samples dropped after a move, see jitter()
+_DELAI_APRES_SLEW = 5.0           # seconds ignored when tracking resumes
 
 # ── Excursion rejection inside a segment ──────────────────────────────────
 # Dithers, re-centering slews and autofocus moves happen WHILE the mount still
@@ -59,12 +63,14 @@ class TargetSegment:
     dec_residual: np.ndarray = field(default_factory=lambda: np.array([]))
     # Observing site, read back from the header: decimal degrees, longitude
     # positive east. Needed on replay, when the mount is long gone.
+    mouvements: list = field(default_factory=list)
     site_lat: float | None = None
     site_lon: float | None = None
     site_elev: float | None = None
     start_iso: object = None
     excursions_removed: int = 0       # dithers / re-centering excluded from stats
     excursion_max_arcsec: float = 0.0 # largest excursion seen, for the report
+    mouvements: list = field(default_factory=list)   # see _mouvements()
 
     def _paliers(self, dev: np.ndarray) -> np.ndarray:
         """Indices where the mount was repositioned (dither, re-centering).
@@ -95,7 +101,14 @@ class TargetSegment:
         if len(dev) < 8:
             return float(np.std(dev)) if len(dev) else 0.0
         bords = np.concatenate(([0], self._paliers(dev), [len(dev)]))
-        morceaux = [dev[a:b] for a, b in zip(bords[:-1], bords[1:]) if b - a >= 8]
+        # Drop a couple of samples after each step: the move itself is not
+        # tracking error and must not count as one. Measured on the
+        # 2026-09-22 session the effect is small -- RA unchanged, DEC 5%
+        # lower at most -- which is the point: the figure must not depend on
+        # how often the sequencer dithers.
+        morceaux = [dev[a + _MARGE_MOUVEMENT:b] if a > 0 else dev[a:b]
+                    for a, b in zip(bords[:-1], bords[1:])
+                    if b - a - (_MARGE_MOUVEMENT if a > 0 else 0) >= 8]
         if not morceaux:
             return float(np.std(dev))
         # Median of the per-step spreads: robust to the few steps that contain
@@ -398,6 +411,81 @@ def _settled_stdevs(t: np.ndarray, stdevs: np.ndarray,
     return out
 
 
+@dataclass
+class Mouvement:
+    """One commanded move: a dither, a re-centering, or something else.
+
+    Raw threshold crossings are NOT movements. A single re-centering of 70"
+    takes several samples to complete and trips the threshold at each one:
+    on the 2026-09-22 session, 98 crossings on the first target were 37
+    actual moves. Counting crossings made the reported median amplitude
+    0.79" when the real median move was 7.9" -- an order of magnitude, and
+    in the flattering direction.
+    """
+    debut: int = 0
+    fin: int = 0
+    instant: float = 0.0
+    amplitude: float = 0.0        # arcsec, end to end
+    duree: float = 0.0            # seconds
+    classe: str = "dither"        # dither | recentrage | anomalie
+    jitter_apres: float = 0.0
+
+
+def _mouvements(ra_dev, dec_dev, t, seuil_recentrage=25.0) -> list:
+    """Group threshold crossings into movements and label them.
+
+    Crossings closer together than ``_FUSION_S`` belong to one move. The
+    label is deliberately crude, because the log cannot tell a commanded
+    move from an uncommanded one -- there is no command channel in the
+    file. What it CAN see is the size, and whether the mount settled
+    afterwards; a move that does not settle is the one worth flagging.
+    """
+    n = len(ra_dev)
+    if n < 8 or len(t) != n:
+        return []
+    d = np.hypot(np.diff(ra_dev), np.diff(dec_dev))
+    ech = float(np.median(d))
+    seuil = max(8.0 * ech, 0.5)
+    idx = np.flatnonzero(d > seuil) + 1
+    if not len(idx):
+        return []
+    groupes = [[int(idx[0])]]
+    for i in idx[1:]:
+        if t[i] - t[groupes[-1][-1]] <= _FUSION_S:
+            groupes[-1].append(int(i))
+        else:
+            groupes.append([int(i)])
+
+    # Reference spread: how tight the mount is between moves. A move is an
+    # anomaly when what follows it is markedly worse than that.
+    bords = np.concatenate(([0], idx, [n]))
+    calmes = [np.hypot(np.std(ra_dev[a:b]), np.std(dec_dev[a:b]))
+              for a, b in zip(bords[:-1], bords[1:]) if b - a >= 8]
+    calme = float(np.median(calmes)) if calmes else 0.0
+
+    out = []
+    for g in groupes:
+        a = max(0, g[0] - 1)
+        b = min(g[-1], n - 1)
+        m = Mouvement(
+            debut=a, fin=b, instant=float(t[a]),
+            amplitude=float(np.hypot(ra_dev[b] - ra_dev[a], dec_dev[b] - dec_dev[a])),
+            duree=float(t[b] - t[a]),
+        )
+        fin_fenetre = min(n, b + 1 + _FENETRE_APRES)
+        if fin_fenetre - (b + 1) >= 8:
+            m.jitter_apres = float(np.hypot(np.std(ra_dev[b + 1:fin_fenetre]),
+                                            np.std(dec_dev[b + 1:fin_fenetre])))
+        if calme > 0 and m.jitter_apres > max(5.0 * calme, 1.0):
+            m.classe = "anomalie"
+        elif m.amplitude >= seuil_recentrage:
+            m.classe = "recentrage"
+        else:
+            m.classe = "dither"
+        out.append(m)
+    return out
+
+
 def _baseline(t: np.ndarray, v: np.ndarray, block_s: float = 180.0) -> np.ndarray:
     """Slowly varying baseline of ``v``: the position the mount is holding.
 
@@ -538,6 +626,7 @@ def _segment_tracking_data(
             dec_stdevs=_settled_stdevs(timestamps[idx], dec_stdevs[idx], dec_dev[keep]),
             ra_residual=ra_res[keep],
             dec_residual=dec_res[keep],
+            mouvements=_mouvements(ra_dev[keep], dec_dev[keep], timestamps[idx]),
             excursions_removed=n_out,
             excursion_max_arcsec=sep_max,
         )
@@ -702,6 +791,21 @@ def parse_dat_file(dat_path: Path) -> ParsedSession:
 
     # ── Filter TRACKING-only samples ──
     tracking_mask = np.array([s == "TRACKING" for s in statuses], dtype=bool)
+
+    # Drop the first seconds of every return to tracking. The mount reports
+    # TRACKING as soon as the slew command ends, while the axes are still
+    # settling; those samples are the tail of a move, not tracking error.
+    # The live logger has a delay_after_slew setting for the same reason,
+    # but it defaults to 0 and does nothing on replay -- a file already
+    # written carries every sample.
+    if len(tracking_mask) > 1 and _DELAI_APRES_SLEW > 0:
+        reprises = np.flatnonzero(tracking_mask[1:] & ~tracking_mask[:-1]) + 1
+        for i in reprises:
+            fin = session.timestamps[i] + _DELAI_APRES_SLEW
+            j = i
+            while j < len(tracking_mask) and session.timestamps[j] < fin:
+                tracking_mask[j] = False
+                j += 1
     session.tracking_mask = tracking_mask
 
     if np.any(tracking_mask):
@@ -737,6 +841,7 @@ def parse_dat_file(dat_path: Path) -> ParsedSession:
             session.ra_jitter = sum(g.ra_jitter * g.sample_count for g in segments) / _w
             session.dec_jitter = sum(g.dec_jitter * g.sample_count for g in segments) / _w
             session.repositionnements = sum(g.repositionnements for g in segments)
+            session.mouvements = [m for g in segments for m in g.mouvements]
             session.deviation_timestamps = np.concatenate([g.timestamps for g in segments])
             session.deviation_ra_stdevs = np.concatenate([g.ra_stdevs for g in segments])
             session.deviation_dec_stdevs = np.concatenate([g.dec_stdevs for g in segments])
@@ -769,6 +874,13 @@ def parse_dat_file(dat_path: Path) -> ParsedSession:
             )
         except ValueError:
             pass
+
+    # Files written before the header carried a "Start:" line have no stored
+    # offset. The name is local time, so attaching the reader's own offset is
+    # the only thing available -- right whenever the file is read where it was
+    # written, which is the normal case.
+    if getattr(session, 'start_iso', None) is None and session.start_time is not None:
+        session.start_iso = session.start_time.astimezone()
 
     logger.info(f"Parsed {len(mount_times)} samples from {dat_path.name} "
                 f"({int(np.sum(tracking_mask))} tracking, "

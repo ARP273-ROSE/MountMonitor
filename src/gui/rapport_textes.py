@@ -15,6 +15,94 @@ Les cles sont groupees dans l'ordre ou elles apparaissent dans le rapport.
 from ..utils.i18n import LANGUE_DEFAUT
 
 TR = {
+    "t_mouvements": {"en": "COMMANDED MOVES", "fr": "MOUVEMENTS COMMANDÉS",
+                     "nl": "AANGESTUURDE BEWEGINGEN"},
+    "mv_intro": {
+        "en": "(the mount is MOVED between exposures and stays there; none of "
+              "this blurs a frame)",
+        "fr": "(la monture est DÉPLACÉE entre les poses et y reste ; rien de "
+              "tout ceci n'étale une pose)",
+        "nl": "(de montering wordt TUSSEN opnames verplaatst en blijft daar; "
+              "niets hiervan doet een opname uitlopen)"},
+    "mv_total": {"en": "Movements", "fr": "Mouvements", "nl": "Bewegingen"},
+    "mv_dither": {"en": "of which dither", "fr": "dont dither", "nl": "waarvan dither"},
+    "mv_recentrage": {"en": "of which re-centering", "fr": "dont recentrage",
+                      "nl": "waarvan hercentrering"},
+    "mv_anomalie": {"en": "of which UNSETTLED", "fr": "dont NON STABILISÉS",
+                    "nl": "waarvan NIET GESTABILISEERD"},
+    "mv_amplitude": {"en": "Median amplitude", "fr": "Amplitude médiane",
+                     "nl": "Mediane amplitude"},
+    "mv_cadence": {"en": "Median interval", "fr": "Intervalle médian",
+                   "nl": "Mediaan interval"},
+    "mv_duree": {"en": "Median duration", "fr": "Durée médiane",
+                 "nl": "Mediane duur"},
+    "mv_max": {"en": "Largest movement", "fr": "Plus grand mouvement",
+               "nl": "Grootste beweging"},
+    "mv_hors_jitter": {
+        "en": "None of these enter the jitter: it is measured between moves, "
+              "with a margin after each.",
+        "fr": "Aucun n'entre dans le jitter : il est mesuré entre les "
+              "mouvements, avec une marge après chacun.",
+        "nl": "Geen ervan telt mee in de jitter: die wordt tussen de "
+              "bewegingen gemeten, met een marge na elke beweging."},
+    "mv_anomalie_detail": {
+        "en": "An unsettled move is one the mount did not recover from: the "
+              "spread afterwards stays several times its usual value. That is "
+              "the one worth looking at.",
+        "fr": "Un mouvement non stabilisé est un mouvement dont la monture ne "
+              "s'est pas remise : la dispersion qui suit reste plusieurs fois "
+              "sa valeur habituelle. C'est celui-là qui mérite un coup d'œil.",
+        "nl": "Een niet-gestabiliseerde beweging is er een waarvan de montering "
+              "zich niet herstelde: de spreiding erna blijft meerdere malen de "
+              "gebruikelijke waarde. Juist die verdient aandacht."},
+    "mv_aucun": {"en": "No commanded movement detected.",
+                 "fr": "Aucun mouvement commandé détecté.",
+                 "nl": "Geen aangestuurde beweging vastgesteld."},
+
+    # Lines that used to be hard-coded in analysis_dialog, printed in English
+    # AND French at once whatever language the report was in -- so the Dutch
+    # report was not Dutch, and the French one said everything twice.
+    "suivi_faible_detail": {
+        "en": "Mount spent significant time not tracking.",
+        "fr": "La monture a passé beaucoup de temps hors suivi.",
+        "nl": "De montering heeft veel tijd niet-volgend doorgebracht."},
+    "coupures_detectees": {
+        "en": "[i] Data acquisition interruptions detected",
+        "fr": "[i] Des interruptions d'acquisition ont été détectées",
+        "nl": "[i] Onderbrekingen in de gegevensregistratie vastgesteld"},
+    "acquisition_continue": {
+        "en": "[OK] Continuous acquisition, no gaps detected",
+        "fr": "[OK] Acquisition continue, pas de coupure détectée",
+        "nl": "[OK] Ononderbroken registratie, geen hiaten vastgesteld"},
+    "temp_grande_variation": {
+        "en": "[!] Large temperature change - may affect focus and tracking",
+        "fr": "[!] Variation thermique importante - peut affecter la mise au point et le suivi",
+        "nl": "[!] Grote temperatuurverandering - kan scherpstelling en volgen beïnvloeden"},
+    "temp_variation_moderee": {
+        "en": "[i] Moderate temperature change - monitor focus",
+        "fr": "[i] Variation thermique modérée - surveillez la mise au point",
+        "nl": "[i] Matige temperatuurverandering - houd de scherpstelling in de gaten"},
+    "monture_chauffe": {
+        "en": "[!] Mount heating significantly - check ventilation",
+        "fr": "[!] La monture chauffe significativement - vérifiez la ventilation",
+        "nl": "[!] De montering wordt duidelijk warm - controleer de ventilatie"},
+    "barometre_change": {
+        "en": "[i] Notable barometric change - weather conditions changing",
+        "fr": "[i] Changement barométrique notable - conditions météo changeantes",
+        "nl": "[i] Opvallende luchtdrukverandering - het weer verandert"},
+    "polaire_elevee": {
+        "en": "[!] High polar error - redo polar alignment",
+        "fr": "[!] Erreur polaire élevée - refaites l'alignement polaire",
+        "nl": "[!] Grote poolfout - voer de poolafstelling opnieuw uit"},
+    "polaire_moderee": {
+        "en": "[i] Moderate polar error - acceptable for most use cases",
+        "fr": "[i] Erreur polaire modérée - acceptable pour la plupart des usages",
+        "nl": "[i] Matige poolfout - voor de meeste toepassingen aanvaardbaar"},
+    "pas_ep_typique": {
+        "en": "[i] No typical periodic error in the 2-15 min range",
+        "fr": "[i] Pas d'erreur périodique typique dans la plage 2-15 min",
+        "nl": "[i] Geen typische periodieke fout in het bereik 2-15 min"},
+
 
     # ── titres de section ──────────────────────────────────────────────
     "t_apercu": {
