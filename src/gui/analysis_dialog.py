@@ -367,11 +367,22 @@ class AnalysisDialog(QDialog):
         lines.append(f"  {T('dec_short', lg) + ' RMS':<22} : {dec_jit:.3f}\"")
         lines.append("")
         lines.append("  --- " + _("s_repositionnement") + " ---")
-        if s.repositionnements:
-            _amp = [g.amplitude_repositionnement for g in s.target_segments
-                    if g.amplitude_repositionnement > 0]
-            _am = float(np.median(_amp)) if _amp else 0.0
-            lines.append(f"  {_('mouvements_detectes'):<22} : {s.repositionnements}")
+        _mv = getattr(s, 'mouvements', None) or []
+        if _mv or s.repositionnements:
+            # Count MOVES, not threshold crossings. One re-centering trips the
+            # threshold at every sample it takes to complete, so crossings
+            # both inflate the count and deflate the median amplitude -- the
+            # 2026-09-22 session read 47 moves of 0.79" where there were 55
+            # moves of 6.47".
+            if _mv:
+                _am = float(np.median([m.amplitude for m in _mv]))
+                _n = len(_mv)
+            else:
+                _amp = [g.amplitude_repositionnement for g in s.target_segments
+                        if g.amplitude_repositionnement > 0]
+                _am = float(np.median(_amp)) if _amp else 0.0
+                _n = s.repositionnements
+            lines.append(f"  {_('mouvements_detectes'):<22} : {_n}")
             lines.append(f"  {_('amplitude_mediane'):<22} : {_am:.2f}\"")
             lines.append("      " + _("repositionnement_explique"))
         else:
@@ -580,11 +591,15 @@ class AnalysisDialog(QDialog):
             tracking_pct = status_counts.get('TRACKING', 0) / total * 100
             if tracking_pct < 90:
                 lines.append(_("suivi_faible", pct=tracking_pct))
-                lines.append("      Mount spent significant time not tracking.")
-                lines.append("      La monture a passé beaucoup de temps hors suivi.")
+                lines.append("      " + _("suivi_faible_detail"))
             else:
                 lines.append(_("suivi_normal", pct=tracking_pct))
             lines.append("")
+
+        # ═══════════════════════════════════════════════════════════
+        # 6a. COMMANDED MOVES
+        # ═══════════════════════════════════════════════════════════
+        lines.extend(self._section_mouvements(s, lg))
 
         # ═══════════════════════════════════════════════════════════
         # 6b. NIGHT EPHEMERIS
@@ -637,12 +652,10 @@ class AnalysisDialog(QDialog):
                 lines.append(f"  {_('coupures'):<34} : {len(gaps)}")
                 lines.append(f"  {_('plus_longue_coupure'):<34} : {np.max(gaps):.1f} s")
                 lines.append(f"  {_('temps_total_perdu'):<34} : {np.sum(gaps):.1f} s")
-                lines.append("  [i] Data acquisition interruptions detected")
-                lines.append("      Des interruptions d'acquisition ont été détectées")
+                lines.append("  " + _("coupures_detectees"))
                 lines.append("      " + _("coupure_cause"))
             else:
-                lines.append("  [OK] Continuous acquisition, no gaps detected")
-                lines.append("       Acquisition continue, pas de coupure détectée")
+                lines.append("  " + _("acquisition_continue"))
             lines.append("")
 
         # ═══════════════════════════════════════════════════════════
@@ -663,11 +676,9 @@ class AnalysisDialog(QDialog):
                 temp_delta = valid_temp[-1] - valid_temp[0]
                 lines.append(f"  {_('changement_temp'):<34} : {temp_delta:+.1f}°C {_('pendant_session')}")
                 if abs(temp_delta) > 5.0:
-                    lines.append("  [!] Large temperature change — may affect focus and tracking")
-                    lines.append("      Variation thermique importante — peut affecter la mise au point et le suivi")
+                    lines.append("  " + _("temp_grande_variation"))
                 elif abs(temp_delta) > 2.0:
-                    lines.append("  [i] Moderate temperature change — monitor focus")
-                    lines.append("      Variation thermique modérée — surveillez la mise au point")
+                    lines.append("  " + _("temp_variation_moderee"))
                 else:
                     lines.append("  " + _("temperature_stable"))
                 lines.append("")
@@ -679,8 +690,7 @@ class AnalysisDialog(QDialog):
                 lines.append(f"  Internal range     : {np.min(valid_int):.1f}°C — {np.max(valid_int):.1f}°C")
                 int_delta = valid_int[-1] - valid_int[0]
                 if int_delta > 10.0:
-                    lines.append("  [!] Mount heating significantly — check ventilation")
-                    lines.append("      La monture chauffe significativement — vérifiez la ventilation")
+                    lines.append("  " + _("monture_chauffe"))
                 lines.append("")
 
             pres = s.env_pressure
@@ -691,8 +701,7 @@ class AnalysisDialog(QDialog):
                 pres_delta = valid_pres[-1] - valid_pres[0]
                 lines.append(f"  Pressure change     : {pres_delta:+.1f} mbar")
                 if abs(pres_delta) > 5.0:
-                    lines.append("  [i] Notable barometric change — weather conditions changing")
-                    lines.append("      Changement barométrique notable — conditions météo changeantes")
+                    lines.append("  " + _("barometre_change"))
                 lines.append("")
 
             valid_rms = s.env_alignment_rms[~np.isnan(s.env_alignment_rms)] if len(s.env_alignment_rms) > 0 else np.array([])
@@ -708,11 +717,9 @@ class AnalysisDialog(QDialog):
                     polar_arcmin = valid_polar[0] * 60.0
                     lines.append(f"  {_('erreur_polaire'):<34} : {valid_polar[0]:.4f}° ({polar_arcmin:.1f}')")
                     if polar_arcmin > 5.0:
-                        lines.append("  [!] High polar error — redo polar alignment")
-                        lines.append("      Erreur polaire élevée — refaites l'alignement polaire")
+                        lines.append("  " + _("polaire_elevee"))
                     elif polar_arcmin > 1.0:
-                        lines.append("  [i] Moderate polar error — acceptable for most use cases")
-                        lines.append("      Erreur polaire modérée — acceptable pour la plupart des usages")
+                        lines.append("  " + _("polaire_moderee"))
                     else:
                         lines.append("  " + _("alignement_excellent"))
                 lines.append("")
@@ -861,6 +868,55 @@ class AnalysisDialog(QDialog):
                 self._report.setPlainText(texte)
                 self._report.moveCursor(QTextCursor.MoveOperation.Start)
         return texte
+
+    def _section_mouvements(self, s, lg) -> list:
+        """Dither, re-centering, and moves the mount did not recover from.
+
+        Kept strictly apart from the tracking figures. A sequencer that
+        dithers every frame must not come out worse than one that never
+        does, so none of this touches the jitter -- that is measured between
+        moves, with a margin after each.
+        """
+        def _(cle, **kw):
+            return R(cle, lg, **kw)
+
+        mv = getattr(s, 'mouvements', None) or []
+        lines = ["=" * 70, "  " + _("t_mouvements"), "=" * 70, "",
+                 "  " + _("mv_intro"), ""]
+        if not mv:
+            lines += ["  " + _("mv_aucun"), ""]
+            return lines
+
+        import numpy as _np
+        amp = _np.array([m.amplitude for m in mv])
+        dur = _np.array([m.duree for m in mv])
+        classes = [m.classe for m in mv]
+        n_d = classes.count("dither")
+        n_r = classes.count("recentrage")
+        n_a = classes.count("anomalie")
+
+        lines.append(f"  {_('mv_total'):<34} : {len(mv)}")
+        if n_d:
+            lines.append(f"  {_('mv_dither'):<34} : {n_d}")
+        if n_r:
+            lines.append(f"  {_('mv_recentrage'):<34} : {n_r}")
+        if n_a:
+            lines.append(f"  {_('mv_anomalie'):<34} : {n_a}")
+        lines.append("")
+        lines.append(f"  {_('mv_amplitude'):<34} : {_np.median(amp):.2f}\"")
+        lines.append(f"  {_('mv_max'):<34} : {amp.max():.2f}\"")
+        lines.append(f"  {_('mv_duree'):<34} : {_np.median(dur):.1f} s")
+        if len(mv) > 1:
+            ecarts = _np.diff(sorted(m.instant for m in mv))
+            ecarts = ecarts[ecarts > 0]
+            if len(ecarts):
+                lines.append(f"  {_('mv_cadence'):<34} : {_np.median(ecarts):.0f} s")
+        lines.append("")
+        lines.append("  " + _("mv_hors_jitter"))
+        if n_a:
+            lines.append("  " + _("mv_anomalie_detail"))
+        lines.append("")
+        return lines
 
     def _section_nuit(self, s, lg) -> list:
         """Sunset, twilights and how much of the night the session covers.
@@ -1090,8 +1146,7 @@ class AnalysisDialog(QDialog):
             else:
                 lines.append("        " + _("pe_elevee"))
         else:
-            lines.append("  [i] No typical periodic error in 2-15 min range")
-            lines.append("      Pas d'erreur périodique typique dans la plage 2-15 min")
+            lines.append("  " + _("pas_ep_typique"))
         lines.append("")
 
     def _export_report(self):
