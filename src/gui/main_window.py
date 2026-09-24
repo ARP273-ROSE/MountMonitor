@@ -111,6 +111,7 @@ class MainWindow(QMainWindow):
         # a rien a analyser automatiquement.
         self._derniere_session = None
         self._fen_analyse = None
+        self._session_analysee = None
         self._aube_timer = None
         # Site as the mount reports it, when it does. Plenty of setups never
         # push their site to the mount -- hence the preference fallback.
@@ -1150,6 +1151,14 @@ class MainWindow(QMainWindow):
         if self._nuit_vue:
             self._status_panel.add_message(T("logging_autostop"), Colors.STATUS_OK)
             self._stop_logging()
+
+            # Et on montre le rapport. L'analyse automatique ne se declenchait
+            # que sur une TRANSITION vers PARKED : une monture parquee depuis
+            # une demi-heure quand le Soleil se leve n'en produit aucune, si
+            # bien que la nuit se cloturait, le rapport s'ecrivait, et rien ne
+            # s'affichait. C'est pourtant le seul moment ou l'on veut le voir.
+            self._auto_analyze_on_park()
+
             # Et on se remet en attente pour le soir. Sans cela le programme
             # restait connecte mais inerte jusqu'a un clic : il fallait etre
             # la chaque soir. Arme, il enchaine les nuits tout seul.
@@ -1448,14 +1457,19 @@ class MainWindow(QMainWindow):
             self._fft_window.raise_()
 
     def _auto_analyze_on_park(self):
-        """Automatically analyze the night session when mount is parked.
+        """Montre le rapport de la nuit qui vient de se terminer.
 
-        Finds the most recent .dat log file and runs the full analysis.
+        Appelee a la cloture du matin et sur un park. Une meme session n'est
+        montree qu'une fois : sans cela, une monture qui se parque apres le
+        lever ouvrait une seconde fenetre sur le meme rapport.
         """
         try:
             dat_path = self._derniere_session
             if dat_path is None or not Path(dat_path).exists():
                 return
+            if str(dat_path) == getattr(self, '_session_analysee', None):
+                return
+            self._session_analysee = str(dat_path)
             # Une session d'une poignee d'octets n'a rien a dire.
             if Path(dat_path).stat().st_size < 1024:
                 return
