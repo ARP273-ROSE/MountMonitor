@@ -460,3 +460,26 @@ def test_l_ascension_droite_se_lit_aussi_en_degres():
     assert format_ra_degrees(0.0) == "000:00:00.0"
     assert format_ra_degrees(12.0) == "180:00:00.0"
     assert format_ra_degrees(2 + 44 / 60 + 8 / 3600) == "041:02:00.0"
+
+
+def test_le_rapport_s_affiche_a_la_cloture_du_matin():
+    """La nuit se cloturait, le rapport s'ecrivait, et rien ne s'affichait.
+
+    L'analyse automatique ne se declenchait que sur une TRANSITION vers
+    PARKED. Une monture parquee depuis une demi-heure quand le Soleil se
+    leve n'en produit aucune — c'est pourtant le seul moment ou l'on veut
+    voir le rapport.
+    """
+    from pathlib import Path
+
+    src = (Path(__file__).resolve().parents[1] / "src" / "gui"
+           / "main_window.py").read_text(encoding="utf-8")
+    bloc = src.split("def _surveiller_aube")[1].split("def ")[0]
+    assert "_auto_analyze_on_park()" in bloc, (
+        "la cloture du matin n'ouvre pas le rapport")
+    assert bloc.index("_stop_logging()") < bloc.index("_auto_analyze_on_park()"), (
+        "le rapport doit etre ecrit avant d'etre montre")
+
+    # et une meme session n'est montree qu'une fois
+    analyse = src.split("def _auto_analyze_on_park")[1].split("\n    def ")[0]
+    assert "_session_analysee" in analyse
