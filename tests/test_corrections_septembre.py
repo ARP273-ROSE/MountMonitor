@@ -430,6 +430,50 @@ def test_les_courbes_defilent_au_zoom_par_defaut():
     assert fenetre_horizontale(w, t, t[-1], None) > 0
 
 
+def test_les_graphes_defilent_sur_deux_minutes_au_present():
+    """Le tampon enchaine plusieurs nuits : seul le present doit s'afficher.
+
+    Le graphe recevait tout le tampon reduit a 5 000 points, et la regle
+    « un point par pixel » s'appliquait a ces points reduits : la fenetre
+    couvrait des heures et l'axe, parti du debut du tampon, se graduait
+    en ks. Il recoit maintenant les deux dernieres minutes, pleine
+    resolution, et le zoom les divise.
+    """
+    import numpy as np
+
+    from src.gui.graph_widgets import couper_au_present, largeur_fenetre
+
+    assert largeur_fenetre(1) == 120.0
+    assert largeur_fenetre(5) == 24.0
+    assert largeur_fenetre(None) == largeur_fenetre(0) == 120.0
+
+    # trois nuits de 8 h a 1,9 Hz, separees par des journees vides
+    nuits = [np.arange(0, 8 * 3600, 1 / 1.9) + k * 86400 for k in range(3)]
+    t = np.concatenate(nuits)
+    v = np.sin(t)
+    sd = np.abs(np.cos(t))
+
+    tc, vc, sdc = couper_au_present(t, v, 120.0, None, sd)
+    assert t[-1] - tc[0] <= 120.0 + 1.0, "la fenetre deborde de deux minutes"
+    assert t[-1] - tc[1] <= 120.0
+    assert tc[-1] == t[-1], "le present doit etre le dernier echantillon"
+    assert len(tc) == len(vc) == len(sdc)
+    assert 220 < len(tc) < 240, len(tc)
+
+    # une serie d'une autre longueur que t n'est pas coupee de travers
+    _, _, rien = couper_au_present(t, v, 120.0, None, sd[:10])
+    assert rien is None
+
+    # une serie annexe se coupe sur le present d'une autre (graphe du temps)
+    t2 = t[::7]
+    t2c, _ = couper_au_present(t2, t2, 120.0, float(t[-1]))
+    assert t2c[-1] == t2[-1] and t[-1] - t2c[1] <= 120.0
+
+    # tampon plus court que la fenetre : tout est garde
+    court = np.arange(0, 30, 0.5)
+    assert len(couper_au_present(court, court, 120.0)[0]) == len(court)
+
+
 # ── Les coordonnees ─────────────────────────────────────────────────
 
 def test_le_report_des_secondes_ne_donne_plus_soixante():

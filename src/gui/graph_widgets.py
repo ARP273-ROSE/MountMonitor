@@ -94,6 +94,62 @@ def fenetre_horizontale(widget, rel_times, t_end, zoom):
     return float(rel_times[-points_visibles])
 
 
+LARGEUR_FENETRE_S = 120.0
+
+
+def largeur_fenetre(zoom, base=LARGEUR_FENETRE_S):
+    """Largeur, en secondes, de la fenetre qui defile au present.
+
+    Au zoom 1 on voit les deux dernieres minutes ; au zoom 5, les
+    vingt-quatre dernieres secondes, en detail.
+    """
+    try:
+        zoom = max(1, int(zoom))
+    except (TypeError, ValueError):
+        zoom = 1
+    return float(base) / zoom
+
+
+def debut_fenetre(timestamps, borne):
+    """Indice du premier echantillon a garder pour tracer depuis `borne`.
+
+    On garde un echantillon avant la borne, pour que la courbe touche le
+    bord gauche au lieu de commencer en l'air.
+
+    🔴 C'est ici, et non dans le graphe, que la nuit est coupee. Le graphe
+    recevait auparavant TOUT le tampon — jusqu'a 50 000 echantillons, soit
+    plusieurs nuits enchainees — reduit a 5 000 points ; la regle « un point
+    par pixel » s'appliquait a ces points reduits, dont chacun valait une
+    dizaine d'echantillons. La fenetre couvrait ainsi des heures, l'axe
+    partait du debut du tampon et se graduait en ks, et rien ne defilait.
+    """
+    if len(timestamps) == 0:
+        return 0
+    i = int(np.searchsorted(timestamps, borne, side='left'))
+    return max(0, i - 1)
+
+
+def couper_au_present(t, v, largeur_s, t_fin=None, *autres):
+    """Ne garde de (t, v, autres...) que les `largeur_s` dernieres secondes."""
+    if t is None or len(t) == 0:
+        return (t, v) + autres
+    if t_fin is None:
+        t_fin = float(t[-1])
+    i = debut_fenetre(t, t_fin - largeur_s)
+    coupes = tuple(a[i:] if a is not None and len(a) == len(t) else None
+                   for a in autres)
+    return (t[i:], v[i:]) + coupes
+
+
+def etiquette_heure(t_abs):
+    """Heure locale d'un repere, ou temps ecoule si ce n'est pas une date."""
+    if t_abs > 1e9:
+        return datetime.fromtimestamp(t_abs).strftime("%H:%M:%S")
+    m, s_ = divmod(int(t_abs), 60)
+    h, m = divmod(m, 60)
+    return f"{h}:{m:02d}:{s_:02d}" if h > 0 else f"{m:02d}:{s_:02d}"
+
+
 class TrackingGraph(QWidget):
     """Real-time tracking graph for RA or DEC data.
 
@@ -230,16 +286,22 @@ class TrackingGraph(QWidget):
                     stdev_timestamps: np.ndarray = None,
                     min_val: float = None, max_val: float = None,
                     max_stdev: float = None,
-                    mount_times: list = None):
+                    mount_times: list = None,
+                    largeur_s: float = None):
         """Update graph with new data.
 
         Manages range manually to avoid sigRangeChanged cascades.
+
+        Avec `largeur_s`, le graphe defile au present : l'abscisse est le
+        temps avant maintenant (de -largeur_s a 0), et `timestamps` ne doit
+        contenir que la fenetre (voir `couper_au_present`). Sans, il montre
+        une session entiere (relecture), a partir de son debut.
         """
         if len(timestamps) == 0:
             return
 
         # Normalize timestamps to relative seconds
-        t0 = timestamps[0]
+        t0 = timestamps[-1] if largeur_s else timestamps[0]
         rel_times = timestamps - t0
         t_end = rel_times[-1]
 
@@ -278,9 +340,6 @@ class TrackingGraph(QWidget):
             self._max_stdev_label.setPos(t_end, max_stdev)
             self._max_stdev_label.setVisible(True)
 
-        # Time fix markers every 30 seconds
-        self._update_time_fixes(t0, rel_times, mount_times)
-
         # Stats text
         if len(values) > 0:
             current = values[-1]
@@ -293,16 +352,22 @@ class TrackingGraph(QWidget):
         y_min = float(np.min(values))
         y_max = float(np.max(values))
         margin = max(abs(y_min), abs(y_max), self._tolerance) * 1.3
-        x0 = fenetre_horizontale(self, rel_times, t_end,
-                                 getattr(self, '_zoom_horizontal', 1))
-        vb.setRange(xRange=(x0, max(t_end, x0 + 1.0)),
-                    yRange=(-margin, margin), padding=0)
+        if largeur_s:
+            x0, x1 = -float(largeur_s), 0.0
+        else:
+            x0 = fenetre_horizontale(self, rel_times, t_end,
+                                     getattr(self, '_zoom_horizontal', 1))
+            x1 = max(t_end, x0 + 1.0)
+        vb.setRange(xRange=(x0, x1), yRange=(-margin, margin), padding=0)
         vb.blockSignals(False)
         accorder_les_axes(self._plot)
 
+        # Time fix markers every 30 seconds (apres la plage : ils la lisent)
+        self._update_time_fixes(t0, rel_times, mount_times)
+
         # Position overlays after range is set
-        x_right = max(t_end, 1.0)
-        self._watermark.setPos(t_end / 2, 0)
+        x_right = x1
+        self._watermark.setPos((x0 + x1) / 2, 0)
         self._stats_text.setPos(x_right, margin)
         self._tol_upper_label.setPos(x_right, self._tolerance)
         self._tol_lower_label.setPos(x_right, -self._tolerance)
@@ -356,15 +421,15 @@ class TrackingGraph(QWidget):
 
         t_max = rel_times[-1]
 
-        # Determine visible range — show last portion only for long sessions
+        # Les reperes tombent sur les multiples de 30 s de l'heure reelle :
+        # ils glissent donc avec la courbe au lieu de rester fixes a l'ecran.
         vr = self._plot.getViewBox().viewRange()
-        x_min = max(0.0, vr[0][0]) if vr else 0.0
-        x_max = vr[0][1] if vr else t_max
-        y_top = vr[1][1] if vr else 0
-
-        # Compute which 30s marks fall in visible range
-        first_mark = max(1, int(x_min / 30.0) + 1)
-        last_mark = int(min(t_max, x_max) / 30.0)
+        x_min, x_max = vr[0]
+        y_top = vr[1][1]
+        a_min = t0 + max(x_min, float(rel_times[0]))
+        a_max = t0 + min(x_max, float(t_max))
+        first_mark = int(np.ceil(a_min / 30.0))
+        last_mark = int(np.floor(a_max / 30.0))
         visible_marks = list(range(first_mark, last_mark + 1))
 
         # Limit to pool size
@@ -384,20 +449,12 @@ class TrackingGraph(QWidget):
         # Update pool items: assign visible marks to pool slots
         for i in range(len(self._time_fixes)):
             if i < len(visible_marks):
-                mark_idx = visible_marks[i]
-                t = 30.0 * mark_idx
+                t_abs = 30.0 * visible_marks[i]
+                t = t_abs - t0
                 self._time_fixes[i].setPos(t)
                 self._time_fixes[i].setVisible(True)
 
-                # Time label
-                m, s = divmod(int(t), 60)
-                h, m = divmod(m, 60)
-                if h > 0:
-                    label_text = f"{h}:{m:02d}:{s:02d}"
-                else:
-                    label_text = f"{m:02d}:{s:02d}"
-
-                self._time_fix_labels[i].setText(label_text)
+                self._time_fix_labels[i].setText(etiquette_heure(t_abs))
                 self._time_fix_labels[i].setPos(t, y_top)
                 self._time_fix_labels[i].setVisible(True)
             else:
@@ -495,10 +552,10 @@ class TimeGraph(QWidget):
 
     def update_data(self, diff_t, diff_v, pc_loop_t=None, pc_loop_v=None,
                     mount_loop_t=None, mount_loop_v=None,
-                    ntp_t=None, ntp_v=None):
-        """Update time graph data."""
+                    ntp_t=None, ntp_v=None, largeur_s=None):
+        """Update time graph data (au present si `largeur_s`)."""
         if len(diff_t) > 0:
-            t0 = diff_t[0]
+            t0 = diff_t[-1] if largeur_s else diff_t[0]
             vb = self._plot.getViewBox()
             vb.blockSignals(True)
 
@@ -522,16 +579,20 @@ class TimeGraph(QWidget):
             y_max = float(np.max(combined))
             y_margin = max(abs(y_max - y_min) * 0.1, 1.0)
             t_end = rel_t[-1]
-            x0 = fenetre_horizontale(self, rel_t, t_end,
-                                     getattr(self, '_zoom_horizontal', 1))
-            vb.setRange(xRange=(x0, max(t_end, x0 + 1.0)),
+            if largeur_s:
+                x0, x1 = -float(largeur_s), 0.0
+            else:
+                x0 = fenetre_horizontale(self, rel_t, t_end,
+                                         getattr(self, '_zoom_horizontal', 1))
+                x1 = max(t_end, x0 + 1.0)
+            vb.setRange(xRange=(x0, x1),
                         yRange=(y_min - y_margin, y_max + y_margin), padding=0)
             vb.blockSignals(False)
             accorder_les_axes(self._plot)
 
             # Position overlays
-            self._values_text.setPos(max(t_end, 1.0), y_max + y_margin)
-            self._watermark.setPos(t_end / 2, (y_min + y_max) / 2)
+            self._values_text.setPos(x1, y_max + y_margin)
+            self._watermark.setPos((x0 + x1) / 2, (y_min + y_max) / 2)
 
             # Values + drift rate annotation
             parts = []
@@ -618,10 +679,10 @@ class SeismicGraph(QWidget):
         layout.addWidget(self._plot)
 
     def update_data(self, timestamps: np.ndarray, values: np.ndarray,
-                    stdev_values: np.ndarray = None):
-        """Update seismic graph."""
+                    stdev_values: np.ndarray = None, largeur_s: float = None):
+        """Update seismic graph (au present si `largeur_s`)."""
         if len(timestamps) > 0:
-            t0 = timestamps[0]
+            t0 = timestamps[-1] if largeur_s else timestamps[0]
             vb = self._plot.getViewBox()
             vb.blockSignals(True)
 
@@ -635,15 +696,19 @@ class SeismicGraph(QWidget):
             y_min = float(np.min(values))
             y_max = float(np.max(values))
             y_margin = max(abs(y_max - y_min) * 0.15, 1.0)
-            x0 = fenetre_horizontale(self, rel_t, t_end,
-                                     getattr(self, '_zoom_horizontal', 1))
-            vb.setRange(xRange=(x0, max(t_end, x0 + 1.0)),
+            if largeur_s:
+                x0, x1 = -float(largeur_s), 0.0
+            else:
+                x0 = fenetre_horizontale(self, rel_t, t_end,
+                                         getattr(self, '_zoom_horizontal', 1))
+                x1 = max(t_end, x0 + 1.0)
+            vb.setRange(xRange=(x0, x1),
                         yRange=(y_min - y_margin, y_max + y_margin), padding=0)
             vb.blockSignals(False)
             accorder_les_axes(self._plot)
 
             # Position watermark
-            self._watermark.setPos(t_end / 2, (y_min + y_max) / 2)
+            self._watermark.setPos((x0 + x1) / 2, (y_min + y_max) / 2)
 
     def set_tolerance(self, percent: float, data_range: int):
         """Set tolerance as percentage of range."""
@@ -752,16 +817,19 @@ class AxialGraph(QWidget):
                     ra_raw_t=None, ra_raw_v=None,
                     dec_raw_t=None, dec_raw_v=None,
                     ra_avg_t=None, ra_avg_v=None,
-                    dec_avg_t=None, dec_avg_v=None):
+                    dec_avg_t=None, dec_avg_v=None, largeur_s=None):
         """Update axial graph with speed data.
 
-        All timestamps/values are numpy arrays.
+        All timestamps/values are numpy arrays. Avec `largeur_s`, l'origine
+        est le dernier echantillon et le graphe defile au present.
         """
-        # Determine t0 from first available data
         t0 = None
         for t_arr in [ra_raw_t, dec_raw_t, ra_avg_t, dec_avg_t]:
             if t_arr is not None and len(t_arr) > 0:
-                if t0 is None or t_arr[0] < t0:
+                if largeur_s:
+                    if t0 is None or t_arr[-1] > t0:
+                        t0 = t_arr[-1]
+                elif t0 is None or t_arr[0] < t0:
                     t0 = t_arr[0]
         if t0 is None:
             return
@@ -826,17 +894,20 @@ class AxialGraph(QWidget):
             y_margin = max(abs(y_max - y_min) * 0.15, 0.01)
             # Le graphe axial trace plusieurs series de longueurs differentes :
             # il n'y a pas d'echelle de points commune a fenetrer.
-            x0 = 0.0
-            vb.setRange(xRange=(x0, max(t_end, x0 + 1.0)),
+            if largeur_s:
+                x0, x1 = -float(largeur_s), 0.0
+            else:
+                x0, x1 = 0.0, max(t_end, 1.0)
+            vb.setRange(xRange=(x0, x1),
                         yRange=(y_min - y_margin, y_max + y_margin), padding=0)
 
         vb.blockSignals(False)
         accorder_les_axes(self._plot)
 
         # Position overlays
-        self._watermark.setPos(t_end / 2, 0)
         if all_v:
-            self._reg_label.setPos(max(t_end, 1.0), y_max + y_margin)
+            self._watermark.setPos((x0 + x1) / 2, 0)
+            self._reg_label.setPos(x1, y_max + y_margin)
 
     def export_to_image(self, directory: str):
         """Export axial graph as PNG."""
