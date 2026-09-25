@@ -22,7 +22,8 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QTimer, pyqtSlot, pyqtSignal
 from PyQt6.QtGui import QAction, QActionGroup, QFont, QIcon, QKeySequence
 
-from .graph_widgets import TrackingGraph, TimeGraph, SeismicGraph, AxialGraph
+from .graph_widgets import (TrackingGraph, TimeGraph, SeismicGraph, AxialGraph,
+                            couper_au_present, largeur_fenetre)
 from .fft_window import FFTWindow
 from .analysis_dialog import AnalysisDialog, sauver_rapport
 from .log10m_dialog import Log10mAnalysisDialog
@@ -859,109 +860,86 @@ class MainWindow(QMainWindow):
     def _refresh_graphs(self):
         """Refresh all graphs with current buffer data. Called by timer.
 
-        Performance: uses downsampled arrays (max 5000 points) for graph display
-        to avoid plotting 50K+ points. Full-resolution arrays are used only for
-        statistics (min/max/stdev) which are pre-computed in DataBuffer.
+        Les graphes defilent au present : chacun ne recoit que les
+        `largeur_fenetre(zoom)` dernieres secondes, a pleine resolution
+        (deux minutes, c'est quelques centaines d'echantillons). Les
+        statistiques de la nuit (min/max/ecart-type maximal) restent
+        calculees sur tout le tampon, par DataBuffer.
         """
+        largeur = largeur_fenetre(self._settings.get("horizontal_zoom") or 1)
+
         # Graph correction: shift STDEV timestamps back by half running range
         correct = self._settings.get("correct_graphs_for_range")
         half_range = self._settings.get("running_range_seconds") / 2.0 if correct else 0.0
 
-        # RA graph — downsampled for display
-        ra_t, ra_v = self._processor.ra_buffer.get_downsampled_arrays(5000)
-        ra_stdev = self._processor.ra_buffer.get_stdev_array()
-        if len(ra_t) > 0:
-            # Downsample stdev to match display points
-            if len(ra_stdev) > 0:
-                full_t, _ = self._processor.ra_buffer.get_arrays()
-                if len(ra_stdev) == len(full_t) and len(full_t) > 5000:
-                    step = len(full_t) // 5000
-                    indices = np.arange(0, len(full_t), step)
-                    if indices[-1] != len(full_t) - 1:
-                        indices = np.append(indices, len(full_t) - 1)
-                    stdev_for_graph = ra_stdev[indices]
-                else:
-                    stdev_for_graph = ra_stdev if len(ra_stdev) == len(ra_t) else None
-            else:
-                stdev_for_graph = None
-            stdev_t = ra_t - half_range if (stdev_for_graph is not None and half_range > 0) else None
-            self._ra_graph.update_data(
-                ra_t, ra_v,
-                stdev_values=stdev_for_graph,
+        # RA / DEC
+        for buf, graphe, tol_cle in (
+                (self._processor.ra_buffer, self._ra_graph, "tolerance_ra_arcsec"),
+                (self._processor.dec_buffer, self._dec_graph, "tolerance_dec_arcsec")):
+            t, v = buf.get_arrays()
+            if len(t) == 0:
+                continue
+            sd = buf.get_stdev_array()
+            t, v, sd = couper_au_present(t, v, largeur, None,
+                                         sd if len(sd) == len(t) else None)
+            stdev_t = t - half_range if (sd is not None and half_range > 0) else None
+            graphe.update_data(
+                t, v,
+                stdev_values=sd,
                 stdev_timestamps=stdev_t,
-                min_val=self._processor.ra_buffer.min_value,
-                max_val=self._processor.ra_buffer.max_value,
-                max_stdev=self._processor.ra_buffer.max_stdev,
+                min_val=buf.min_value,
+                max_val=buf.max_value,
+                max_stdev=buf.max_stdev,
+                largeur_s=largeur,
             )
-            self._ra_graph.set_tolerance(self._settings.get("tolerance_ra_arcsec"))
+            graphe.set_tolerance(self._settings.get(tol_cle))
 
-        # DEC graph — downsampled for display
-        dec_t, dec_v = self._processor.dec_buffer.get_downsampled_arrays(5000)
-        dec_stdev = self._processor.dec_buffer.get_stdev_array()
-        if len(dec_t) > 0:
-            if len(dec_stdev) > 0:
-                full_t, _ = self._processor.dec_buffer.get_arrays()
-                if len(dec_stdev) == len(full_t) and len(full_t) > 5000:
-                    step = len(full_t) // 5000
-                    indices = np.arange(0, len(full_t), step)
-                    if indices[-1] != len(full_t) - 1:
-                        indices = np.append(indices, len(full_t) - 1)
-                    stdev_for_graph = dec_stdev[indices]
-                else:
-                    stdev_for_graph = dec_stdev if len(dec_stdev) == len(dec_t) else None
-            else:
-                stdev_for_graph = None
-            stdev_t = dec_t - half_range if (stdev_for_graph is not None and half_range > 0) else None
-            self._dec_graph.update_data(
-                dec_t, dec_v,
-                stdev_values=stdev_for_graph,
-                stdev_timestamps=stdev_t,
-                min_val=self._processor.dec_buffer.min_value,
-                max_val=self._processor.dec_buffer.max_value,
-                max_stdev=self._processor.dec_buffer.max_stdev,
-            )
-            self._dec_graph.set_tolerance(self._settings.get("tolerance_dec_arcsec"))
-
-        # Time graph — downsampled
-        diff_t, diff_v = self._processor.time_diff_buffer.get_downsampled_arrays(5000)
-        pc_t, pc_v = self._processor.pc_loop_buffer.get_downsampled_arrays(5000)
-        mt_t, mt_v = self._processor.mount_loop_buffer.get_downsampled_arrays(5000)
-        ntp_t, ntp_v = self._processor.ntp_buffer.get_downsampled_arrays(5000)
+        # Time graph
+        diff_t, diff_v = self._processor.time_diff_buffer.get_arrays()
         if len(diff_t) > 0:
+            fin = float(diff_t[-1])
+            diff_t, diff_v = couper_au_present(diff_t, diff_v, largeur)
+            pc_t, pc_v = couper_au_present(
+                *self._processor.pc_loop_buffer.get_arrays(), largeur, fin)
+            mt_t, mt_v = couper_au_present(
+                *self._processor.mount_loop_buffer.get_arrays(), largeur, fin)
+            ntp_t, ntp_v = couper_au_present(
+                *self._processor.ntp_buffer.get_arrays(), largeur, fin)
             self._time_graph.update_data(
                 diff_t, diff_v,
                 pc_loop_t=pc_t, pc_loop_v=pc_v,
                 mount_loop_t=mt_t, mount_loop_v=mt_v,
                 ntp_t=ntp_t if len(ntp_t) > 0 else None,
                 ntp_v=ntp_v if len(ntp_v) > 0 else None,
+                largeur_s=largeur,
             )
 
-        # Axial graph — downsampled
+        # Axial graph
         if self._settings.get("axial_mode") != "off":
-            ra_raw_t, ra_raw_v = self._processor.ra_speed_raw_buffer.get_downsampled_arrays(5000)
-            dec_raw_t, dec_raw_v = self._processor.dec_speed_raw_buffer.get_downsampled_arrays(5000)
-            ra_avg_t, ra_avg_v = self._processor.ra_speed_avg_buffer.get_downsampled_arrays(5000)
-            dec_avg_t, dec_avg_v = self._processor.dec_speed_avg_buffer.get_downsampled_arrays(5000)
-            if len(ra_raw_t) > 0 or len(dec_raw_t) > 0:
-                self._axial_graph.update_data(
-                    ra_raw_t=ra_raw_t if len(ra_raw_t) > 0 else None,
-                    ra_raw_v=ra_raw_v if len(ra_raw_v) > 0 else None,
-                    dec_raw_t=dec_raw_t if len(dec_raw_t) > 0 else None,
-                    dec_raw_v=dec_raw_v if len(dec_raw_v) > 0 else None,
-                    ra_avg_t=ra_avg_t if len(ra_avg_t) > 0 else None,
-                    ra_avg_v=ra_avg_v if len(ra_avg_v) > 0 else None,
-                    dec_avg_t=dec_avg_t if len(dec_avg_t) > 0 else None,
-                    dec_avg_v=dec_avg_v if len(dec_avg_v) > 0 else None,
-                )
+            series = [b.get_arrays() for b in (
+                self._processor.ra_speed_raw_buffer,
+                self._processor.dec_speed_raw_buffer,
+                self._processor.ra_speed_avg_buffer,
+                self._processor.dec_speed_avg_buffer)]
+            fins = [float(t[-1]) for t, _ in series if len(t) > 0]
+            if fins:
+                fin = max(fins)
+                series = [couper_au_present(t, v, largeur, fin) for t, v in series]
+                args = {}
+                for nom, (t, v) in zip(("ra_raw", "dec_raw", "ra_avg", "dec_avg"), series):
+                    args[nom + "_t"] = t if len(t) > 0 else None
+                    args[nom + "_v"] = v if len(t) > 0 else None
+                self._axial_graph.update_data(largeur_s=largeur, **args)
 
-        # Seismic graph — downsampled
-        sei_t, sei_v = self._processor.seismic_buffer.get_downsampled_arrays(5000)
+        # Seismic graph
+        sei_t, sei_v = self._processor.seismic_buffer.get_arrays()
         if len(sei_t) > 0:
             sei_stdev = self._processor.seismic_buffer.get_stdev_array()
-            sei_stdev_ds = sei_stdev if len(sei_stdev) == len(sei_t) else None
+            sei_t, sei_v, sei_sd = couper_au_present(
+                sei_t, sei_v, largeur, None,
+                sei_stdev if len(sei_stdev) == len(sei_t) else None)
             self._seismic_graph.update_data(
-                sei_t, sei_v,
-                stdev_values=sei_stdev_ds,
+                sei_t, sei_v, stdev_values=sei_sd, largeur_s=largeur,
             )
 
         # Update STDEV in status panel (use full-res last values)
@@ -1714,23 +1692,31 @@ class MainWindow(QMainWindow):
         new data ». Il laisse un carnet photographique continu de la nuit,
         sans avoir a rejouer quoi que ce soit le lendemain.
 
-        Le critere est celui de l'original : autant d'echantillons neufs que
-        le graphe a de pixels de large — au-dela, un point de plus n'ajoute
-        rien a l'image.
+        Le critere : la fenetre affichee s'est entierement renouvelee depuis
+        le dernier export, c'est-a-dire que le dernier echantillon a avance
+        d'une largeur de fenetre. Chaque image montre ainsi un morceau de
+        nuit different, sans trou ni recouvrement.
+
+        🔴 Il comptait auparavant les echantillons du tampon. Or celui-ci est
+        circulaire et plafonne a 50 000 : une fois plein, sa taille ne bouge
+        plus, et le carnet s'arretait en pleine nuit sans rien dire.
         """
         if self._settings.get("dump_mode") != "full":
             return
         try:
-            largeur = max(200, self._ra_graph.width())
-            total = self._processor.ra_buffer.size
+            t, _ = self._processor.ra_buffer.get_arrays()
         except Exception:
             return
-        depart = getattr(self, '_rang_dernier_dump', None)
-        if depart is None or total < depart:
-            self._rang_dernier_dump = total
+        if len(t) == 0:
             return
-        if total - depart >= largeur:
-            self._rang_dernier_dump = total
+        fin = float(t[-1])
+        largeur = largeur_fenetre(self._settings.get("horizontal_zoom") or 1)
+        depart = getattr(self, '_instant_dernier_dump', None)
+        if depart is None or fin < depart:
+            self._instant_dernier_dump = fin
+            return
+        if fin - depart >= largeur:
+            self._instant_dernier_dump = fin
             self._dump_graphs()
 
     def _dump_graphs(self):

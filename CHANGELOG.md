@@ -6,6 +6,29 @@ behaviour changes, the patch number when only a defect is fixed.
 
 Figures quoted below were measured on real sessions, not estimated.
 
+## 1.31.0 — 2026-09-25
+
+### Fixed
+- **The graphs still did not scroll, and the axis still read in ks.** The 1.28
+  fix applied the "one point per pixel" rule to the wrong data: each graph was
+  handed the whole buffer -- up to 50 000 samples, several nights chained --
+  decimated to 5 000 points, so each displayed point stood for about ten
+  samples and the window spanned hours. The axis started at the beginning of
+  the buffer, hence the kiloseconds.
+- The automatic graph dump ("each time the window width is filled") counted
+  buffer samples. The buffer is circular and caps at 50 000: once full its
+  size never changes, and the dumps silently stopped mid-night.
+
+### Changed
+- The graphs now show **the last two minutes, at full resolution, scrolling at
+  the present**: the time axis runs from -120 s to 0. The horizontal zoom
+  divides that width (5x = the last 24 s). The 30 s markers sit on real clock
+  times and scroll with the curve, labelled HH:MM:SS. The vertical scale and
+  the sigma overlay follow the visible window only; night-long min/max stay
+  computed on the whole buffer. Replaying a session still shows it whole.
+- Graph dumps now fire each time the window has been fully renewed, so every
+  image shows a different slice of the night.
+
 ## 1.28.0 — 2026-09-24
 
 ### Fixed
