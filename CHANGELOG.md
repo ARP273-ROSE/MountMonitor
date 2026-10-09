@@ -6,6 +6,18 @@ behaviour changes, the patch number when only a defect is fixed.
 
 Figures quoted below were measured on real sessions, not estimated.
 
+## Unreleased — 2026-10-09
+
+### Changed
+- Removal of personal mentions; installer publisher and the header of
+  `reporting.py` now read ARP273-ROSE. The example observing site (preferences
+  placeholder, tests, night simulator) is now the Observatoire de Haute-Provence
+  (43.9317 N, 5.7122 E, 650 m); the twilight reference values of the tests were
+  recomputed with skyfield/DE421. Teaching documents use example configurations.
+  Settings location (`QSettings` organisation `ARP273`) is unchanged.
+- Privacy guard `tests/test_confidentialite.py` (files, PDF text and metadata,
+  PNG, binaries), run by CI.
+
 ## 1.31.0 — 2026-09-25
 
 ### Fixed
