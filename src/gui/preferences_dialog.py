@@ -288,7 +288,7 @@ class PreferencesDialog(QDialog):
         log_form.addRow(T("pref_site_lon"), self._site_lon)
 
         self._site_elev = QLineEdit(str(self._settings.get("site_elevation_m") or ""))
-        self._site_elev.setPlaceholderText("57")
+        self._site_elev.setPlaceholderText("650")
         log_form.addRow(T("pref_site_elev"), self._site_elev)
 
         # Arming. Put next to the log mode because it answers the same

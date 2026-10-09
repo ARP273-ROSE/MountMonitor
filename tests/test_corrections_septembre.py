@@ -125,14 +125,16 @@ def test_une_cible_plus_courte_que_la_fenetre_n_affiche_rien():
 
 def test_les_crepuscules_tombent_ou_skyfield_les_met():
     """Verifie contre des valeurs de reference calculees par skyfield/DE421
-    pour Haute-Provence le 23 septembre 2026, a la seconde pres en UTC."""
+    pour l'Observatoire de Haute-Provence (43,9317 N ; 5,7122 E ; 650 m)
+    le 23 septembre 2026, a la minute pres en UTC."""
     from datetime import datetime, timezone
     from src.core.ephemerides import nuit_autour
 
     n = nuit_autour(datetime(2026, 9, 23, 12, tzinfo=timezone.utc), 43.9317, 5.7122)
     attendus = {
-        'coucher': (17, 45), 'civil': (18, 16), 'nautique': (18, 54),
-        'astro_debut': (19, 32), 'astro_fin': (3, 50), 'lever': (5, 38),
+        # skyfield/DE421 : 17:32:57, 18:01:40, 18:35:19, 19:09:43, 03:49:34, 05:26:29
+        'coucher': (17, 32), 'civil': (18, 1), 'nautique': (18, 35),
+        'astro_debut': (19, 9), 'astro_fin': (3, 49), 'lever': (5, 26),
     }
     for cle, (h, m) in attendus.items():
         t = getattr(n, cle)
@@ -320,12 +322,12 @@ def test_le_matin_on_annonce_la_nuit_qui_vient():
     from src.core.ephemerides import nuit_autour
 
     tz = ZoneInfo("Europe/Paris")
-    lat, lon = 43.9317, 5.7122
+    lat, lon = 43.9317, 5.7122   # Observatoire de Haute-Provence
 
     # le matin, apres le lever : la nuit A VENIR
     matin = nuit_autour(datetime(2026, 9, 23, 9, 16, tzinfo=tz), lat, lon)
     assert matin.astro_debut.astimezone(tz).day == 23
-    assert matin.astro_debut.astimezone(tz).strftime("%H:%M") == "21:32"
+    assert matin.astro_debut.astimezone(tz).strftime("%H:%M") == "21:09"
 
     # l'apres-midi vise la meme nuit, sans sauter un jour de plus
     aprem = nuit_autour(datetime(2026, 9, 23, 15, 0, tzinfo=tz), lat, lon)
@@ -368,7 +370,7 @@ def test_le_garde_fou_de_jour_empeche_la_boucle():
     s = Settings()
     s.set("close_at_sunrise", True)
     w._settings = s
-    w._site = lambda: (43.9317, 5.7122, 57)
+    w._site = lambda: (43.9317, 5.7122, 650)
 
     vraie = E.hauteur_soleil
     try:

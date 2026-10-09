@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Échantillonnage des instruments de ARP273-ROSE, et ce qu'il faut en lire.
+"""Échantillonnage de trois configurations d'exemple, et ce qu'il faut en lire.
 
 Script de vérification livré avec le cours : aucun chiffre du document n'est
 posé de tête. Relancez-le, les valeurs du cours doivent réapparaître.
@@ -19,7 +19,7 @@ INSTRUMENTS = [
     ("FC-76DCU f/7,5",       570.0, "ASI 2600 MC Air", 3.76),
 ]
 
-# Site de ARP273-ROSE : Haute-Provence.
+# Seeing typique d'un site de plaine.
 SEEING_MIN, SEEING_MAX = 2.5, 3.5   # secondes d'arc
 
 
@@ -56,7 +56,7 @@ for nom, focale, capteur, pixel in INSTRUMENTS:
         print(f'    {nom:22s} tolérance {tol:.1f}" = {tol/e:5.2f} pixel(s)')
 
 print()
-print(f'  Seeing du site : {SEEING_MIN}" à {SEEING_MAX}" (sud de Haute-Provence)')
+print(f'  Seeing du site : {SEEING_MIN}" à {SEEING_MAX}" (site de plaine typique)')
 for nom, focale, capteur, pixel in INSTRUMENTS:
     e = echantillonnage(focale, pixel)
     print(f"    {nom:22s} : la turbulence étale l'étoile sur "

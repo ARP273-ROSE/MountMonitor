@@ -42,7 +42,7 @@ for cle in ("autostart_on_tracking", "pause_when_not_tracking", "close_at_sunris
 
 w = MainWindow()
 w._settings = reglages
-w._site = lambda: (43.9317, 5.7122, 57)
+w._site = lambda: (43.9317, 5.7122, 650)   # Observatoire de Haute-Provence
 w._connected = True
 w._prev_mount_status = MountStatus.PARKED
 
