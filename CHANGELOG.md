@@ -6,7 +6,21 @@ behaviour changes, the patch number when only a defect is fixed.
 
 Figures quoted below were measured on real sessions, not estimated.
 
-## Unreleased — 2026-10-09
+## 1.31.1 — 2026-10-13
+
+### Fixed
+- **macOS and Linux: automatic updates never worked.** Two defects in the
+  shared update kit: the installed package was only recognised by
+  `python/python.exe` (Windows), so the macOS and Linux packages believed they
+  ran from source and never looked for a new version; and `build_unix.py` did
+  not ship `kit.json`, so the distribution repository was empty. Both fixed;
+  the Unix build now fails if the update check would not work. An update was
+  tested end to end on the real Linux package. **macOS and Linux installations
+  up to 1.31.0 must be reinstalled once by hand.**
+- macOS and Linux: settings, report consent and session logs were written
+  inside the program folder (a consequence of the same defect). They now live
+  in the data folder (`~/.local/share/MountMonitor`) and are copied there once
+  from the old location, without overwriting anything.
 
 ### Changed
 - Removal of personal mentions; installer publisher and the header of
