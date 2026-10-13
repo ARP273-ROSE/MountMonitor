@@ -33,7 +33,9 @@ def est_empaquete() -> bool:
     a cote. C'est la signature la plus sure : elle ne depend ni d'une variable
     d'environnement ni d'un drapeau qu'on pourrait oublier de poser.
     """
-    return (_RACINE_PROJET.parent / 'python' / 'python.exe').exists()
+    python = _RACINE_PROJET.parent / 'python'
+    # Windows : python/python.exe ; macOS et Linux : python/bin/python3.
+    return (python / 'python.exe').exists() or (python / 'bin' / 'python3').exists()
 
 
 def dossier_donnees() -> Path:
@@ -49,7 +51,40 @@ def dossier_donnees() -> Path:
                     or Path.home() / '.local' / 'share')
     dossier = base / 'MountMonitor'
     dossier.mkdir(parents=True, exist_ok=True)
+    _reprendre_anciennes_donnees(dossier)
     return dossier
+
+
+_REPRISE_FAITE = False
+
+
+def _reprendre_anciennes_donnees(dossier: Path) -> None:
+    """Versions <= 1.31 sous macOS et Linux : le paquet ne se reconnaissait pas,
+    et reglages, rapports et journaux de session s'ecrivaient dans `app/`.
+    On les recopie une fois dans le dossier de donnees, sans rien effacer, et
+    sans jamais ecraser ce qui s'y trouve deja."""
+    global _REPRISE_FAITE
+    if _REPRISE_FAITE or sys.platform == 'win32':
+        return
+    _REPRISE_FAITE = True
+    import shutil
+    for nom in ('mountmonitor_settings.json', 'reglages_rapports.json', 'Logs'):
+        ancien, neuf = _RACINE_PROJET / nom, dossier / nom
+        if not ancien.exists():
+            continue
+        try:
+            if ancien.is_dir():
+                for f in ancien.rglob('*'):
+                    cible = neuf / f.relative_to(ancien)
+                    if f.is_dir():
+                        cible.mkdir(parents=True, exist_ok=True)
+                    elif not cible.exists():
+                        cible.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(f, cible)
+            elif not neuf.exists():
+                shutil.copy2(ancien, neuf)
+        except OSError:
+            pass
 
 
 def dossier_journaux() -> Path:

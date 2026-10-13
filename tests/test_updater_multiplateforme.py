@@ -125,3 +125,36 @@ class _Faux:
 
     def __exit__(self, *a):
         return False
+
+
+@pytest.mark.parametrize("interpreteur", ["python/python.exe", "python/bin/python3"])
+def test_le_paquet_est_reconnu_sur_les_trois_systemes(interpreteur, tmp_path, monkeypatch):
+    """Jusqu'a 1.31, seul python.exe etait cherche : sous macOS et Linux le
+    paquet se croyait lance depuis les sources et ne cherchait jamais de mise
+    a jour."""
+    (tmp_path / "app").mkdir()
+    exe = tmp_path / interpreteur
+    exe.parent.mkdir(parents=True)
+    exe.write_text("")
+    monkeypatch.setattr(updater, "app_dir", lambda: tmp_path / "app")
+    assert updater.is_packaged()
+
+
+def test_reprise_des_donnees_ecrites_dans_app(tmp_path, monkeypatch):
+    """Versions <= 1.31 hors Windows : reglages et journaux etaient dans app/.
+    Ils sont recopies une fois, sans ecraser ce qui existe deja."""
+    from src.config import paths
+    app = tmp_path / "app"
+    (app / "Logs").mkdir(parents=True)
+    (app / "Logs" / "nuit.dat").write_text("ancien")
+    (app / "mountmonitor_settings.json").write_text('{"ancien": 1}')
+    donnees = tmp_path / "donnees"
+    donnees.mkdir()
+    (donnees / "reglages_rapports.json").write_text("deja la")
+    monkeypatch.setattr(paths, "_RACINE_PROJET", app)
+    monkeypatch.setattr(paths, "_REPRISE_FAITE", False)
+    monkeypatch.setattr(paths.sys, "platform", "linux")
+    paths._reprendre_anciennes_donnees(donnees)
+    assert (donnees / "Logs" / "nuit.dat").read_text() == "ancien"
+    assert (donnees / "mountmonitor_settings.json").exists()
+    assert (donnees / "reglages_rapports.json").read_text() == "deja la"
