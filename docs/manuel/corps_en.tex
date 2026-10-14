@@ -346,6 +346,13 @@ Simulation mode lets you walk through everything with no hardware:
 MountMonitor --sim-all
 \end{lstlisting}
 
+Here is the window after half a minute of simulation: at the top the right
+ascension and declination deviations with their tolerances, then the
+PC--mount clock difference and the seismometer; on the right the mount's
+state, its coordinates and the session log.
+
+\capture{en-principal.png}
+
 % ─────────────────────────────────────────────────────────────────
 \chapter{Settings}
 \label{ch:config}
@@ -532,6 +539,12 @@ A change takes effect at the next start.
 If the program crashes, freezes or fails to start, it can report that by
 itself. You are asked once, and nothing else is ever sent: not your tracking
 data, not your file names, not your user name. All paths are anonymised.
+
+In the \textbf{Help} menu, \textbf{Report a problem\ldots} sends a message
+written by you to the same collection point, and the \textbf{Send crash
+reports automatically} box withdraws or gives back consent at any time.
+\textbf{Report a Bug on GitHub} opens a pre-filled issue on the project's
+public page instead.
 
 \section{Version history}
 

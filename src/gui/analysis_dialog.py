@@ -207,7 +207,7 @@ class AnalysisDialog(QDialog):
         for code, nom in LANGUES.items():
             vue = QTextEdit()
             vue.setReadOnly(True)
-            vue.setFont(QFont("Consolas", 10))
+            vue.setFont(QFont('Source Code Pro', 10))
             vue.setStyleSheet(
                 "QTextEdit { background: #1a1a2e; color: #e0e0e0; "
                 "border: 1px solid #333; padding: 8px; }"

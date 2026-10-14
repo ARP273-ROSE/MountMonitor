@@ -11,7 +11,9 @@
     "main.py",
     "shortcut_helper.py",
     "reporting.py",
-    "updater.py"
+    "updater.py",
+    "kit_aide.py",
+    "interface_kit.py"
   ],
   "paquets": [
     "src"
@@ -20,11 +22,17 @@
     "VERSION",
     "README.md",
     "CHANGELOG.md",
+    "LICENSE",
+    "logo.svg",
     "logo.ico",
     "logo.png",
+    "logo_16.png",
+    "logo_32.png",
     "logo_64.png",
-    "icon.png",
-    "about.png",
+    "logo_128.png",
+    "logo_256.png",
+    "logo_512.png",
+    "polices",
     "docs"
   ],
   "requirements": "requirements.txt",
@@ -33,7 +41,10 @@
   "fichiers_proteges": [
     "mountmonitor_settings.json",
     "MountMonitor.pref",
-    "Logs"
+    "Logs",
+    "_rapports",
+    "reglages_rapports.json",
+    "_crash_natif.log"
   ],
   "verification_import": [
     "src.config.settings",
@@ -42,6 +53,29 @@
     "src.gui.main_window",
     "src.logging_module.file_logger",
     "src.models.data_buffer",
-    "src.utils.coordinates"
+    "src.utils.coordinates",
+    "kit_aide",
+    "interface_kit",
+    "src.gui.theme"
+  ],
+  "journal_technique": "CHANGELOG.md",
+  "icone_png": "logo_256.png",
+  "icone_grande": "logo_512.png",
+  "nom_affiche_fr": "MountMonitor",
+  "nom_affiche_en": "MountMonitor",
+  "description_fr": "Surveillance du suivi d'une monture de télescope",
+  "description_en": "Telescope mount tracking monitor",
+  "categories_linux": "Science;Astronomy;",
+  "icone_icns": "logo.icns",
+  "tests_ci": [
+    "tests/test_confidentialite.py",
+    "tests/test_langues.py",
+    "tests/test_textes_en_dur.py",
+    "tests/test_kit.py",
+    "tests/test_updater_multiplateforme.py",
+    "tests/test_rapport_trilingue.py",
+    "tests/test_corrections_septembre.py",
+    "tests/test_analyse_suivi.py",
+    "tests/test_gui.py"
   ]
 }

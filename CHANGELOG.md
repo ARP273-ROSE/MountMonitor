@@ -6,6 +6,36 @@ behaviour changes, the patch number when only a defect is fixed.
 
 Figures quoted below were measured on real sessions, not estimated.
 
+## 1.32.0 — 2026-10-14
+
+### Changed
+- **Fixed look on every system**: Fusion style, a complete palette (active,
+  inactive and disabled groups) and embedded fonts (Source Sans 3, Source Code
+  Pro for figures), whatever the system theme, accent colour or fonts. The
+  monospaced texts used Consolas, which only exists on Windows.
+- **Real file chooser on Linux** (full Qt dialog with sidebar and folder tree)
+  where the portal's dialog is reduced.
+- **Help menu**: *Report a problem…* sends a written report to the collection
+  point, and *Send crash reports automatically* withdraws or restores consent;
+  the GitHub entry is now *Report a Bug on GitHub*. The About box shows the logo
+  and speaks Dutch too.
+- **Logo**: one SVG source (`logo.svg`) for the icon, the About box and the
+  manuals (ICO, ICNS, PNG 16–512); `icon.png` and `about.png` are gone.
+- **Manuals** (EN/FR/NL) in the house PDF format, with a real screenshot of the
+  window in each language, version taken from `VERSION`.
+- **Translations**: the 10micron log dialog now follows the chosen language
+  (it read the system locale) and speaks Dutch; the last texts written in one
+  language (preference lists, baud rate, error prefixes, "already running")
+  are translated; a test catches hard-coded displayed texts.
+- **Packaging**: common kit workflow and `build_unix.py` (Linux `installer.sh`,
+  stripped `libpython`, version check, `--check` start test on every system).
+
+### Fixed
+- **Native crash traces were lost**: the trace file was reopened (emptied)
+  before the previous session's trace was read.
+- The simulated mount reported a real observing site; it now reports the
+  example site used everywhere else (Observatoire de Haute-Provence).
+
 ## 1.31.1 — 2026-10-13
 
 ### Fixed
@@ -111,8 +141,8 @@ Figures quoted below were measured on real sessions, not estimated.
   only; connection called `_start_logging` directly.
 - **Longitude flipped west.** ASCOM counts `SiteLongitude` positive EAST, the
   LX200 protocol west, and the driver's string was read with the LX200
-  convention: a site 5.70 deg east became 5.70 deg west. It does not announce
-  itself -- it moves the observatory, and shifted every twilight by 22
+  convention: a site 5.71 deg east became 5.71 deg west. It does not announce
+  itself -- it moves the observatory, and shifted every twilight by 46
   minutes.
 - **"Tracking rate: Sidereal OK" on a parked mount.** The check read the
   configured rate, not the actual state.

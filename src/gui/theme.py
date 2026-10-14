@@ -56,6 +56,18 @@ class Colors:
     BORDER_FOCUS = QColor(80, 130, 200)
 
 
+#: les couleurs de la palette figee, par role (interface_kit.REPLIS)
+COULEURS = {
+    "fenetre": Colors.BG_DARK.name(), "texte": Colors.TEXT_PRIMARY.name(),
+    "base": Colors.BG_LIGHT.name(), "base_alt": Colors.BG_MEDIUM.name(),
+    "bouton": Colors.BG_LIGHT.name(), "texte_bouton": Colors.TEXT_PRIMARY.name(),
+    "selection": Colors.ACCENT_BLUE.name(), "texte_selection": Colors.TEXT_HIGHLIGHT.name(),
+    "lien": Colors.ACCENT_BLUE.name(), "infobulle": Colors.BG_MEDIUM.name(),
+    "texte_infobulle": Colors.TEXT_PRIMARY.name(), "desactive": Colors.TEXT_MUTED.name(),
+    "clair": Colors.BG_LIGHT.name(), "moyen": Colors.BG_MEDIUM.name(), "sombre": "#000000",
+}
+
+
 def apply_dark_theme(app: QApplication):
     """Apply the dark astronomy theme to the application."""
     palette = QPalette()
@@ -85,10 +97,23 @@ def apply_dark_theme(app: QApplication):
     palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text, Colors.TEXT_MUTED)
     palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText, Colors.TEXT_MUTED)
 
-    app.setPalette(palette)
+    # Apparence FIGEE (kit commun, interface_kit) : style Fusion, palette
+    # COMPLETE dans les trois groupes, police embarquee et feuille de style ;
+    # ni le theme clair/sombre du systeme ni ses polices ne s'en melent.
+    try:
+        import interface_kit
+        from pathlib import Path
+        racine = Path(__file__).resolve().parent.parent.parent
+        interface_kit.appliquer_style(app, COULEURS, polices=racine / "polices",
+                                      famille="Source Sans 3", taille=10, feuille=FEUILLE)
+    except Exception:
+        app.setStyle("Fusion")
+        app.setPalette(palette)
+        app.setStyleSheet(FEUILLE)
 
-    # Stylesheet for fine-tuning
-    app.setStyleSheet("""
+
+#: feuille de style de l'application (reglages fins au-dessus de la palette)
+FEUILLE = """
         QMainWindow {
             background-color: #14141a;
         }
@@ -195,7 +220,7 @@ def apply_dark_theme(app: QApplication):
             background-color: #14141a;
             color: #c8c8d2;
             border: 1px solid #3c3c4b;
-            font-family: 'Consolas', 'Courier New', monospace;
+            font-family: 'Source Code Pro';
             font-size: 11px;
         }
         QScrollBar:vertical {
@@ -247,4 +272,5 @@ def apply_dark_theme(app: QApplication):
         QDialog {
             background-color: #14141a;
         }
-    """)
+"""
+

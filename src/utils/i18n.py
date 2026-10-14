@@ -503,7 +503,41 @@ TX = {
     "menu_about": {"en": "About", "fr": "À propos", "nl": "Over"},
     "menu_help_contents": {"en": "Help Contents", "fr": "Contenu de l'aide", "nl": "Helponderwerpen"},
     "menu_online_help": {"en": "Online Help", "fr": "Aide en ligne", "nl": "Online help"},
-    "menu_report_bug": {"en": "Report a Bug", "fr": "Signaler un bug", "nl": "Een fout melden"},
+    "menu_report_bug": {"en": "Report a Bug on GitHub", "fr": "Signaler un bug sur GitHub",
+                        "nl": "Een fout melden op GitHub"},
+    "proto_lx200_serie": {"en": "LX200 (Serial)", "fr": "LX200 (série)", "nl": "LX200 (serieel)"},
+    "proto_simulation": {"en": "Simulation", "fr": "Simulation", "nl": "Simulatie"},
+    "bauds": {"en": "Baud rate", "fr": "Débit (bauds)", "nl": "Baudrate"},
+    "val_sidereal": {"en": "sidereal", "fr": "sidéral", "nl": "siderisch"},
+    "val_lunar": {"en": "lunar", "fr": "lunaire", "nl": "maan"},
+    "val_solar": {"en": "solar", "fr": "solaire", "nl": "zon"},
+    "val_king": {"en": "King", "fr": "King", "nl": "King"},
+    "val_sync": {"en": "synchronising", "fr": "synchronisé", "nl": "synchroniserend"},
+    "val_nosync": {"en": "not synchronising", "fr": "non synchronisé", "nl": "niet synchroniserend"},
+    "val_enabled": {"en": "enabled", "fr": "activé", "nl": "ingeschakeld"},
+    "val_disabled": {"en": "disabled", "fr": "désactivé", "nl": "uitgeschakeld"},
+    "erreur_prefixe": {"en": "Error: ", "fr": "Erreur : ", "nl": "Fout: "},
+    "ascom_windows_seul": {"en": "ASCOM exists only on Windows.",
+                           "fr": "ASCOM n'existe que sous Windows.",
+                           "nl": "ASCOM bestaat alleen onder Windows."},
+    "deja_ouvert": {
+        "en": "MountMonitor is already running.\n\nLook in the taskbar: the window is "
+              "probably behind another one.",
+        "fr": "MountMonitor est déjà ouvert.\n\nRegardez dans la barre des tâches : la "
+              "fenêtre est sans doute derrière une autre.",
+        "nl": "MountMonitor is al geopend.\n\nKijk in de taakbalk: het venster staat "
+              "waarschijnlijk achter een ander venster."},
+    "about_texte": {
+        "en": "<h2>MountMonitor {v}</h2><p>Real-time telescope mount monitoring.</p>"
+              "<p>Modernized rewrite of the original Java v3.37<br>by Nicolàs de Hilster "
+              "(2018-2021).</p><p>Python/PyQt6/pyqtgraph — © ARP273-ROSE, MIT License</p>",
+        "fr": "<h2>MountMonitor {v}</h2><p>Surveillance de monture télescope en temps réel.</p>"
+              "<p>Réécriture modernisée du programme original Java v3.37<br>par Nicolàs de "
+              "Hilster (2018-2021).</p><p>Python/PyQt6/pyqtgraph — © ARP273-ROSE, licence MIT</p>",
+        "nl": "<h2>MountMonitor {v}</h2><p>Realtime bewaking van een telescoopmontering.</p>"
+              "<p>Gemoderniseerde herschrijving van het oorspronkelijke Java-programma v3.37<br>"
+              "door Nicolàs de Hilster (2018-2021).</p><p>Python/PyQt6/pyqtgraph — © ARP273-ROSE, "
+              "MIT-licentie</p>"},
     "menu_create_shortcut": {"en": "Create Desktop Shortcut", "fr": "Créer raccourci bureau", "nl": "Snelkoppeling maken"},
 
     # Connection

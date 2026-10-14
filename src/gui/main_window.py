@@ -319,6 +319,21 @@ class MainWindow(QMainWindow):
         bug_action.triggered.connect(self._report_bug)
         help_menu.addAction(bug_action)
 
+        # Kit commun : signalement vers le point de collecte et case
+        # d'accord des rapports automatiques (le manuel et les mises a jour
+        # ont deja leurs entrees ci-dessus et ci-dessous ; l'accord est
+        # demande par main.py au premier lancement).
+        try:
+            from kit_aide import AideKit
+            from src.config.paths import dossier_journaux
+            self._aide_kit = AideKit(
+                self, self._version, get_language, [], nom_fil="mountmonitor",
+                etat=lambda: {"langue": get_language(), "simulation": self._sim_mode},
+                journal=dossier_journaux() / "mountmonitor_app.log")
+            self._aide_kit.remplir_menu(help_menu, avec_manuel=False, avec_maj=False)
+        except Exception:
+            logger.debug("Menu du kit indisponible", exc_info=True)
+
         update_action = QAction(T("menu_check_updates"), self)
         update_action.setToolTip(T("tt_check_upd"))
         update_action.triggered.connect(self._check_updates_manual)
@@ -1897,25 +1912,18 @@ class MainWindow(QMainWindow):
         dlg.exec()
 
     def _show_about(self):
-        """Show about dialog."""
-        lang = get_language()
-        if lang == "fr":
-            text = (
-                f"<h2>MountMonitor v{self._version}</h2>"
-                f"<p>Surveillance de monture télescope en temps réel.</p>"
-                f"<p>Réécriture modernisée du programme original Java v3.37<br>"
-                f"par Nicolàs de Hilster (2018-2021).</p>"
-                f"<p>Python/PyQt6/pyqtgraph</p>"
-            )
-        else:
-            text = (
-                f"<h2>MountMonitor v{self._version}</h2>"
-                f"<p>Real-time telescope mount monitoring.</p>"
-                f"<p>Modernized rewrite of the original Java v3.37<br>"
-                f"by Nicolàs de Hilster (2018-2021).</p>"
-                f"<p>Python/PyQt6/pyqtgraph</p>"
-            )
-        QMessageBox.about(self, T("menu_about"), text)
+        """Show about dialog, in the interface language, with the logo
+        (same source as the icon: logo.svg)."""
+        box = QMessageBox(self)
+        box.setWindowTitle(T("menu_about"))
+        try:
+            from kit_aide import logo_a_propos
+            logo_a_propos(box, Path(__file__).resolve().parent.parent.parent / "logo_128.png")
+        except Exception:
+            pass
+        box.setTextFormat(Qt.TextFormat.RichText)
+        box.setText(T("about_texte").format(v=self._version))
+        box.exec()
 
     def _show_online_help(self):
         """Open online help / documentation in browser."""
@@ -2137,7 +2145,7 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.warning(self,
                 T("menu_create_shortcut"),
-                f"Error: {e}")
+                T("erreur_prefixe") + str(e))
 
     # ── Window lifecycle ─────────────────────────────────────────
 

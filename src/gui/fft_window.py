@@ -38,7 +38,7 @@ class FFTWindow(QWidget):
         # Info bar
         info_layout = QHBoxLayout()
         self._freq_label = QLabel("")
-        self._freq_label.setFont(QFont("Consolas", 9))
+        self._freq_label.setFont(QFont('Source Code Pro', 9))
         self._freq_label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY.name()};")
         info_layout.addWidget(self._freq_label)
         info_layout.addStretch()

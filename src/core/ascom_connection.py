@@ -510,8 +510,8 @@ class ASCOMConnection(MountConnection):
         instead of two.
 
         Getting this wrong does not fail loudly: it moves the observatory to
-        the wrong side of Greenwich. On a site 5.70 deg east it shifted every
-        twilight by 22 minutes, which reads as plausible.
+        the wrong side of Greenwich. On a site 5.71 deg east it shifted every
+        twilight by 46 minutes, which reads as plausible.
         """
         lon = self._safe_read("SiteLongitude")
         if lon is None:

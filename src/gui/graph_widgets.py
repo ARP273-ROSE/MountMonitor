@@ -230,14 +230,14 @@ class TrackingGraph(QWidget):
         self._min_label = pg.TextItem(
             text='', color=data_color, anchor=(0, 0.5)
         )
-        self._min_label.setFont(QFont('Consolas', 8))
+        self._min_label.setFont(QFont('Source Code Pro', 8))
         self._plot.addItem(self._min_label)
         self._min_label.setVisible(False)
 
         self._max_label = pg.TextItem(
             text='', color=data_color, anchor=(0, 0.5)
         )
-        self._max_label.setFont(QFont('Consolas', 8))
+        self._max_label.setFont(QFont('Source Code Pro', 8))
         self._plot.addItem(self._max_label)
         self._max_label.setVisible(False)
 
@@ -245,7 +245,7 @@ class TrackingGraph(QWidget):
         self._max_stdev_label = pg.TextItem(
             text='', color=Colors.GRAPH_STDEV, anchor=(0, 0.5)
         )
-        self._max_stdev_label.setFont(QFont('Consolas', 8))
+        self._max_stdev_label.setFont(QFont('Source Code Pro', 8))
         self._plot.addItem(self._max_stdev_label)
         self._max_stdev_label.setVisible(False)
 
@@ -254,20 +254,20 @@ class TrackingGraph(QWidget):
             text='', color=Colors.TEXT_SECONDARY,
             anchor=(1, 0)
         )
-        self._stats_text.setFont(QFont('Consolas', 9))
+        self._stats_text.setFont(QFont('Source Code Pro', 9))
         self._plot.addItem(self._stats_text)
 
         # Tolerance value annotations (labels showing the arcsec value)
         self._tol_upper_label = pg.TextItem(
             text='', color=Colors.GRAPH_TOLERANCE, anchor=(1, 1)
         )
-        self._tol_upper_label.setFont(QFont('Consolas', 8))
+        self._tol_upper_label.setFont(QFont('Source Code Pro', 8))
         self._plot.addItem(self._tol_upper_label)
 
         self._tol_lower_label = pg.TextItem(
             text='', color=Colors.GRAPH_TOLERANCE, anchor=(1, 0)
         )
-        self._tol_lower_label.setFont(QFont('Consolas', 8))
+        self._tol_lower_label.setFont(QFont('Source Code Pro', 8))
         self._plot.addItem(self._tol_lower_label)
 
         # Time fix markers (grey vertical lines every 30s)
@@ -277,7 +277,7 @@ class TrackingGraph(QWidget):
         self._MAX_TIME_FIXES = 40  # Max visible at once; recycle pool
         # Cache pen/font objects — avoid recreating every refresh
         self._fix_pen = pg.mkPen(Colors.TEXT_MUTED, width=1, style=Qt.PenStyle.DotLine)
-        self._fix_label_font = QFont('Consolas', 7)
+        self._fix_label_font = QFont('Source Code Pro', 7)
 
         layout.addWidget(self._plot)
 
@@ -544,7 +544,7 @@ class TimeGraph(QWidget):
         self._values_text = pg.TextItem(
             text='', color=Colors.TEXT_SECONDARY, anchor=(1, 0)
         )
-        self._values_text.setFont(QFont('Consolas', 9))
+        self._values_text.setFont(QFont('Source Code Pro', 9))
         self._plot.addItem(self._values_text)
         self._plot.getViewBox().disableAutoRange()
 
@@ -807,7 +807,7 @@ class AxialGraph(QWidget):
         self._reg_label = pg.TextItem(
             text='', color=Colors.GRAPH_SPEED_REG, anchor=(1, 0)
         )
-        self._reg_label.setFont(QFont('Consolas', 9))
+        self._reg_label.setFont(QFont('Source Code Pro', 9))
         self._plot.addItem(self._reg_label)
 
         self._plot.getViewBox().disableAutoRange()
