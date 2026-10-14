@@ -36,11 +36,62 @@ from .theme import Colors
 logger = logging.getLogger(__name__)
 
 
+#: Dutch for this dialog, keyed by the English text (the dialog was written
+#: with inline English/French pairs; Dutch is the program's third language)
+_NL = {
+    '10micron Mount Log Analysis': 'Analyse van de 10micron-montagelogboeken',
+    'Open .log10m files...': '.log10m-bestanden openen...',
+    'Select one or more .log10m files from the 10micron mount logger':
+        'Een of meer .log10m-bestanden van de 10micron-logger kiezen',
+    'Overview': 'Overzicht', 'Activity': 'Activiteit', 'Time Sync': 'Tijdsynchronisatie',
+    'Events': 'Gebeurtenissen', 'Close': 'Sluiten',
+    'Select mount log files': 'Logbestanden van de montering kiezen',
+    '10micron logs (*.log10m);;All files (*)': '10micron-logboeken (*.log10m);;Alle bestanden (*)',
+    'Parsing...': 'Bezig met analyseren...',
+    'Time (hours from start)': 'Tijd (uren sinds de start)', 'State': 'Toestand',
+    'Difference (ms)': 'Verschil (ms)', 'Session Overview': 'Overzicht van de sessie',
+    'Mount Information': 'Gegevens van de montering', 'Model': 'Model', 'Firmware': 'Firmware',
+    'Logger version': 'Versie van de logger', 'RA encoder steps': 'Encoderstappen RK',
+    'DEC encoder steps': 'Encoderstappen DEC', 'IP address': 'IP-adres', 'MAC address': 'MAC-adres',
+    'Session Timing': 'Tijdsverloop van de sessie', 'Start': 'Begin', 'End': 'Einde',
+    'Duration': 'Duur', 'Sampling rate': 'Bemonsteringsfrequentie', 'Data Records': 'Records',
+    'Status records (Gstat)': 'Statusrecords (Gstat)', 'Time sync records': 'Tijdsynchronisatierecords',
+    'GPS records': 'GPS-records', 'Tracking data (>G)': 'Volggegevens (>G)',
+    'Encoder data (>H)': 'Encodergegevens (>H)', 'Tracking Efficiency': 'Volgrendement',
+    'Tracking time': 'Volgtijd', 'Slewing time': 'Zwenktijd', 'Parked time': 'Parkeertijd',
+    'Efficiency': 'Rendement', 'Number of slews': 'Aantal zwenkingen',
+    'Avg slew duration': 'Gem. duur van een zwenking', 'Mount Activity Timeline': 'Tijdlijn van de montering',
+    'Tracking': 'Volgen', 'Slewing': 'Zwenken', 'Parked': 'Geparkeerd', 'Other': 'Overig',
+    'Tracking efficiency': 'Volgrendement', 'Slews': 'Zwenkingen',
+    'Model building slews': 'Zwenkingen voor de modelopbouw',
+    'PC - Mount Time Difference': 'Tijdsverschil pc - montering', 'PC-Mount diff': 'Verschil pc-montering',
+    'Samples': 'Monsters', 'Mean': 'Gemiddelde', 'Median': 'Mediaan', 'Std dev': 'Standaardafwijking',
+    'Min': 'Min', 'Max': 'Max', 'Drift rate': 'Drift',
+    'Positive values mean PC clock is ahead of mount clock. A stable, near-zero drift rate '
+    'indicates good clock synchronization.':
+        'Positieve waarden: de klok van de pc loopt voor op die van de montering. Een stabiele '
+        'drift dicht bij nul wijst op een goede kloksynchronisatie.',
+    'Time (UTC)': 'Tijd (UTC)', 'State (FR)': 'Toestand (FR)', 'Details': 'Details',
+    'Model building / alignment star': 'Modelopbouw / uitlijnster', 'Session:': 'Sessie:',
+    'Model Building Detected': 'Modelopbouw gedetecteerd', 'Alignment slews': 'Uitlijnzwenkingen',
+    'Alignment Model': 'Uitlijnmodel', 'Max alignment stars': 'Max. uitlijnsterren',
+    'Time Synchronization': 'Tijdsynchronisatie', 'PC-Mount mean diff': 'Gem. verschil pc-montering',
+    'Standard deviation': 'Standaardafwijking', 'Min / Max': 'Min / Max', 'Drift trend': 'Drifttrend',
+    'Long tracking session': 'Lange volgsessie', 'Error: ': 'Fout: ',
+    '{n} file(s), {s} session(s) analyzed': '{n} bestand(en), {s} sessie(s) geanalyseerd',
+}
+
+
 def _tr(en: str, fr: str) -> str:
-    """Return bilingual string."""
-    import locale
-    lang = locale.getdefaultlocale()[0] or "en"
-    return fr if lang.startswith("fr") else en
+    """The text in the interface language (the one chosen in the Language
+    menu, not the system locale): French, Dutch, otherwise English."""
+    from ..utils.i18n import get_language
+    langue = get_language()
+    if langue == "fr":
+        return fr
+    if langue == "nl":
+        return _NL.get(en, en)
+    return en
 
 
 def _fmt_duration(seconds: float) -> str:
@@ -211,9 +262,9 @@ class Log10mAnalysisDialog(QDialog):
 
         total_sessions = len(self._analysis.sessions)
         self._lbl_status.setText(_tr(
-            f"{len(results)} file(s), {total_sessions} session(s) analyzed",
-            f"{len(results)} fichier(s), {total_sessions} session(s) analysée(s)"
-        ))
+            "{n} file(s), {s} session(s) analyzed",
+            "{n} fichier(s), {s} session(s) analysée(s)"
+        ).format(n=len(results), s=total_sessions))
         self._progress.setVisible(False)
 
         # Populate tabs
@@ -227,7 +278,7 @@ class Log10mAnalysisDialog(QDialog):
     def _on_parse_error(self, error_msg: str):
         self._progress.setVisible(False)
         self._btn_open.setEnabled(True)
-        self._lbl_status.setText(f"Error: {error_msg}")
+        self._lbl_status.setText(_tr("Error: ", "Erreur : ") + str(error_msg))
         self._worker = None
 
     # ─── Overview Tab ────────────────────────────────────────────
@@ -254,7 +305,7 @@ class Log10mAnalysisDialog(QDialog):
         # Overview text
         self._overview_text = QTextEdit()
         self._overview_text.setReadOnly(True)
-        self._overview_text.setFont(QFont("Consolas", 10))
+        self._overview_text.setFont(QFont('Source Code Pro', 10))
         layout.addWidget(self._overview_text)
 
         # Show first session
@@ -271,7 +322,7 @@ class Log10mAnalysisDialog(QDialog):
     def _show_session_overview(self, s: SessionAnalysis):
         html = f"""
         <style>
-            body {{ color: #c8c8d2; font-family: Consolas, monospace; }}
+            body {{ color: #c8c8d2; font-family: 'Source Code Pro', monospace; }}
             h2 {{ color: #5082c8; margin-bottom: 8px; }}
             h3 {{ color: #50b450; margin-top: 12px; margin-bottom: 6px; }}
             table {{ border-collapse: collapse; margin: 8px 0; }}
@@ -410,7 +461,7 @@ class Log10mAnalysisDialog(QDialog):
         self._activity_summary = QTextEdit()
         self._activity_summary.setReadOnly(True)
         self._activity_summary.setMaximumHeight(200)
-        self._activity_summary.setFont(QFont("Consolas", 10))
+        self._activity_summary.setFont(QFont('Source Code Pro', 10))
         layout.addWidget(self._activity_summary, stretch=1)
 
         if self._analysis and self._analysis.sessions:
@@ -448,7 +499,8 @@ class Log10mAnalysisDialog(QDialog):
 
             if seg.gstat not in seen_states:
                 seen_states.add(seg.gstat)
-                name = seg.state_name_fr if _tr("en", "fr") == "fr" else seg.state_name
+                from ..utils.i18n import get_language
+                name = seg.state_name_fr if get_language() == "fr" else seg.state_name
                 y_ticks.append((seg.gstat, name))
 
         # Set Y axis ticks
@@ -474,7 +526,7 @@ class Log10mAnalysisDialog(QDialog):
 
         html = f"""
         <style>
-            body {{ color: #c8c8d2; font-family: Consolas, monospace; }}
+            body {{ color: #c8c8d2; font-family: 'Source Code Pro', monospace; }}
             .bar {{ display: inline-block; height: 16px; margin-right: 8px; vertical-align: middle; }}
             table {{ border-collapse: collapse; }}
             td {{ padding: 2px 10px 2px 0; }}
@@ -532,7 +584,7 @@ class Log10mAnalysisDialog(QDialog):
         self._sync_stats = QTextEdit()
         self._sync_stats.setReadOnly(True)
         self._sync_stats.setMaximumHeight(160)
-        self._sync_stats.setFont(QFont("Consolas", 10))
+        self._sync_stats.setFont(QFont('Source Code Pro', 10))
         layout.addWidget(self._sync_stats, stretch=1)
 
         if self._analysis and self._analysis.sessions:
@@ -595,7 +647,7 @@ class Log10mAnalysisDialog(QDialog):
         drift_sign = "+" if ts.drift_rate_ms_per_hour >= 0 else ""
         html = f"""
         <style>
-            body {{ color: #c8c8d2; font-family: Consolas, monospace; }}
+            body {{ color: #c8c8d2; font-family: 'Source Code Pro', monospace; }}
             td {{ padding: 2px 12px 2px 0; }}
             .label {{ color: #8c8c9b; }}
             .value {{ color: #e0e0ea; }}

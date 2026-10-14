@@ -1,18 +1,26 @@
-% Page de titre, commune aux trois langues.
+% Page de titre, commune aux trois langues (format maison, logo de l'application).
 \begin{titlepage}
-\centering
-\vspace*{3cm}
-{\Huge\bfseries\textcolor{darkblue}{MountMonitor}\par}
-\vspace{0.5cm}
-{\Large\textcolor{accentblue}{v\VERSION}\par}
-\vspace{1cm}
-{\LARGE \TITREDOC\par}
-\vspace{1.5cm}
-{\large\textcolor{midgray}{\SOUSTITRE}\par}
-\vspace{3cm}
-{\large \PARTIESDOC\par}
-\vspace{2cm}
-{\normalsize \CREDITS\par}
+\thispagestyle{empty}
+\vspace*{1.2cm}
+\begin{center}\includegraphics[width=4.6cm]{logo_512.png}\end{center}
+\vspace{8mm}
+{\sffamily\color{summit}\large MountMonitor\par}
+\vspace{4mm}
+{\color{sky!35}\hrule height 2pt}
+\vspace{7mm}
+{\sffamily\bfseries\color{sky}\fontsize{26}{30}\selectfont \TITREDOC\par}
+\vspace{4mm}
+{\sffamily\color{night}\large \SOUSTITRE\par}
+\vspace{7mm}
+{\color{sky!35}\hrule height 2pt}
+\vspace{5mm}
+{\sffamily\color{summit}\normalsize Version \VERSION\par}
+\vspace{6mm}
+{\sffamily\color{night}\normalsize \PARTIESDOC\par}
+\vfill
+{\sffamily\small\color{summit}\CREDITS\par}
+\vspace{3mm}
+{\sffamily\small\color{summit} MIT \textbar{} github.com/ARP273-ROSE/MountMonitor\par}
 \end{titlepage}
 \tableofcontents
 \newpage

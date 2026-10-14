@@ -58,7 +58,7 @@ class StatusPanel(QWidget):
         values_layout.setContentsMargins(8, 6, 8, 6)
         values_layout.setSpacing(4)
 
-        mono_font = QFont("Consolas", 10)
+        mono_font = QFont('Source Code Pro', 10)
 
         # Connection status
         self._status_indicator = QLabel("●")
@@ -112,7 +112,7 @@ class StatusPanel(QWidget):
 
         # Frequency and sample count
         self._freq_label = QLabel(f"0.0 Hz | 0 {T('samples')}")
-        self._freq_label.setFont(QFont("Consolas", 9))
+        self._freq_label.setFont(QFont('Source Code Pro', 9))
         self._freq_label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY.name()};")
         self._freq_label.setToolTip(T("tt_freq"))
         values_layout.addWidget(self._freq_label, 3, 0, 1, 4)
@@ -122,7 +122,7 @@ class StatusPanel(QWidget):
         # Scrolling message log — QPlainTextEdit is FAR more performant than QTextEdit
         self._log_text = QPlainTextEdit()
         self._log_text.setReadOnly(True)
-        self._log_text.setFont(QFont("Consolas", 9))
+        self._log_text.setFont(QFont('Source Code Pro', 9))
         self._log_text.setMaximumHeight(200)
         self._log_text.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
         self._log_text.setStyleSheet(

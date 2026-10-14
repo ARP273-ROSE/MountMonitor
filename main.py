@@ -101,18 +101,21 @@ def _initialiser_les_rapports(app):
     # Trace des plantages sans exception : elle s'ecrit au fil de l'eau dans
     # un fichier, releve au demarrage suivant.
     chemin_natif = donnees / _FICHIER_CRASH_NATIF
+    # Relever la trace de la session precedente AVANT de rouvrir le fichier :
+    # l'ouverture en ecriture le vide, et la trace d'un crash natif etait
+    # perdue avant d'avoir ete lue.
+    try:
+        reporting.relever_crash_natif(chemin_natif)
+        reporting.reprendre_file_en_fond()
+    except Exception:
+        logging.getLogger(__name__).debug("File des rapports non reprise", exc_info=True)
+
     try:
         import faulthandler
         _initialiser_les_rapports._fichier = open(chemin_natif, 'w', encoding='utf-8')
         faulthandler.enable(file=_initialiser_les_rapports._fichier, all_threads=True)
     except Exception:
         logging.getLogger(__name__).debug("faulthandler indisponible", exc_info=True)
-
-    try:
-        reporting.relever_crash_natif(chemin_natif)
-        reporting.reprendre_file_en_fond()
-    except Exception:
-        logging.getLogger(__name__).debug("File des rapports non reprise", exc_info=True)
 
     # Vigie anti-gel : un minuteur bat sur le fil graphique, un fil de fond
     # regarde l'heure. Si le battement s'arrete, la fenetre est figee, et la
@@ -166,6 +169,14 @@ def _demander_accord_rapports(fenetre):
         logging.getLogger(__name__).debug("Accord non demande", exc_info=True)
 
 
+def updater_est_installe() -> bool:
+    try:
+        import updater
+        return bool(updater.is_packaged())
+    except Exception:
+        return False
+
+
 def _langue_tot():
     """Apply the user's language before any dialog can appear.
 
@@ -181,8 +192,39 @@ def _langue_tot():
         pass
 
 
+def _verifier() -> int:
+    """--check : the application and its dependencies load.
+
+    Run by the package builds (Windows, macOS, Linux) with the embedded
+    interpreter. No window, no mount, nothing written next to the program.
+    """
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    try:
+        from PyQt6.QtWidgets import QApplication
+        app = QApplication.instance() or QApplication(sys.argv[:1])
+        import interface_kit
+        import reporting  # noqa: F401
+        import updater  # noqa: F401
+        import kit_aide  # noqa: F401
+        import pyqtgraph  # noqa: F401
+        import numpy  # noqa: F401
+        from src.gui import main_window  # noqa: F401
+        from src.gui.theme import apply_dark_theme
+        apply_dark_theme(app)
+        assert app.style().name().lower() == 'fusion' or app.styleSheet()
+        del app, interface_kit
+    except Exception as exc:
+        print(f"MountMonitor : ECHEC / FAILED -- {type(exc).__name__}: {exc}")
+        return 1
+    print("MountMonitor : OK")
+    return 0
+
+
 def main():
     """Application entry point."""
+    if "--check" in sys.argv[1:]:
+        return _verifier()
+
     # Need to import logging.handlers before setup
     import logging.handlers
 
@@ -223,12 +265,8 @@ def main():
     _verrou.setStaleLockTime(30000)
     if not _verrou.tryLock(200):
         from PyQt6.QtWidgets import QMessageBox
-        QMessageBox.information(
-            None, "MountMonitor",
-            "MountMonitor est deja ouvert.\n"
-            "MountMonitor is already running.\n\n"
-            "Regardez dans la barre des taches : la fenetre est sans doute "
-            "derriere une autre.")
+        from src.utils.i18n import T
+        QMessageBox.information(None, "MountMonitor", T("deja_ouvert"))
         return 0
     app._verrou_instance = _verrou
 
@@ -252,6 +290,13 @@ def main():
     # Apply dark theme
     from src.gui.theme import apply_dark_theme
     apply_dark_theme(app)
+    # Vraie boite de fichiers complete sous Linux (barre laterale, arborescence),
+    # la boite « native » du portail y etant souvent reduite (kit commun).
+    try:
+        import interface_kit
+        interface_kit.installer_dialogues_fichiers()
+    except Exception:
+        logger.debug("Boites de fichiers du kit non installees", exc_info=True)
 
     # Install crash reporter
     from src.logging_module.crash_reporter import CrashReporter
@@ -334,13 +379,15 @@ def main():
     window = MainWindow(sim_mode=sim_mode)
     window.show()
 
-    # Offer desktop shortcut on first launch
-    from src.config.settings import Settings
-    _settings = Settings()
-    from shortcut_helper import offer_shortcut
-    offer_shortcut("MountMonitor", "main.py", "logo.ico",
-                   get_config=lambda k: _settings.get(k),
-                   set_config=lambda k, v: (_settings.set(k, v), _settings.save()))
+    # Offer desktop shortcut on first launch -- from source only: the
+    # installed application already has the installer's shortcuts.
+    if not updater_est_installe():
+        from src.config.settings import Settings
+        _settings = Settings()
+        from shortcut_helper import offer_shortcut
+        offer_shortcut("MountMonitor", "main.py", "logo.ico",
+                       get_config=lambda k: _settings.get(k),
+                       set_config=lambda k, v: (_settings.set(k, v), _settings.save()))
 
     _demander_accord_rapports(window)
 
@@ -371,4 +418,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

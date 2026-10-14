@@ -148,7 +148,7 @@ def test_la_longitude_lx200_est_comptee_a_l_envers():
     from src.core.ephemerides import parse_longitude_lx200 as lon
 
     assert lon('-005*42') == pytest.approx(5.70, abs=0.01)    # 5,70 est
-    assert lon('357*15') == pytest.approx(5.70, abs=0.01)     # meme site, 0-360
+    assert lon('354*18') == pytest.approx(5.70, abs=0.01)     # meme site, 0-360
     assert lon('+078*30') == pytest.approx(-78.5, abs=0.01)   # 78,5 ouest
     assert lon('-149*00') == pytest.approx(149.0, abs=0.01)   # Australie
 
@@ -246,7 +246,8 @@ def test_les_noms_de_paquets_annonces_existent_vraiment():
 
     wf = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "release.yml"
     texte = wf.read_text(encoding="utf-8")
-    corps = texte.split("body: |", 1)[1]
+    # notes redigees par le workflow commun du kit (etape « Rediger les notes »)
+    corps = texte.split("Rediger les notes", 1)[1]
     for disparu in ("-macos.dmg", "-linux.tar.gz"):
         assert disparu not in corps, f"le corps de release cite {disparu}"
     for attendu in ("macos-arm64.dmg", "macos-x86_64.dmg",

@@ -201,10 +201,10 @@ def parse_longitude_lx200(texte: str) -> float | None:
     """``:Gg#`` -> degrees, **positive EAST**.
 
     The LX200 protocol reports longitude positive WEST, and 10Micron
-    follows it: a site at 5.70 deg EAST answers -005*42 (and firmwares
-    that refuse a negative sign answer 357*15 instead). Getting this
-    backwards puts the observatory 5.5 deg away and shifts every twilight
-    by 22 minutes, which is exactly the kind of error that looks almost
+    follows it: a site at 5.71 deg EAST answers -005*42 (and firmwares
+    that refuse a negative sign answer 354*18 instead). Getting this
+    backwards puts the observatory 11.4 deg away and shifts every twilight
+    by 46 minutes, which is exactly the kind of error that looks almost
     right. Both forms are handled here and the sign is flipped once.
     """
     d = _sexa_en_degres(texte)

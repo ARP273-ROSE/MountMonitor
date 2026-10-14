@@ -1,17 +1,23 @@
+% Preamble shared by the three manuals (English, French, Dutch), in the house
+% PDF format: Latin Modern, coloured sans-serif headings (sky for chapters and
+% sections, alert for subsections), typed tcolorbox boxes with fontawesome
+% icons, no orphan headings, title page with the logo.
+% Build: python3 docs/manuel/compiler.py   (from the repository root)
 \documentclass[a4paper,11pt,twoside]{report}
 
 % ─── Packages ────────────────────────────────────────────────────
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
 \usepackage[english,french,dutch]{babel}
 \usepackage{geometry}
-\geometry{margin=2.2cm, top=2.5cm, bottom=2.5cm}
+\geometry{margin=2.2cm, top=2.5cm, bottom=2.5cm, headheight=24pt}
 \usepackage{graphicx}
 \usepackage{xcolor}
 \usepackage{colortbl}
-\usepackage{tcolorbox}
+\usepackage[most]{tcolorbox}
 \usepackage{fancyhdr}
-\usepackage{hyperref}
 \usepackage{enumitem}
 \usepackage{booktabs}
 \usepackage{tabularx}
@@ -19,83 +25,119 @@
 \usepackage{amssymb}
 \usepackage{textcomp}
 \usepackage{multicol}
-\usepackage{titlesec}
+\usepackage[nobottomtitles*]{titlesec}
+\usepackage{needspace}
+\usepackage{etoolbox}
 \usepackage{float}
 \usepackage{wrapfig}
 \usepackage{pifont}
 \usepackage{listings}
+\usepackage{fontawesome5}
+\usepackage{hyperref}
+\graphicspath{{captures/}{../../}}
 
-% ─── Colors ──────────────────────────────────────────────────────
-\definecolor{darkblue}{HTML}{1a3a5c}
-\definecolor{accentblue}{HTML}{2c6fbb}
-\definecolor{lightblue}{HTML}{e8f0fa}
+% ─── Colours (house palette; older names kept for the manual bodies) ─
+\definecolor{sky}{HTML}{1C6DB4}
+\definecolor{skyl}{HTML}{E6F0F9}
+\definecolor{alert}{HTML}{B5382B}
+\definecolor{alertl}{HTML}{FBEAE8}
+\definecolor{steppe}{HTML}{C08A2E}
+\definecolor{steppel}{HTML}{FBF1DC}
+\definecolor{summit}{HTML}{6B7A8F}
+\definecolor{night}{HTML}{232A56}
+\definecolor{ink}{HTML}{1F2430}
+\definecolor{success}{HTML}{2E7D5B}
+\definecolor{successl}{HTML}{E5F3EC}
+\AtBeginDocument{\color{ink}}
+\colorlet{darkblue}{night}
+\colorlet{accentblue}{sky}
+\colorlet{lightblue}{skyl}
 \definecolor{darkgray}{HTML}{333333}
-\definecolor{midgray}{HTML}{666666}
-\definecolor{lightgray}{HTML}{f0f0f0}
-\definecolor{accentred}{HTML}{c85050}
-\definecolor{accentgreen}{HTML}{3a8a3a}
-\definecolor{accentmagenta}{HTML}{c864c8}
-\definecolor{warnbg}{HTML}{fff3e0}
-\definecolor{tipbg}{HTML}{e8f5e9}
-\definecolor{infobg}{HTML}{e3f2fd}
-\definecolor{codebg}{HTML}{f5f5f5}
-\definecolor{rowalt}{HTML}{f2f6fc}
+\colorlet{midgray}{summit}
+\definecolor{lightgray}{HTML}{F0F0F0}
+\colorlet{accentred}{alert}
+\colorlet{accentgreen}{success}
+\definecolor{accentmagenta}{HTML}{C864C8}
+\colorlet{warnbg}{alertl}
+\colorlet{tipbg}{steppel}
+\colorlet{infobg}{skyl}
+\definecolor{codebg}{HTML}{F5F5F5}
+\definecolor{rowalt}{HTML}{F2F6FC}
 
 % ─── Hyperlinks ──────────────────────────────────────────────────
 \hypersetup{
     colorlinks=true,
-    linkcolor=darkblue,
-    urlcolor=accentblue,
-    citecolor=darkblue,
-    pdfauthor={MountMonitor},
+    linkcolor=sky,
+    urlcolor=sky,
+    citecolor=sky,
+    pdfauthor={ARP273-ROSE},
     pdftitle={MountMonitor \VERSION{}},
     pdfsubject={Telescope mount monitoring},
 }
 
+% ─── Headings ────────────────────────────────────────────────────
+\titleformat{\chapter}[display]
+    {\sffamily\bfseries\color{sky}}
+    {\Large\color{summit}\chaptertitlename\ \thechapter}{6pt}
+    {\Huge}[{\vspace{2pt}\color{sky!35}\titlerule[1.3pt]}]
+\titlespacing*{\chapter}{0pt}{10pt}{18pt}
+\titleformat{\section}
+    {\Large\bfseries\sffamily\color{sky}}
+    {\thesection}{0.6em}{}
+    [{\vspace{1pt}\color{sky!35}\titlerule[1pt]}]
+\titlespacing*{\section}{0pt}{16pt}{8pt}
+\titleformat{\subsection}
+    {\large\bfseries\sffamily\color{alert}}
+    {\thesubsection}{0.5em}{}
+\titlespacing*{\subsection}{0pt}{12pt}{4pt}
+\titleformat{\part}[display]
+    {\centering\sffamily\bfseries\color{night}}
+    {\Large\partname\ \thepart}{12pt}{\Huge}
+\pretocmd{\section}{\needspace{12\baselineskip}}{}{}
+\pretocmd{\subsection}{\needspace{6\baselineskip}}{}{}
+\widowpenalty=10000
+\clubpenalty=10000
+
 % ─── Headers/Footers ────────────────────────────────────────────
 \pagestyle{fancy}
 \fancyhf{}
-\fancyhead[LE,RO]{\thepage}
-\fancyhead[LO]{\nouppercase{\rightmark}}
-\fancyhead[RE]{\nouppercase{\leftmark}}
-\fancyfoot[C]{\small\textcolor{midgray}{MountMonitor v\VERSION{} --- \PIEDPAGE}}
 \renewcommand{\headrulewidth}{0.4pt}
-\renewcommand{\footrulewidth}{0.2pt}
+\renewcommand{\headrule}{\hbox to\headwidth{\color{sky!40}\leaders\hrule height \headrulewidth\hfill}}
+\fancyhead[LE,RO]{\sffamily\small\color{summit}\thepage}
+\fancyhead[LO]{\sffamily\small\color{sky}\textbf{MountMonitor} \color{summit}\textbar{} \nouppercase{\rightmark}}
+\fancyhead[RE]{\sffamily\small\color{sky}\textbf{MountMonitor} \color{summit}\textbar{} \nouppercase{\leftmark}}
+\fancyfoot[C]{\sffamily\scriptsize\color{summit}Version \VERSION{} \textbar{} \PIEDPAGE{} \textbar{} github.com/ARP273-ROSE/MountMonitor}
+\fancypagestyle{plain}{\fancyhf{}\renewcommand{\headrulewidth}{0pt}%
+  \fancyfoot[C]{\sffamily\scriptsize\color{summit}Version \VERSION{} \textbar{} \PIEDPAGE}}
 
-% ─── Section Styling ────────────────────────────────────────────
-\titleformat{\chapter}[display]
-    {\normalfont\huge\bfseries\color{darkblue}}
-    {\chaptertitlename\ \thechapter}{20pt}{\Huge}
-\titleformat{\section}
-    {\normalfont\Large\bfseries\color{darkblue}}
-    {\thesection}{1em}{}
-\titleformat{\subsection}
-    {\normalfont\large\bfseries\color{accentblue}}
-    {\thesubsection}{1em}{}
+% ─── Boxes (same names as before: warning, tip, info, formula) ───
+\newtcolorbox{warning}{enhanced,breakable,colback=alertl,colframe=alert,
+    coltitle=white,fonttitle=\bfseries\sffamily\small,boxrule=0.9pt,arc=2.5pt,
+    left=2.5mm,right=2.5mm,top=1.5mm,bottom=1.5mm,
+    title={\faExclamationTriangle~~\TITREWARN},
+    before upper={\widowpenalties 4 10000 10000 10000 0 \clubpenalties 4 10000 10000 10000 0}}
+\newtcolorbox{tip}{enhanced,breakable,colback=steppel,colframe=steppe!85!black,
+    coltitle=white,fonttitle=\bfseries\sffamily\small,boxrule=0.9pt,arc=2.5pt,
+    left=2.5mm,right=2.5mm,top=1.5mm,bottom=1.5mm,
+    title={\faLightbulb~~\TITRETIP},
+    before upper={\widowpenalties 4 10000 10000 10000 0 \clubpenalties 4 10000 10000 10000 0}}
+\newtcolorbox{info}{enhanced,breakable,colback=skyl,colframe=sky,
+    coltitle=white,fonttitle=\bfseries\sffamily\small,boxrule=0.9pt,arc=2.5pt,
+    left=2.5mm,right=2.5mm,top=1.5mm,bottom=1.5mm,
+    title={\faInfoCircle~~\TITREINFO},
+    before upper={\widowpenalties 4 10000 10000 10000 0 \clubpenalties 4 10000 10000 10000 0}}
+\newtcolorbox{formula}{enhanced,breakable,colback=lightgray,colframe=night!60,
+    coltitle=white,fonttitle=\bfseries\sffamily\small,boxrule=0.9pt,arc=2.5pt,
+    left=2.5mm,right=2.5mm,top=1.5mm,bottom=1.5mm,
+    title={\faCalculator~~\TITREFORM}}
+\BeforeBeginEnvironment{warning}{\par\needspace{9\baselineskip}}
+\BeforeBeginEnvironment{tip}{\par\needspace{9\baselineskip}}
+\BeforeBeginEnvironment{info}{\par\needspace{9\baselineskip}}
+\BeforeBeginEnvironment{formula}{\par\needspace{9\baselineskip}}
 
-% ─── TColorBox styles ───────────────────────────────────────────
-\tcbuselibrary{skins,breakable}
-
-\newtcolorbox{warning}{
-    colback=warnbg, colframe=accentred!70,
-    fonttitle=\bfseries, title={\ding{43} \TITREWARN},
-    breakable, left=4mm, right=4mm
-}
-\newtcolorbox{tip}{
-    colback=tipbg, colframe=accentgreen!70,
-    fonttitle=\bfseries, title={\ding{52} \TITRETIP},
-    breakable, left=4mm, right=4mm
-}
-\newtcolorbox{info}{
-    colback=infobg, colframe=accentblue!70,
-    fonttitle=\bfseries, title={$\mathbf{i}$ \TITREINFO},
-    breakable, left=4mm, right=4mm
-}
-\newtcolorbox{formula}{
-    colback=lightgray, colframe=darkblue!50,
-    fonttitle=\bfseries, title={\TITREFORM},
-    breakable, left=4mm, right=4mm
-}
+% A real screenshot of the application, framed, never split from its line
+\newcommand{\capture}[2][1]{\par\needspace{14\baselineskip}\begin{center}\setlength{\fboxsep}{0pt}\setlength{\fboxrule}{0.6pt}%
+  \fcolorbox{summit!50}{white}{\includegraphics[width=\dimexpr#1\linewidth-1.3pt\relax]{#2}}\end{center}}
 
 % Les encadres et les tableaux laissent parfois une page presque vide si
 % LaTeX doit etirer le texte pour atteindre le bas. On prefere un bas de
@@ -111,15 +153,18 @@
 \providecommand{\degre}{}\renewcommand{\degre}{\ensuremath{^\circ}}
 
 % ─── Code listings ──────────────────────────────────────────────
+\definecolor{codegray}{HTML}{2B2B2B}
 \lstset{
-    backgroundcolor=\color{codebg},
-    basicstyle=\ttfamily\small,
+    basicstyle=\ttfamily\small\color{white},
+    backgroundcolor=\color{codegray},
     breaklines=true,
     frame=single,
-    rulecolor=\color{midgray!40},
-    xleftmargin=4mm,
+    framerule=0pt,
+    rulecolor=\color{codegray},
+    xleftmargin=6pt, xrightmargin=6pt,
+    framexleftmargin=6pt, framexrightmargin=6pt,
+    showstringspaces=false,
 }
 
 % colortbl fournit deja \rowcolor : le redefinir faisait echouer la
 % compilation. Les tableaux utilisent \rowcolors (avec s), de xcolor.
-

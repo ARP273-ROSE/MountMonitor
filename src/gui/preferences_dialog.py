@@ -103,7 +103,14 @@ class PreferencesDialog(QDialog):
         conn_form = QFormLayout(conn_group)
 
         self._protocol = QComboBox()
-        self._protocol.addItems(["LX200 (TCP/IP)", "LX200 (Serial)", "ASCOM", "Simulation"])
+        self._protocol.addItems(["LX200 (TCP/IP)", T("proto_lx200_serie"), "ASCOM",
+                                 T("proto_simulation")])
+        if sys.platform != "win32":
+            # ASCOM n'existe que sous Windows : l'entree reste visible, grisee
+            item = self._protocol.model().item(2)
+            if item is not None:
+                item.setEnabled(False)
+                item.setToolTip(T("ascom_windows_seul"))
         protocol_map = {"lx200": 0, "lx200_serial": 1, "ascom": 2, "simulation": 3}
         self._protocol.setCurrentIndex(protocol_map.get(self._settings.get("mount_protocol"), 0))
         self._protocol.setToolTip(T("tt_protocol"))
@@ -140,7 +147,7 @@ class PreferencesDialog(QDialog):
         index = self._serial_baudrate.findData(actuelle)
         self._serial_baudrate.setCurrentIndex(index if index >= 0 else 0)
         self._serial_baudrate.setToolTip(T("tt_serial_baud"))
-        conn_form.addRow("Bauds", self._serial_baudrate)
+        conn_form.addRow(T("bauds"), self._serial_baudrate)
 
         ascom_row = QHBoxLayout()
         self._ascom_driver = QLineEdit(self._settings.get("ascom_driver"))
@@ -171,7 +178,7 @@ class PreferencesDialog(QDialog):
         # someone looking for their language does not read the current one.
         self._language = QComboBox()
         self._codes_langue = ["auto"] + list(langues_disponibles().keys())
-        self._language.addItem("Auto")
+        self._language.addItem(T("lang_auto"))
         for code, nom in langues_disponibles().items():
             self._language.addItem(nom)
         courant = self._settings.get("language")
@@ -481,7 +488,9 @@ class PreferencesDialog(QDialog):
         checks_grid.addWidget(self._check_tracking, 2, 0)
 
         self._tracking_rate_value = QComboBox()
-        self._tracking_rate_value.addItems(["sidereal", "lunar", "solar", "king"])
+        # libelle traduit, valeur LX200 en donnee (c'est elle qu'on enregistre)
+        for valeur in ("sidereal", "lunar", "solar", "king"):
+            self._tracking_rate_value.addItem(T(f"val_{valeur}"), valeur)
         rate_val_map = {"sidereal": 0, "lunar": 1, "solar": 2, "king": 3}
         self._tracking_rate_value.setCurrentIndex(
             rate_val_map.get(self._settings.get("check_tracking_rate_value"), 0)
@@ -496,7 +505,8 @@ class PreferencesDialog(QDialog):
         checks_grid.addWidget(self._check_gps, 3, 0)
 
         self._gps_sync_value = QComboBox()
-        self._gps_sync_value.addItems(["synchronising", "not synchronising"])
+        for valeur, cle in (("synchronising", "val_sync"), ("not synchronising", "val_nosync")):
+            self._gps_sync_value.addItem(T(cle), valeur)
         gps_val_map = {"synchronising": 0, "not synchronising": 1}
         self._gps_sync_value.setCurrentIndex(
             gps_val_map.get(self._settings.get("check_gps_sync_value"), 0)
@@ -511,7 +521,8 @@ class PreferencesDialog(QDialog):
         checks_grid.addWidget(self._check_dual, 4, 0)
 
         self._dual_tracking_value = QComboBox()
-        self._dual_tracking_value.addItems(["enabled", "disabled"])
+        for valeur in ("enabled", "disabled"):
+            self._dual_tracking_value.addItem(T(f"val_{valeur}"), valeur)
         dual_val_map = {"enabled": 0, "disabled": 1}
         self._dual_tracking_value.setCurrentIndex(
             dual_val_map.get(self._settings.get("check_dual_tracking_value"), 0)
@@ -615,11 +626,11 @@ class PreferencesDialog(QDialog):
         refraction_map = {0: "not_updating", 1: "not_updating_tracking", 2: "continuously_updating"}
         s.set("check_refraction_value", refraction_map.get(self._refraction_value.currentIndex(), "continuously_updating"))
         s.set("check_tracking_rate", self._check_tracking.isChecked())
-        s.set("check_tracking_rate_value", self._tracking_rate_value.currentText())
+        s.set("check_tracking_rate_value", self._tracking_rate_value.currentData())
         s.set("check_gps_sync", self._check_gps.isChecked())
-        s.set("check_gps_sync_value", self._gps_sync_value.currentText())
+        s.set("check_gps_sync_value", self._gps_sync_value.currentData())
         s.set("check_dual_tracking", self._check_dual.isChecked())
-        s.set("check_dual_tracking_value", self._dual_tracking_value.currentText())
+        s.set("check_dual_tracking_value", self._dual_tracking_value.currentData())
 
         s.save()
         self.accept()

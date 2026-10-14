@@ -6,6 +6,8 @@
 
 **Real-time telescope mount monitoring for astrophotography. Tracks RA/DEC deviations, timing accuracy, seismic vibrations, and provides FFT analysis — all with a modern dark astronomy-friendly interface. Includes automatic GitHub updates, crash detection, and anonymized bug reporting.**
 
+**[Français](README.fr.md)** · **[Download](https://github.com/ARP273-ROSE/MountMonitor/releases/latest)** · Manuals: [EN](docs/manual_en.pdf) · [FR](docs/manual_fr.pdf) · [NL](docs/manual_nl.pdf)
+
 ---
 
 ## Supported systems
@@ -32,6 +34,12 @@ not start at all.
 
 Running from source needs Python 3.10 or later and the packages in
 `requirements.txt`.
+
+**What depends on the system:** the mount is reached over the network (LX200
+over TCP/IP — the usual way for a 10Micron GM1000/2000) or a serial port on all
+three systems; **ASCOM exists only on Windows**, so that protocol is greyed out
+elsewhere. The look is fixed (Fusion style, complete palette, embedded fonts)
+and identical everywhere; on Linux the file dialogs are Qt's full dialogs.
 
 ---
 
@@ -104,7 +112,9 @@ Running from source needs Python 3.10 or later and the packages in
   the GUI thread's stack, which is the only thing that says *what* froze it
 - **Asked once, and never assumed**: nothing leaves the machine until you have
   answered the question, and a refusal is final
-- **Bug report dialog**: Help → Report a Bug
+- **Help → Report a problem…** sends a written report to the collection
+  point; **Help → Send crash reports automatically** withdraws or restores
+  consent; **Help → Report a Bug on GitHub** opens a pre-filled public issue
 - All file paths in reports are **completely anonymized** (home dir → ~), and
   no mount data, file name or user name is ever sent
 
@@ -115,7 +125,7 @@ Running from source needs Python 3.10 or later and the packages in
   and switchable from the Language menu — every dialog, report and message
 - Keyboard shortcuts for all operations
 - Resizable panels with persistent layout
-- Custom logo and icon
+- One logo, from a single SVG source (icon, About box, manuals)
 
 ---
 
