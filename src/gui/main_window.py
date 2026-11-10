@@ -77,11 +77,13 @@ class MainWindow(QMainWindow):
     # moindre message.
     maj_trouvee = pyqtSignal(object)
 
-    def __init__(self, sim_mode: str = "none"):
+    def __init__(self, sim_mode: str = "none", auto_connect: bool = False):
         """Initialize main window.
 
         Args:
             sim_mode: "none", "mount", "seismometer", or "all"
+            auto_connect: connect at launch and retry until the mount answers
+                (--connect; the "connect_on_launch" setting does the same)
         """
         super().__init__()
         self._version = _read_version()
@@ -146,8 +148,16 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(3000, self._check_updates_silent)
 
         # Auto-connect in simulation mode
+        self._essais_connexion = 0
+        self._connexion_auto_active = False
         if sim_mode != "none":
             QTimer.singleShot(500, self._connect)
+        elif auto_connect or self._settings.get("connect_on_launch"):
+            # Unattended start of the observatory PC: the window comes up
+            # before the control box has finished booting, so the first
+            # attempt often fails. Keep trying until it answers.
+            self._connexion_auto_active = True
+            QTimer.singleShot(1500, self._connexion_automatique)
 
         self._appliquer_zoom_horizontal(
             self._settings.get("horizontal_zoom") or 1)
@@ -462,10 +472,43 @@ class MainWindow(QMainWindow):
     # ── Connection management ────────────────────────────────────
 
     def _toggle_connection(self):
+        # A click by the user ends the automatic attempts, whatever its effect.
+        self._connexion_auto_active = False
         if self._connected:
             self._disconnect()
         else:
             self._connect()
+
+    def _connexion_automatique(self):
+        """Connect at launch; on failure, try again every connect_retry_s s.
+
+        Stops at the first success, or as soon as the user takes over (click on
+        Connect/Disconnect). Never opens a dialog: on an unattended start nobody
+        is there to answer it."""
+        if not self._connexion_auto_active or self._connected:
+            self._connexion_auto_active = False
+            return
+        protocol = self._settings.get("mount_protocol")
+        if protocol == "ascom" and not self._settings.get("ascom_driver"):
+            # _connect would open the ASCOM Chooser and wait for a click.
+            self._status_panel.add_message(T("no_ascom_driver"), Colors.STATUS_ERROR)
+            self._connexion_auto_active = False
+            return
+        if protocol == "lx200_serial" and not self._settings.get("serial_port"):
+            self._status_panel.add_message(T("no_serial_port"), Colors.STATUS_ERROR)
+            self._connexion_auto_active = False
+            return
+        self._essais_connexion += 1
+        self._connect()
+        if self._connected:
+            self._connexion_auto_active = False
+            return
+        brut = self._settings.get("connect_retry_s")
+        delai = max(5, int(30 if brut is None else brut))
+        self._status_panel.add_message(
+            T("auto_connect_retry").format(n=self._essais_connexion, s=delai),
+            Colors.STATUS_WARNING)
+        QTimer.singleShot(delai * 1000, self._connexion_automatique)
 
     def _connect(self):
         """Connect to the mount."""

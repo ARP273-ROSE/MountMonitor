@@ -393,6 +393,30 @@ twice that is comfortable.
 The running standard deviation window is set between 60 and 900 seconds. Sixty
 reacts fast, nine hundred smooths a long session.
 
+\section{Connecting automatically at launch}
+
+On an observatory PC that starts on its own, MountMonitor can connect to the mount
+as soon as it opens, without a click. Two equivalent ways:
+
+\begin{itemize}
+  \item tick \textbf{Connect to the mount when MountMonitor opens} in the
+        Preferences (recording tab);
+  \item start the program with the \texttt{--connect} option, for instance from
+        a scheduled task.
+\end{itemize}
+
+When the PC starts, the mount's control box has often not finished booting: while
+the mount does not answer, MountMonitor tries again every 30~seconds (setting
+\texttt{connect\_retry\_s}, 5~s minimum) until the first successful connection,
+and says so in the session log. A click on \emph{Connect} or \emph{Disconnect}
+stops the attempts. No dialog opens during these attempts: with ASCOM the driver
+must already be chosen; on a serial link the port must already be set. With
+\texttt{--connect}, the offer to report a previous crash is kept for the next
+launch, so that it does not hold the window.
+
+Once connected, recording follows the settings below: it is armed and starts
+when the mount starts tracking.
+
 \section{Arming the logger}
 
 Three settings govern the record button. All three are \textbf{on by default}.

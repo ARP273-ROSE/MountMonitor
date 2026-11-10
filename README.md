@@ -256,6 +256,9 @@ python main.py --sim-seismometer
 
 # Debug logging
 python main.py --sim-all --log-level DEBUG
+
+# Observatory PC started unattended: connect at launch, retry every 30 s
+python main.py --connect
 ```
 
 ## Requirements

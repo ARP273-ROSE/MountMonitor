@@ -24,7 +24,7 @@ n'existe que sous Windows** (protocole grisé ailleurs). L'apparence est figée 
 palette complète, polices embarquées) et identique partout ; sous Linux, les boîtes de fichiers
 sont les boîtes complètes de Qt.
 
-Essai sans matériel : `MountMonitor --sim-all`. Depuis les sources : Python 3.10+,
+Essai sans matériel : `MountMonitor --sim-all`. PC d'observatoire qui démarre seul : `MountMonitor --connect` (connexion au lancement, nouvel essai toutes les 30 s tant que la monture ne répond pas ; ou la case des Préférences). Depuis les sources : Python 3.10+,
 `pip install -r requirements.txt`, puis `python main.py`.
 
 ## Mises à jour, rapports, données

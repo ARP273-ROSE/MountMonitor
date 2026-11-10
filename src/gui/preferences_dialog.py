@@ -302,6 +302,11 @@ class PreferencesDialog(QDialog):
         # question -- what ends up in the file -- and because a mount
         # connected at noon for a night that starts at 19:00 writes seven
         # hours of nothing.
+        self._connect_launch = QCheckBox(T("pref_connect_launch"))
+        self._connect_launch.setChecked(bool(self._settings.get("connect_on_launch")))
+        self._connect_launch.setToolTip(T("tt_connect_launch"))
+        log_form.addRow(self._connect_launch)
+
         self._autostart = QCheckBox(T("pref_autostart"))
         self._autostart.setChecked(bool(self._settings.get("autostart_on_tracking")))
         self._autostart.setToolTip(T("tt_arm"))
@@ -584,6 +589,7 @@ class PreferencesDialog(QDialog):
         s.set("site_latitude", self._site_lat.text().strip())
         s.set("site_longitude", self._site_lon.text().strip())
         s.set("site_elevation_m", self._site_elev.text().strip())
+        s.set("connect_on_launch", self._connect_launch.isChecked())
         s.set("autostart_on_tracking", self._autostart.isChecked())
         s.set("pause_when_not_tracking", self._autostop.isChecked())
         s.set("pause_delay_s", self._park_delay.value())

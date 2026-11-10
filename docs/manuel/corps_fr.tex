@@ -407,6 +407,31 @@ l'échantillonnage est stricte, le double est confortable.
 La fenêtre de l'écart-type glissant se règle de 60 à 900 secondes. Soixante
 secondes réagissent vite, neuf cents lissent une longue session.
 
+\section{Connexion automatique au lancement}
+
+Pour un PC d'observatoire qui démarre seul, MountMonitor peut se connecter à la
+monture dès l'ouverture, sans clic. Deux façons, équivalentes :
+
+\begin{itemize}
+  \item cocher \textbf{Se connecter à la monture à l'ouverture de MountMonitor}
+        dans les Préférences (onglet de l'enregistrement) ;
+  \item lancer le programme avec l'option \texttt{--connect}, par exemple depuis
+        une tâche planifiée.
+\end{itemize}
+
+Au démarrage du PC, le boîtier de commande de la monture n'a souvent pas fini de
+démarrer : si la monture ne répond pas, MountMonitor réessaie toutes les
+30~secondes (réglage \texttt{connect\_retry\_s}, 5~s au minimum) jusqu'à la
+première connexion réussie, en l'indiquant dans le journal de la session. Un clic
+sur \emph{Connecter} ou \emph{Déconnecter} arrête les essais. Aucune fenêtre ne
+s'ouvre pendant ces essais : avec ASCOM, le pilote doit déjà être choisi ; en
+liaison série, le port doit déjà être réglé. Avec \texttt{--connect}, l'offre de
+signaler un plantage précédent est gardée pour le lancement suivant, pour ne pas
+bloquer la fenêtre.
+
+Une fois connecté, l'enregistrement suit les réglages ci-dessous : il est armé et
+démarre quand la monture se met à suivre.
+
 \section{L'armement de l'enregistreur}
 
 Deux réglages commandent le comportement du bouton d'enregistrement.
