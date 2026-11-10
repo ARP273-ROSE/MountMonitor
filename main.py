@@ -61,6 +61,11 @@ def parse_args():
         help='Simulate everything (demo mode)'
     )
     parser.add_argument(
+        '--connect', action='store_true',
+        help='Connect to the mount at launch and retry until it answers '
+             '(unattended start; recording follows the arming setting)'
+    )
+    parser.add_argument(
         '--log-level', default='INFO',
         choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'],
         help='Logging level (default: INFO)'
@@ -304,8 +309,13 @@ def main():
     crash_reporter = CrashReporter(dossier_donnees())
     crash_reporter.install()
 
-    # Check for previous crash — offer to report on GitHub
-    if crash_reporter.has_crash_report():
+    # Check for previous crash — offer to report on GitHub.
+    # Not on an unattended start (--connect): a modal box here would hold the
+    # window -- and the connection -- until someone clicks. The report is kept
+    # and offered at the next ordinary launch.
+    if args.connect and crash_reporter.has_crash_report():
+        logger.warning("Previous crash report kept: --connect start, no dialog")
+    elif crash_reporter.has_crash_report():
         report = crash_reporter.get_crash_report()
         if report:
             from PyQt6.QtWidgets import QMessageBox
@@ -376,7 +386,7 @@ def main():
 
     # Create and show main window
     from src.gui.main_window import MainWindow
-    window = MainWindow(sim_mode=sim_mode)
+    window = MainWindow(sim_mode=sim_mode, auto_connect=args.connect)
     window.show()
 
     # Offer desktop shortcut on first launch -- from source only: the

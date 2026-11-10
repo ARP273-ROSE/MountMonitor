@@ -6,6 +6,17 @@ behaviour changes, the patch number when only a defect is fixed.
 
 Figures quoted below were measured on real sessions, not estimated.
 
+## 1.33.0 — 2026-11-10
+
+### Added
+- **Connection at launch** for an observatory PC that starts on its own: the
+  `--connect` option, or *Connect to the mount when MountMonitor opens* in the
+  Preferences. While the mount does not answer (control box still booting), a
+  new attempt every 30 s (`connect_retry_s`, 5 s minimum) until the first
+  success; a click on Connect/Disconnect stops the attempts. No dialog during
+  these attempts (ASCOM Chooser not opened, previous-crash offer kept for the
+  next launch). Recording then follows the arming setting.
+
 ## 1.32.0 — 2026-10-14
 
 ### Changed

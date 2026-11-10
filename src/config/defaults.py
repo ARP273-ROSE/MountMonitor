@@ -42,6 +42,12 @@ DEFAULTS = {
     "site_longitude": "",
     "site_elevation_m": "",
     "autostart_on_tracking": True,
+    # Connect to the mount as soon as the window opens (observatory PC started
+    # unattended). Same as the --connect command-line option. While the mount
+    # does not answer -- control box still booting, cable unplugged -- a new
+    # attempt every connect_retry_s seconds, until the first success.
+    "connect_on_launch": False,
+    "connect_retry_s": 30,
     # Suspend rather than stop: one night, one file, one report. Closing on
     # a park would split a night that merely paused.
     "pause_when_not_tracking": True,

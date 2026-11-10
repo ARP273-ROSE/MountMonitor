@@ -475,6 +475,14 @@ TX = {
         "en": "End the night and write the report at sunrise",
         "fr": "Terminer la nuit et écrire le rapport au lever du Soleil",
         "nl": "De nacht beëindigen en het rapport schrijven bij zonsopkomst"},
+    "pref_connect_launch": {
+        "en": "Connect to the mount when MountMonitor opens",
+        "fr": "Se connecter à la monture à l'ouverture de MountMonitor",
+        "nl": "Met de montering verbinden zodra MountMonitor opent"},
+    "tt_connect_launch": {
+        "en": "For an observatory PC that starts on its own: connects at launch and, while the mount does not answer, tries again every 30 s. Same as starting MountMonitor with --connect.",
+        "fr": "Pour un PC d'observatoire qui démarre seul : connexion au lancement et, tant que la monture ne répond pas, nouvel essai toutes les 30 s. Équivaut à lancer MountMonitor avec --connect.",
+        "nl": "Voor een observatorium-pc die vanzelf opstart: verbindt bij het openen en probeert het, zolang de montering niet antwoordt, elke 30 s opnieuw. Hetzelfde als MountMonitor starten met --connect."},
     "pref_autostart": {
         "en": "Start recording when the mount starts tracking",
         "fr": "Démarrer l'enregistrement quand la monture se met à suivre",
@@ -545,6 +553,10 @@ TX = {
     "connected": {"en": "Connected", "fr": "Connecté", "nl": "Verbonden"},
     "disconnected": {"en": "Disconnected", "fr": "Déconnecté", "nl": "Niet verbonden"},
     "connection_failed": {"en": "Connection failed", "fr": "Échec de connexion", "nl": "Verbinding mislukt"},
+    "auto_connect_retry": {
+        "en": "Automatic connection: the mount does not answer (attempt {n}), new attempt in {s} s",
+        "fr": "Connexion automatique : la monture ne répond pas (essai {n}), nouvel essai dans {s} s",
+        "nl": "Automatisch verbinden: de montering antwoordt niet (poging {n}), nieuwe poging over {s} s"},
     "connection_restored": {"en": "Connection restored", "fr": "Connexion restaurée", "nl": "Verbinding hersteld"},
     "reconnecting": {"en": "Reconnecting...", "fr": "Reconnexion...", "nl": "Opnieuw verbinden..."},
 

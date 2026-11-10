@@ -405,6 +405,31 @@ bemonstering is streng, het dubbele is comfortabel.
 Het venster van de lopende standaardafwijking stelt u in tussen 60 en 900
 seconden. Zestig reageert snel, negenhonderd vlakt een lange sessie af.
 
+\section{Automatisch verbinden bij het openen}
+
+Op een observatorium-pc die vanzelf opstart, kan MountMonitor met de montering
+verbinden zodra het venster opent, zonder klik. Twee gelijkwaardige manieren:
+
+\begin{itemize}
+  \item vink \textbf{Met de montering verbinden zodra MountMonitor opent} aan in
+        de Voorkeuren (tabblad registratie);
+  \item start het programma met de optie \texttt{--connect}, bijvoorbeeld vanuit
+        een geplande taak.
+\end{itemize}
+
+Bij het opstarten van de pc is de besturingskast van de montering vaak nog niet
+klaar: zolang de montering niet antwoordt, probeert MountMonitor het elke
+30~seconden opnieuw (instelling \texttt{connect\_retry\_s}, minimaal 5~s) tot de
+eerste geslaagde verbinding, en meldt dat in het logboek van de sessie. Een klik
+op \emph{Verbinden} of \emph{Verbreken} stopt de pogingen. Tijdens deze pogingen
+opent geen enkel venster: met ASCOM moet het stuurprogramma al gekozen zijn, bij
+een seriële verbinding de poort al ingesteld. Met \texttt{--connect} wordt het
+aanbod om een eerdere crash te melden bewaard voor de volgende start, zodat het
+venster niet blokkeert.
+
+Eenmaal verbonden volgt de registratie de instellingen hieronder: ze wordt
+gereedgezet en start zodra de montering begint te volgen.
+
 \section{De logger gereedzetten}
 
 Drie instellingen sturen de opnameknop aan. Alle drie staan \textbf{standaard
