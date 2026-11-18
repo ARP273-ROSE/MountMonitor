@@ -76,6 +76,10 @@
     "tests/test_rapport_trilingue.py",
     "tests/test_corrections_septembre.py",
     "tests/test_analyse_suivi.py",
-    "tests/test_gui.py"
-  ]
+    "tests/test_gui.py",
+    "tests/test_audit_novembre.py"
+  ],
+  "rapports": {
+    "poste": "installation"
+  }
 }

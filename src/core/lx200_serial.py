@@ -32,7 +32,6 @@ class LX200SerialConnection(LX200Connection):
         self._serial: Optional[serial.Serial] = None
         self._protocol = ConnectionProtocol.LX200
         self._reconnect_attempts = 0
-        self._max_reconnect_attempts = 5
         # __init__ de LX200Connection sauté (super(LX200Connection, ...)) :
         # le verrou d'E/S partagé poller/GUI doit être recréé ici.
         self._io_lock = threading.Lock()
@@ -79,16 +78,23 @@ class LX200SerialConnection(LX200Connection):
             self._serial = None
         self._connected = False
 
+    def abort(self) -> None:
+        s = self._serial
+        if s is not None:
+            try:
+                s.cancel_read()
+            except Exception:
+                pass
+
     def reconnect(self) -> bool:
-        """Attempt to reconnect after connection loss."""
-        if self._reconnect_attempts >= self._max_reconnect_attempts:
-            logger.error("Max serial reconnection attempts reached")
-            return False
+        """One reconnection attempt after a connection loss.
+
+        No ceiling: the attempts used to stop for good after five, about
+        thirty seconds, so a mount that rebooted (one to two minutes) was
+        never found again and the rest of the night was lost. The poller now
+        spaces the attempts out (2, 4, 8... up to 60 s)."""
         self._reconnect_attempts += 1
-        logger.info(
-            f"Serial reconnection attempt "
-            f"{self._reconnect_attempts}/{self._max_reconnect_attempts}"
-        )
+        logger.info(f"Serial reconnection attempt {self._reconnect_attempts}")
         return self.connect()
 
     # Maximum response size to prevent unbounded buffer growth (security)
@@ -105,6 +111,16 @@ class LX200SerialConnection(LX200Connection):
 
         with self._io_lock:
             return self._send_command_locked(command)
+
+    def _send_no_reply(self, command: str) -> None:
+        if not self._serial or not self._connected:
+            return
+        with self._io_lock:
+            try:
+                self._serial.write(command.encode('ascii'))
+            except (serial.SerialException, OSError) as e:
+                logger.warning(f"Serial communication error: {e}")
+                self._connected = False
 
     def _send_command_locked(self, command: str) -> Optional[str]:
         try:
@@ -128,7 +144,7 @@ class LX200SerialConnection(LX200Connection):
                     logger.warning(f"Serial response exceeded {self._MAX_RESPONSE_BYTES} bytes")
                     return None
 
-            decoded = response.decode('ascii').rstrip('#')
+            decoded = response.decode('ascii', 'replace').rstrip('#')
             return decoded
 
         except (serial.SerialException, OSError) as e:

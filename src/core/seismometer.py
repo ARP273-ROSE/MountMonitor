@@ -104,6 +104,12 @@ class Seismometer:
                     continue
 
                 buffer += data
+                if len(buffer) > 4096 and b'\r\n' not in buffer:
+                    # Wrong port or baud rate: no line ever ends. Unbounded,
+                    # the buffer grew all night and every search in it
+                    # cost more than the last.
+                    buffer = b''
+                    continue
                 # Parse values separated by CR+LF
                 while b'\r\n' in buffer:
                     line, buffer = buffer.split(b'\r\n', 1)

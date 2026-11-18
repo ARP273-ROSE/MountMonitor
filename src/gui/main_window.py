@@ -8,6 +8,7 @@ import os
 import sys
 import logging
 import threading
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -19,7 +20,7 @@ from PyQt6.QtWidgets import (
     QApplication, QStatusBar, QFileDialog,
     QDialog, QTextBrowser, QDialogButtonBox
 )
-from PyQt6.QtCore import Qt, QTimer, pyqtSlot, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSlot, pyqtSignal
 from PyQt6.QtGui import QAction, QActionGroup, QFont, QIcon, QKeySequence
 
 from .graph_widgets import (TrackingGraph, TimeGraph, SeismicGraph, AxialGraph,
@@ -65,6 +66,34 @@ def _read_version() -> str:
         return "1.0.0"
 
 
+
+class TravailFinDeNuit(QThread):
+    """Reads a finished session ONCE and writes its three reports, off the GUI.
+
+    At dawn and at every park the window used to parse the .dat twice and
+    write the reports on the GUI thread: about 7 s frozen for a 10 Hz night
+    here, 25 s or more on a small mini-PC (a minute and a half for a long
+    night), with the freeze watchdog firing. One thread is enough on two
+    cores; the session comes back by a signal and the window is built then.
+    """
+    fini = pyqtSignal(str, object, object)     # dat path, session or None, main report path
+
+    def __init__(self, chemin_dat, langue: str, ecrire: bool, parent=None):
+        super().__init__(parent)
+        self._chemin = str(chemin_dat)
+        self._langue = langue
+        self._ecrire = ecrire
+
+    def run(self):
+        session, sortie = None, None
+        try:
+            session = parse_session(Path(self._chemin))
+            if self._ecrire:
+                sortie = sauver_rapport(self._chemin, self._langue, session=session)
+        except Exception as e:
+            logger.error(f"End-of-night processing failed: {e}")
+        self.fini.emit(self._chemin, session, sortie)
+
 class MainWindow(QMainWindow):
     """Main application window."""
 
@@ -76,6 +105,12 @@ class MainWindow(QMainWindow):
     # d'evenements ne se declenche jamais, et la reponse serait perdue sans le
     # moindre message.
     maj_trouvee = pyqtSignal(object)
+    # The seismometer reads in its own thread; its data crosses over by this
+    # queued signal. It used to call _on_seismic_data directly from that
+    # thread, writing the .sei/.dat files the GUI thread was writing too.
+    sismique_recue = pyqtSignal(float, object)
+    maj_progression = pyqtSignal(int)
+    maj_posee = pyqtSignal(bool, str)
 
     def __init__(self, sim_mode: str = "none", auto_connect: bool = False):
         """Initialize main window.
@@ -92,6 +127,10 @@ class MainWindow(QMainWindow):
         self._processor = DataProcessor()
         self._connection: Optional[MountConnection] = None
         self._poller: Optional[MountPoller] = None
+        self._connexion_en_cours = False
+        # Pollers whose thread has not ended yet (stuck in a driver): kept
+        # referenced, a QThread destroyed while running aborts the process.
+        self._pollers_finissants: list = []
         self._ntp_client: Optional[NTPClient] = None
         self._seismometer = None
         self._file_logger = FileLogger()
@@ -116,6 +155,10 @@ class MainWindow(QMainWindow):
         self._fen_analyse = None
         self._session_analysee = None
         self._aube_timer = None
+        self._timer_armement = None
+        self._travaux_nuit: dict = {}
+        self._analyse_demandee: set = set()
+        self._session_lue = None
         # Site as the mount reports it, when it does. Plenty of setups never
         # push their site to the mount -- hence the preference fallback.
         self._site_monture = None
@@ -136,7 +179,9 @@ class MainWindow(QMainWindow):
         # Refresh timer for graph updates — 4 fps is sufficient for monitoring
         self._refresh_timer = QTimer()
         self._refresh_timer.timeout.connect(self._refresh_graphs)
-        self._refresh_timer.setInterval(250)  # 4 fps graph update (was 100ms/10fps)
+        # 4 fps, 2 fps from the start on a small PC; adapted while running.
+        self._cadence_min = 1 if (os.cpu_count() or 2) <= 4 else 0
+        self._refresh_timer.setInterval(self.CADENCES_MS[self._cadence_min])
 
         # FFT timer (slower)
         self._fft_timer = QTimer()
@@ -145,6 +190,9 @@ class MainWindow(QMainWindow):
 
         # Verification des mises a jour, en fond, au demarrage.
         self.maj_trouvee.connect(self._maj_reperee)
+        self.sismique_recue.connect(self._on_seismic_data)
+        self.maj_progression.connect(self._maj_progression)
+        self.maj_posee.connect(self._maj_terminee)
         QTimer.singleShot(3000, self._check_updates_silent)
 
         # Auto-connect in simulation mode
@@ -499,8 +547,10 @@ class MainWindow(QMainWindow):
             self._connexion_auto_active = False
             return
         self._essais_connexion += 1
-        self._connect()
-        if self._connected:
+        self._connect()      # the answer comes back in _on_connect_result
+
+    def _replanifier_connexion_auto(self):
+        if not self._connexion_auto_active or self._connected:
             self._connexion_auto_active = False
             return
         brut = self._settings.get("connect_retry_s")
@@ -511,8 +561,13 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(delai * 1000, self._connexion_automatique)
 
     def _connect(self):
-        """Connect to the mount."""
-        if self._connected:
+        """Connect to the mount.
+
+        The connection is opened in the poller thread: an unreachable mount
+        (5 s timeout) or a slow ASCOM driver used to freeze the window, every
+        30 s while --connect waited for the mount. The rest of the start-up
+        happens in _on_connect_result."""
+        if self._connected or self._connexion_en_cours:
             return
 
         protocol = self._settings.get("mount_protocol")
@@ -556,11 +611,63 @@ class MainWindow(QMainWindow):
             )
             return
 
-        # Connect
         self._status_panel.add_message(T("connecting"))
-        if not self._connection.connect():
-            self._status_panel.add_message(T("connection_failed"), Colors.STATUS_ERROR)
+        self._poller = MountPoller(
+            self._connection, self._processor,
+            frequency_hz=self._settings.get("polling_frequency_hz"),
+        )
+        self._poller.set_axial_enabled(self._settings.get("axial_mode") != "off")
+        self._poller.set_log_tracking_only(self._settings.get("log_mode") == "tracking_only")
+        self._poller.set_delay_after_slew(self._settings.get("delay_after_slew_seconds"))
+        self._poller.connect_result.connect(self._on_connect_result)
+        self._poller.request_done.connect(self._on_request_done)
+        # Every signal is wired BEFORE the thread starts: the mount info is
+        # emitted right after the connection and would otherwise be lost.
+        self._poller.sample_ready.connect(self._on_sample)
+        self._poller.time_sample_ready.connect(self._on_time_sample)
+        self._poller.status_changed.connect(self._on_status_changed)
+        self._poller.connection_lost.connect(self._on_connection_lost)
+        self._poller.connection_restored.connect(self._on_connection_restored)
+        self._poller.log_message.connect(self._on_log_message)
+        self._poller.mount_info_ready.connect(self._on_mount_info)
+        self._poller.environment_ready.connect(self._on_environment)
+        self._poller.connect_in_thread()
+        self._connexion_en_cours = True
+        self._poller.start()
+
+    @pyqtSlot(object, object)
+    def _on_request_done(self, callback, result):
+        try:
+            callback(result)
+        except Exception as e:
+            logger.warning(f"Mount request callback failed: {e}")
+
+    def _demande_monture(self, fn, callback=None):
+        """Ask the poller thread to run fn(connection); never blocks the GUI."""
+        if self._poller is not None and self._connected:
+            self._poller.submit(fn, callback)
+
+    def _liberer_poller(self, poller):
+        if poller is None:
             return
+        if not poller.stop():
+            logger.warning("Poller thread still busy in the driver; kept until it ends")
+            self._pollers_finissants.append(poller)
+            poller.finished.connect(lambda p=poller: self._pollers_finissants.remove(p)
+                                    if p in self._pollers_finissants else None)
+
+    @pyqtSlot(bool)
+    def _on_connect_result(self, ok: bool):
+        self._connexion_en_cours = False
+        if not ok:
+            self._status_panel.add_message(T("connection_failed"), Colors.STATUS_ERROR)
+            poller, self._poller = self._poller, None
+            self._liberer_poller(poller)
+            self._connection = None
+            if self._connexion_auto_active:
+                self._replanifier_connexion_auto()
+            return
+        self._connexion_auto_active = False
 
         self._connected = True
         self._status_panel.set_connected(True)
@@ -585,26 +692,6 @@ class MainWindow(QMainWindow):
             as_ha_seconds=self._settings.get("tolerance_as_ha_seconds"),
         )
 
-        # Start poller
-        self._poller = MountPoller(
-            self._connection, self._processor,
-            frequency_hz=self._settings.get("polling_frequency_hz"),
-        )
-        self._poller.set_axial_enabled(self._settings.get("axial_mode") != "off")
-        self._poller.set_log_tracking_only(self._settings.get("log_mode") == "tracking_only")
-        self._poller.set_delay_after_slew(self._settings.get("delay_after_slew_seconds"))
-
-        # Connect signals
-        self._poller.sample_ready.connect(self._on_sample)
-        self._poller.time_sample_ready.connect(self._on_time_sample)
-        self._poller.status_changed.connect(self._on_status_changed)
-        self._poller.connection_lost.connect(self._on_connection_lost)
-        self._poller.connection_restored.connect(self._on_connection_restored)
-        self._poller.log_message.connect(self._on_log_message)
-        self._poller.mount_info_ready.connect(self._on_mount_info)
-        self._poller.environment_ready.connect(self._on_environment)
-
-        self._poller.start()
         self._refresh_timer.start()
 
         # Start NTP if enabled
@@ -618,7 +705,7 @@ class MainWindow(QMainWindow):
         # Start seismometer
         if self._sim_mode in ("seismometer", "all"):
             sim_sei = SimulatedSeismometer()
-            sim_sei.set_callback(self._on_seismic_data)
+            sim_sei.set_callback(self.sismique_recue.emit)
             sim_sei.start()
             self._seismometer = sim_sei
             self._status_panel.add_message(T("sim_seismometer"), Colors.STATUS_WARNING)
@@ -629,7 +716,7 @@ class MainWindow(QMainWindow):
                 offset=self._settings.get("seismometer_offset"),
                 data_range=self._settings.get("seismometer_range"),
             )
-            sei.set_callback(self._on_seismic_data)
+            sei.set_callback(self.sismique_recue.emit)
             if sei.start():
                 self._seismometer = sei
 
@@ -656,9 +743,9 @@ class MainWindow(QMainWindow):
         self._refresh_timer.stop()
         self._fft_timer.stop()
 
-        if self._poller:
-            self._poller.stop()
-            self._poller = None
+        # The poller thread closes the connection itself on its way out.
+        poller, self._poller = self._poller, None
+        self._liberer_poller(poller)
 
         if self._ntp_client:
             self._ntp_client.stop()
@@ -669,10 +756,7 @@ class MainWindow(QMainWindow):
                 self._seismometer.stop()
             self._seismometer = None
 
-        if self._connection:
-            self._connection.disconnect()
-            self._connection = None
-
+        self._connection = None
         self._connected = False
         self._status_panel.set_connected(False)
         self._btn_connect.setText(T("btn_connect"))
@@ -776,15 +860,19 @@ class MainWindow(QMainWindow):
         if was_slewing and now_tracking:
             QTimer.singleShot(1000, self._run_mount_checks)
             # Retrieve target coordinates for reference mode
-            if self._settings.get("reference_mode") == "target" and self._connection:
-                target_ra = self._connection.get_target_ra()
-                target_dec = self._connection.get_target_dec()
-                if target_ra and target_dec:
-                    from ..utils.coordinates import parse_ra, parse_dec
-                    ra_h = parse_ra(target_ra)
-                    dec_d = parse_dec(target_dec)
-                    if ra_h is not None and dec_d is not None:
-                        self._processor.set_target_coordinates(ra_h, dec_d)
+            if self._settings.get("reference_mode") == "target":
+                self._demande_monture(
+                    lambda c: (c.get_target_ra(), c.get_target_dec()),
+                    self._recevoir_cible)
+
+    def _recevoir_cible(self, cible):
+        target_ra, target_dec = cible or (None, None)
+        if target_ra and target_dec:
+            from ..utils.coordinates import parse_ra, parse_dec
+            ra_h = parse_ra(target_ra)
+            dec_d = parse_dec(target_dec)
+            if ra_h is not None and dec_d is not None:
+                self._processor.set_target_coordinates(ra_h, dec_d)
 
     @pyqtSlot()
     def _on_connection_lost(self):
@@ -896,8 +984,9 @@ class MainWindow(QMainWindow):
                     f"IntTemp={int_temp}°C"
                 )
 
+    @pyqtSlot(float, object)
     def _on_seismic_data(self, timestamp: float, values: list[float]):
-        """Handle seismometer data callback."""
+        """Handle seismometer data (GUI thread, via sismique_recue)."""
         self._processor.process_seismic_data(timestamp, values)
         # Parité avec le MountMonitor Java : chaque échantillon est journalisé
         # dans le .sei (temps, brut, valeur recentrée par l'offset, stdev
@@ -908,15 +997,42 @@ class MainWindow(QMainWindow):
             offset = float(self._settings.get("seismometer_offset") or 0.0)
             stdev_arr = self._processor.seismic_buffer.get_stdev_array()
             stdev = float(stdev_arr[-1]) if len(stdev_arr) else 0.0
-            for v in values:
-                self._file_logger.log_seismic_data(
-                    timestamp, v + offset, v, stdev
-                )
+            for t, v in zip(self._processor.seismic_times(timestamp, len(values)), values):
+                self._file_logger.log_seismic_data(t, v + offset, v, stdev)
 
     # ── Graph refresh ────────────────────────────────────────────
 
+    # Graph cadence: 4 per second where the machine allows it. On a small PC
+    # (2-4 cores) it starts at 2 per second, and on any machine it slows down
+    # (to 1 per second) when drawing takes too long, then speeds up again.
+    CADENCES_MS = (250, 500, 1000)
+
     def _refresh_graphs(self):
-        """Refresh all graphs with current buffer data. Called by timer.
+        """Timer slot: skip when nobody can see the window, adapt the cadence."""
+        if self.isMinimized() or not self.isVisible():
+            return
+        t0 = time.perf_counter()
+        try:
+            self._refresh_graphs_now()
+        finally:
+            # Drawing happens after this slot, in the event loop; it costs
+            # about as much as the update itself: count it twice.
+            cout = 2.0 * (time.perf_counter() - t0) * 1000.0
+            self._adapter_cadence(cout)
+
+    def _adapter_cadence(self, cout_ms: float):
+        actuel = self._refresh_timer.interval()
+        cadences = self.CADENCES_MS
+        i = cadences.index(actuel) if actuel in cadences else 0
+        moyenne = 0.8 * getattr(self, "_cout_rafraichissement", cout_ms) + 0.2 * cout_ms
+        self._cout_rafraichissement = moyenne
+        if moyenne > 0.4 * actuel and i + 1 < len(cadences):
+            self._refresh_timer.setInterval(cadences[i + 1])
+        elif i > self._cadence_min and moyenne < 0.1 * cadences[i - 1]:
+            self._refresh_timer.setInterval(cadences[i - 1])
+
+    def _refresh_graphs_now(self):
+        """Refresh all graphs with current buffer data.
 
         Les graphes defilent au present : chacun ne recoit que les
         `largeur_fenetre(zoom)` dernieres secondes, a pleine resolution
@@ -930,21 +1046,20 @@ class MainWindow(QMainWindow):
         correct = self._settings.get("correct_graphs_for_range")
         half_range = self._settings.get("running_range_seconds") / 2.0 if correct else 0.0
 
+        # Only the visible tail is copied out of each buffer (get_tail): the
+        # previous version rebuilt seven 50,000-element arrays four times a
+        # second to keep about a thousand points of each.
         # RA / DEC
         for buf, graphe, tol_cle in (
                 (self._processor.ra_buffer, self._ra_graph, "tolerance_ra_arcsec"),
                 (self._processor.dec_buffer, self._dec_graph, "tolerance_dec_arcsec")):
-            t, v = buf.get_arrays()
+            t, v, sd_t, sd = buf.get_tail(largeur)
             if len(t) == 0:
                 continue
-            sd = buf.get_stdev_array()
-            t, v, sd = couper_au_present(t, v, largeur, None,
-                                         sd if len(sd) == len(t) else None)
-            stdev_t = t - half_range if (sd is not None and half_range > 0) else None
             graphe.update_data(
                 t, v,
-                stdev_values=sd,
-                stdev_timestamps=stdev_t,
+                stdev_values=sd if len(sd) else None,
+                stdev_timestamps=(sd_t - half_range) if len(sd) else None,
                 min_val=buf.min_value,
                 max_val=buf.max_value,
                 max_stdev=buf.max_stdev,
@@ -953,16 +1068,12 @@ class MainWindow(QMainWindow):
             graphe.set_tolerance(self._settings.get(tol_cle))
 
         # Time graph
-        diff_t, diff_v = self._processor.time_diff_buffer.get_arrays()
+        diff_t, diff_v, _, _ = self._processor.time_diff_buffer.get_tail(largeur)
         if len(diff_t) > 0:
             fin = float(diff_t[-1])
-            diff_t, diff_v = couper_au_present(diff_t, diff_v, largeur)
-            pc_t, pc_v = couper_au_present(
-                *self._processor.pc_loop_buffer.get_arrays(), largeur, fin)
-            mt_t, mt_v = couper_au_present(
-                *self._processor.mount_loop_buffer.get_arrays(), largeur, fin)
-            ntp_t, ntp_v = couper_au_present(
-                *self._processor.ntp_buffer.get_arrays(), largeur, fin)
+            pc_t, pc_v, _, _ = self._processor.pc_loop_buffer.get_tail(largeur, fin)
+            mt_t, mt_v, _, _ = self._processor.mount_loop_buffer.get_tail(largeur, fin)
+            ntp_t, ntp_v, _, _ = self._processor.ntp_buffer.get_tail(largeur, fin)
             self._time_graph.update_data(
                 diff_t, diff_v,
                 pc_loop_t=pc_t, pc_loop_v=pc_v,
@@ -974,37 +1085,47 @@ class MainWindow(QMainWindow):
 
         # Axial graph
         if self._settings.get("axial_mode") != "off":
-            series = [b.get_arrays() for b in (
-                self._processor.ra_speed_raw_buffer,
-                self._processor.dec_speed_raw_buffer,
-                self._processor.ra_speed_avg_buffer,
-                self._processor.dec_speed_avg_buffer)]
-            fins = [float(t[-1]) for t, _ in series if len(t) > 0]
+            bufs = (self._processor.ra_speed_raw_buffer,
+                    self._processor.dec_speed_raw_buffer,
+                    self._processor.ra_speed_avg_buffer,
+                    self._processor.dec_speed_avg_buffer)
+            fins = [t[-1] for t in (b.get_last_n(1)[0] for b in bufs) if len(t)]
             if fins:
-                fin = max(fins)
-                series = [couper_au_present(t, v, largeur, fin) for t, v in series]
+                fin = float(max(fins))
                 args = {}
-                for nom, (t, v) in zip(("ra_raw", "dec_raw", "ra_avg", "dec_avg"), series):
+                for nom, b in zip(("ra_raw", "dec_raw", "ra_avg", "dec_avg"), bufs):
+                    t, v, _, _ = b.get_tail(largeur, fin)
                     args[nom + "_t"] = t if len(t) > 0 else None
                     args[nom + "_v"] = v if len(t) > 0 else None
                 self._axial_graph.update_data(largeur_s=largeur, **args)
 
         # Seismic graph
-        sei_t, sei_v = self._processor.seismic_buffer.get_arrays()
+        sei_t, sei_v, sei_sd_t, sei_sd = self._processor.seismic_buffer.get_tail(largeur)
         if len(sei_t) > 0:
-            sei_stdev = self._processor.seismic_buffer.get_stdev_array()
-            sei_t, sei_v, sei_sd = couper_au_present(
-                sei_t, sei_v, largeur, None,
-                sei_stdev if len(sei_stdev) == len(sei_t) else None)
+            # The tolerance lines were never set and stayed at +/-100
+            # whatever the preferences said.
+            self._seismic_graph.set_tolerance(
+                float(self._settings.get("tolerance_seismic_percent") or 0.0),
+                float(self._settings.get("seismometer_range") or 0.0))
             self._seismic_graph.update_data(
-                sei_t, sei_v, stdev_values=sei_sd, largeur_s=largeur,
+                sei_t, sei_v,
+                stdev_values=sei_sd if len(sei_sd) else None,
+                stdev_timestamps=sei_sd_t if len(sei_sd) else None,
+                largeur_s=largeur,
             )
 
-        # Update STDEV in status panel (use full-res last values)
+        # Update STDEV in status panel (last value of the night computation)
         full_ra_stdev = self._processor.ra_buffer.get_stdev_array()
         full_dec_stdev = self._processor.dec_buffer.get_stdev_array()
         if len(full_ra_stdev) > 0 and len(full_dec_stdev) > 0:
             self._status_panel.update_stdev(full_ra_stdev[-1], full_dec_stdev[-1])
+
+        # A write error (disk full, network share gone) is said once.
+        erreur = getattr(self._file_logger, "erreur_ecriture", None)
+        if erreur and not getattr(self, "_erreur_ecriture_dite", False):
+            self._erreur_ecriture_dite = True
+            self._status_panel.add_message(f"\u26a0 {T('write_error')} : {erreur}",
+                                           Colors.STATUS_ERROR)
 
         # Update title with current frequency
         self._update_title()
@@ -1031,26 +1152,28 @@ class MainWindow(QMainWindow):
         if not fft_visible and not self._logging_active:
             return
 
-        freq = max(1.0, self._processor.actual_frequency)
+        # On the real timestamps: the sampling rate is measured on the data
+        # (max(1, actual_frequency) forced 1 Hz on a 0.5 Hz poll), gaps are
+        # skipped, drift and dither steps removed (src/core/spectre.py).
+        from ..core.spectre import spectre, spectre_regulier
 
-        # RA FFT
-        _, ra_data = self._processor.ra_buffer.get_arrays()
-        ra_freqs, ra_mags = None, None
-        if len(ra_data) > 64:
-            ra_freqs, ra_mags = self._processor.compute_fft(ra_data, freq)
+        def frequence(t):
+            if len(t) < 2:
+                return 0.0
+            d = np.diff(t)
+            d = d[d > 0]
+            return 1.0 / float(np.median(d)) if len(d) else 0.0
 
-        # DEC FFT
-        _, dec_data = self._processor.dec_buffer.get_arrays()
-        dec_freqs, dec_mags = None, None
-        if len(dec_data) > 64:
-            dec_freqs, dec_mags = self._processor.compute_fft(dec_data, freq)
+        ra_t, ra_data = self._processor.ra_buffer.get_arrays()
+        ra_freqs, ra_mags = spectre(ra_t, ra_data) if len(ra_data) > 64 else (None, None)
+        dec_t, dec_data = self._processor.dec_buffer.get_arrays()
+        dec_freqs, dec_mags = spectre(dec_t, dec_data) if len(dec_data) > 64 else (None, None)
+        freq = frequence(ra_t)
 
-        # Seismic FFT
         _, sei_data = self._processor.seismic_buffer.get_arrays()
-        sei_freqs, sei_mags = None, None
         sei_rate = self._settings.get("seismometer_frequency_hz")
-        if len(sei_data) > 64:
-            sei_freqs, sei_mags = self._processor.compute_fft(sei_data, sei_rate)
+        sei_freqs, sei_mags = (spectre_regulier(sei_data, sei_rate)
+                               if len(sei_data) > 64 else (None, None))
 
         if fft_visible:
             self._fft_window.update_fft(
@@ -1089,6 +1212,19 @@ class MainWindow(QMainWindow):
         self._status_panel.add_message(T("logging_armed"), Colors.STATUS_OK)
         # Already tracking when armed: start at once rather than wait for a
         # transition that has already happened -- unless it is broad daylight.
+        if getattr(self, '_prev_mount_status', None) == MountStatus.TRACKING:
+            self._demarrer_sur_suivi()
+        # Armed in daylight while the mount already tracks: no status change
+        # will come at sunset, so nothing started. Look again every minute.
+        if self._timer_armement is None:
+            self._timer_armement = QTimer(self)
+            self._timer_armement.timeout.connect(self._verifier_armement)
+        self._timer_armement.start(60_000)
+
+    def _verifier_armement(self):
+        if not self._logging_armed or self._logging_active:
+            self._timer_armement.stop()
+            return
         if getattr(self, '_prev_mount_status', None) == MountStatus.TRACKING:
             self._demarrer_sur_suivi()
 
@@ -1268,13 +1404,34 @@ class MainWindow(QMainWindow):
         # The night report is written on its own, next to the .dat. Asking the
         # user to remember to export it is how a night ends up without one.
         if chemin_dat:
-            QApplication.processEvents()
-            sortie = sauver_rapport(chemin_dat, get_language())
-            if sortie:
-                self._status_panel.add_message(
-                    f"{T('report_saved')} : {Path(sortie).stem[:-3]}*.txt "
-                    f"({', '.join(LANGUES)})", Colors.STATUS_OK
-                )
+            self._lancer_fin_de_nuit(chemin_dat, ecrire=True)
+
+    def _lancer_fin_de_nuit(self, chemin_dat, ecrire: bool):
+        cle = str(chemin_dat)
+        if cle in self._travaux_nuit:
+            return
+        travail = TravailFinDeNuit(cle, get_language(), ecrire, self)
+        travail.fini.connect(self._fin_de_nuit_prete)
+        travail.finished.connect(travail.deleteLater)
+        self._travaux_nuit[cle] = travail
+        travail.start()
+
+    @pyqtSlot(str, object, object)
+    def _fin_de_nuit_prete(self, chemin: str, session, sortie):
+        self._travaux_nuit.pop(chemin, None)
+        if sortie:
+            self._status_panel.add_message(
+                f"{T('report_saved')} : {Path(sortie).stem[:-3]}*.txt "
+                f"({', '.join(LANGUES)})", Colors.STATUS_OK
+            )
+        if session is None:
+            return
+        if chemin in self._analyse_demandee:
+            self._analyse_demandee.discard(chemin)
+            self._montrer_analyse(session)
+        else:
+            # Kept for the park that usually follows the dawn close.
+            self._session_lue = (chemin, session)
 
     def _new_log_files(self):
         """Close current files and open new ones."""
@@ -1302,6 +1459,7 @@ class MainWindow(QMainWindow):
         """Open and analyze 10micron mount .log10m internal log files."""
         dialog = Log10mAnalysisDialog(self)
         dialog.exec()
+        dialog.deleteLater()
 
     def _open_log_file(self):
         """Open a previous log file for replay and analysis."""
@@ -1324,12 +1482,18 @@ class MainWindow(QMainWindow):
         self._status_panel.add_message(
             f"{T('loading_file')} : {Path(file_path).name}..."
         )
-        QApplication.processEvents()
+        # Parsed in the background: a long night took seconds (a minute on
+        # a small PC) with the window frozen, live polling included.
+        travail = TravailFinDeNuit(file_path, get_language(), False, self)
+        travail.fini.connect(self._relecture_prete)
+        travail.finished.connect(travail.deleteLater)
+        self._travail_relecture = travail
+        travail.start()
 
-        # Parse the session
-        session = parse_session(Path(file_path))
-
-        if session.sample_count == 0:
+    @pyqtSlot(str, object, object)
+    def _relecture_prete(self, file_path: str, session, _sortie):
+        self._travail_relecture = None
+        if session is None or session.sample_count == 0:
             self._status_panel.add_message(
                 T("replay_no_data"), Colors.STATUS_ERROR
             )
@@ -1367,10 +1531,10 @@ class MainWindow(QMainWindow):
 
         # The report is the point of the whole operation: it opens even if
         # everything above failed.
-        QApplication.processEvents()
         try:
             dialog = AnalysisDialog(session, self)
             dialog.exec()
+            dialog.deleteLater()      # parented to the window: freed, not kept
         except Exception as exc:
             logger.exception("Replay: analysis report failed")
             self._status_panel.add_message(
@@ -1435,11 +1599,20 @@ class MainWindow(QMainWindow):
         # Axial graph
         if len(session.ra_axis) > 2 and np.any(session.ra_axis != 0):
             # Compute speeds from axis positions
+            # Degrees -> arcsec/s. Samples with the same time stamp (ASCOM
+            # times to the second in older files) are dropped: dividing by
+            # 1e-6 drew huge spikes.
             t = session.timestamps[:len(session.ra_axis)]
             dt = np.diff(t)
-            dt[dt == 0] = 1e-6
-            ra_speed = np.diff(session.ra_axis) / dt
-            dec_speed = np.diff(session.dec_axis) / dt if len(session.dec_axis) == len(session.ra_axis) else None
+            bon = dt > 0
+
+            def vitesse(pos):
+                d = (np.diff(pos) + 180.0) % 360.0 - 180.0
+                return (d[bon] * 3600.0) / dt[bon]
+            ra_speed = vitesse(session.ra_axis)
+            dec_speed = (vitesse(session.dec_axis)
+                         if len(session.dec_axis) == len(session.ra_axis) else None)
+            t = np.concatenate((t[:1], t[1:][bon]))
 
             if len(ra_speed) > 0:
                 self._axial_graph.update_data(
@@ -1458,27 +1631,18 @@ class MainWindow(QMainWindow):
         ra_freqs, ra_mags = None, None
         dec_freqs, dec_mags = None, None
 
-        if len(session.ra_deviations) > 64:
-            ra_data = session.ra_deviations - np.mean(session.ra_deviations)
-            window = np.hanning(len(ra_data))
-            windowed = ra_data * window
-            n = len(windowed)
-            fft_result = np.fft.rfft(windowed)
-            ra_mags = 2.0 / n * np.abs(fft_result)
-            ra_freqs = np.fft.rfftfreq(n, d=1.0 / freq)
-            ra_freqs = ra_freqs[1:]
-            ra_mags = ra_mags[1:]
+        from ..core.spectre import spectre, spectre_regulier
 
+        def calcul(dev):
+            t = getattr(session, "deviation_timestamps", None)
+            if t is not None and len(t) == len(dev):
+                return spectre(t, dev)
+            return spectre_regulier(dev, freq, enlever_sauts=True)
+
+        if len(session.ra_deviations) > 64:
+            ra_freqs, ra_mags = calcul(np.asarray(session.ra_deviations))
         if len(session.dec_deviations) > 64:
-            dec_data = session.dec_deviations - np.mean(session.dec_deviations)
-            window = np.hanning(len(dec_data))
-            windowed = dec_data * window
-            n = len(windowed)
-            fft_result = np.fft.rfft(windowed)
-            dec_mags = 2.0 / n * np.abs(fft_result)
-            dec_freqs = np.fft.rfftfreq(n, d=1.0 / freq)
-            dec_freqs = dec_freqs[1:]
-            dec_mags = dec_mags[1:]
+            dec_freqs, dec_mags = calcul(np.asarray(session.dec_deviations))
 
         # Show FFT window with replayed data
         if ra_freqs is not None or dec_freqs is not None:
@@ -1513,32 +1677,41 @@ class MainWindow(QMainWindow):
             self._status_panel.add_message(
                 T("parked_auto_analysis"), Colors.STATUS_OK,
             )
-            QApplication.processEvents()
+            cle = str(dat_path)
+            lue = self._session_lue
+            if lue is not None and lue[0] == cle:
+                self._session_lue = None
+                self._montrer_analyse(lue[1])
+                return
+            # Read in the background; the window opens when it is ready.
+            self._analyse_demandee.add(cle)
+            self._lancer_fin_de_nuit(cle, ecrire=False)
+        except Exception as e:
+            logger.error(f"Auto-analysis failed: {e}")
 
-            session = parse_session(dat_path)
+    def _montrer_analyse(self, session):
+        try:
             if session.sample_count < 10:
                 return
-
             # Non modale, et une seule a la fois. exec() bloquait la boucle
             # d'evenements : au premier matin sans personne devant l'ecran,
-            # le programme se figeait et ne voyait plus passer la nuit
-            # suivante. La precedente est fermee pour ne pas empiler une
-            # fenetre par nuit.
+            # le programme se figeait. La precedente est DETRUITE, pas
+            # seulement cachee : close() la gardait en memoire avec toute sa
+            # session (+100 Mo par nuit, jusqu'au swap sur un PC de 4 Go).
             precedente = getattr(self, '_fen_analyse', None)
             if precedente is not None:
                 try:
                     precedente.close()
+                    precedente.deleteLater()
                 except RuntimeError:
                     pass          # deja detruite par Qt
             dialog = AnalysisDialog(session, self)
+            dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
             dialog.setModal(False)
             dialog.show()
             dialog.raise_()
             self._fen_analyse = dialog
-
-            self._status_panel.add_message(
-                T("analysis_complete"), Colors.STATUS_OK
-            )
+            self._status_panel.add_message(T("analysis_complete"), Colors.STATUS_OK)
         except Exception as e:
             logger.error(f"Auto-analysis failed: {e}")
 
@@ -1795,82 +1968,88 @@ class MainWindow(QMainWindow):
         """Run mount setting checks based on preferences.
 
         Checks refraction, tracking rate, GPS sync as configured in
-        the Miscellaneous tab. Shows warnings and logs results.
+        the Miscellaneous tab. The mount is read in the poller thread (up to
+        five commands, each with a 5 s timeout, used to freeze the window);
+        the results are judged and shown here.
         """
         if not self._connection or not self._connected:
             return
-
-        warnings = []
-        ok_checks = []
-
+        cfg = {k: self._settings.get(k) for k in (
+            "check_refraction_enabled", "check_tracking_rate",
+            "check_gps_sync", "check_dual_tracking")}
         # A parked mount still reports its CONFIGURED tracking rate, so the
         # check passed and printed « Tracking rate: Sidereal OK » next to a
-        # mount that was not tracking at all. The reading was true and the
-        # impression false. Rate-dependent checks are skipped unless the
-        # mount is actually tracking.
+        # mount that was not tracking at all. Rate-dependent checks are
+        # skipped unless the mount is actually tracking.
         suit = getattr(self, '_prev_mount_status', None) == MountStatus.TRACKING
+
+        def lire(c):
+            r = {}
+            if cfg["check_refraction_enabled"]:
+                r["mode"] = c.get_refraction_mode()
+                if r["mode"] is None:
+                    r["refraction"] = c.is_refraction_enabled()
+            if suit and cfg["check_tracking_rate"]:
+                r["rate"] = c.get_tracking_rate()
+            if cfg["check_gps_sync"]:
+                r["gps"] = c.is_gps_synced()
+            if cfg["check_dual_tracking"]:
+                r["dual"] = c.is_dual_tracking_enabled()
+            return r
+
+        self._demande_monture(lire, lambda r: self._juger_controles(r or {}, suit))
+
+    def _juger_controles(self, r: dict, suit: bool):
+        warnings = []
+        ok_checks = []
 
         # Check refraction mode (3-way: not_updating, not_updating_tracking, continuously_updating)
         if self._settings.get("check_refraction_enabled"):
             expected = self._settings.get("check_refraction_value")
-            mode = self._connection.get_refraction_mode()
+            mode = r.get("mode")
             if mode is not None:
+                mode_display = mode.replace('_', ' ')
                 if mode == expected:
-                    mode_display = mode.replace('_', ' ')
                     ok_checks.append(T("chk_refraction_ok").format(v=mode_display) + " \u2713")
                 else:
-                    mode_display = mode.replace('_', ' ')
                     expected_display = expected.replace('_', ' ')
                     warnings.append(
                         T("chk_refraction_ko").format(a=mode_display, e=expected_display)
                     )
-            else:
-                # Fallback to simple enabled/disabled check
-                refraction = self._connection.is_refraction_enabled()
-                if refraction is not None:
-                    actual = "enabled" if refraction else "disabled"
-                    ok_checks.append(T("chk_refraction_simple").format(v=actual))
+            elif r.get("refraction") is not None:
+                actual = "enabled" if r["refraction"] else "disabled"
+                ok_checks.append(T("chk_refraction_simple").format(v=actual))
 
         # Check tracking rate
         if not suit:
             ok_checks.append(T("chk_parked"))
         if suit and self._settings.get("check_tracking_rate"):
             expected_val = self._settings.get("check_tracking_rate_value")
-            rate = self._connection.get_tracking_rate()
+            rate = r.get("rate")
             if rate is not None:
                 rate_lower = str(rate).lower().strip()
                 if expected_val.lower() in rate_lower or rate_lower.startswith("60"):
                     ok_checks.append(T("chk_rate_ok").format(v=rate) + " \u2713")
                 else:
-                    warnings.append(
-                        T("chk_rate_ko").format(a=rate, e=expected_val)
-                    )
+                    warnings.append(T("chk_rate_ko").format(a=rate, e=expected_val))
 
         # Check GPS sync
-        if self._settings.get("check_gps_sync"):
+        if self._settings.get("check_gps_sync") and r.get("gps") is not None:
             expected_val = self._settings.get("check_gps_sync_value")
-            gps = self._connection.is_gps_synced()
-            if gps is not None:
-                actual = "synchronising" if gps else "not synchronising"
-                if actual == expected_val:
-                    ok_checks.append(T("chk_gps_ok").format(v=actual) + " \u2713")
-                else:
-                    warnings.append(
-                        T("chk_gps_ko").format(a=actual, e=expected_val)
-                    )
+            actual = "synchronising" if r["gps"] else "not synchronising"
+            if actual == expected_val:
+                ok_checks.append(T("chk_gps_ok").format(v=actual) + " \u2713")
+            else:
+                warnings.append(T("chk_gps_ko").format(a=actual, e=expected_val))
 
         # Check dual tracking
-        if self._settings.get("check_dual_tracking"):
+        if self._settings.get("check_dual_tracking") and r.get("dual") is not None:
             expected_val = self._settings.get("check_dual_tracking_value")
-            dual = self._connection.is_dual_tracking_enabled()
-            if dual is not None:
-                actual = "enabled" if dual else "disabled"
-                if actual == expected_val:
-                    ok_checks.append(T("chk_dual_ok").format(v=actual) + " \u2713")
-                else:
-                    warnings.append(
-                        T("chk_dual_ko").format(a=actual, e=expected_val)
-                    )
+            actual = "enabled" if r["dual"] else "disabled"
+            if actual == expected_val:
+                ok_checks.append(T("chk_dual_ok").format(v=actual) + " \u2713")
+            else:
+                warnings.append(T("chk_dual_ko").format(a=actual, e=expected_val))
 
         # Display results
         for msg in ok_checks:
@@ -1880,25 +2059,28 @@ class MainWindow(QMainWindow):
 
         if warnings:
             for msg in warnings:
-                self._status_panel.add_message(
-                    f"\u26a0 {msg}", Colors.STATUS_WARNING
-                )
+                self._status_panel.add_message(f"\u26a0 {msg}", Colors.STATUS_WARNING)
                 if self._logging_active:
                     self._file_logger.log_event(f"Check WARNING: {msg}")
+            self._alerte_monture(warnings)
 
-            # Show popup alert
-            lang = get_language()
-            if lang == "fr":
-                title = "Alerte monture"
-                text = "Vérification de la monture :\n\n" + "\n".join(
-                    f"\u26a0 {w}" for w in warnings
-                )
-            else:
-                title = "Mount Alert"
-                text = "Mount settings check:\n\n" + "\n".join(
-                    f"\u26a0 {w}" for w in warnings
-                )
-            QMessageBox.warning(self, title, text)
+    def _alerte_monture(self, warnings: list):
+        """ONE non-modal box, updated in place.
+
+        A modal box per end of slew piled up all night in front of an empty
+        chair, each one a nested event loop."""
+        texte = T("mount_alert_text") + "\n\n" + "\n".join(f"\u26a0 {w}" for w in warnings)
+        boite = getattr(self, "_boite_alerte", None)
+        if boite is None:
+            boite = QMessageBox(self)
+            boite.setIcon(QMessageBox.Icon.Warning)
+            boite.setWindowTitle(T("mount_alert_title"))
+            boite.setStandardButtons(QMessageBox.StandardButton.Ok)
+            boite.setModal(False)
+            self._boite_alerte = boite
+        boite.setText(texte)
+        boite.show()
+        boite.raise_()
 
     # ── Help ─────────────────────────────────────────────────────
 
@@ -2146,26 +2328,44 @@ class MainWindow(QMainWindow):
         """
         from PyQt6.QtWidgets import QProgressDialog
 
+        # The download runs in a thread: done on the GUI thread with
+        # processEvents, it froze the window on a slow line and let events
+        # re-enter half-way through the replacement of the files.
         dlg = QProgressDialog(T("update_downloading"), None, 0, 100, self)
         dlg.setWindowTitle(T("update_available"))
+        dlg.setWindowModality(Qt.WindowModality.ApplicationModal)
         dlg.setMinimumDuration(0)
         dlg.setValue(0)
+        self._dlg_maj = dlg
 
         def progression(fait, total):
             if total:
-                dlg.setValue(int(fait * 100 / total))
-            QApplication.processEvents()
+                self.maj_progression.emit(int(fait * 100 / total))
 
-        try:
-            pose = updater.download_and_apply(info, progress=progression)
-        except Exception as e:
+        def telecharger():
+            try:
+                self.maj_posee.emit(bool(updater.download_and_apply(info, progress=progression)), "")
+            except Exception as e:
+                self.maj_posee.emit(False, str(e) or e.__class__.__name__)
+
+        threading.Thread(target=telecharger, daemon=True, name="maj-telechargement").start()
+
+    @pyqtSlot(int)
+    def _maj_progression(self, pct: int):
+        dlg = getattr(self, "_dlg_maj", None)
+        if dlg is not None:
+            dlg.setValue(pct)
+
+    @pyqtSlot(bool, str)
+    def _maj_terminee(self, pose: bool, erreur: str):
+        dlg, self._dlg_maj = getattr(self, "_dlg_maj", None), None
+        if dlg is not None:
             dlg.close()
+        if erreur:
             QMessageBox.warning(
                 self, T("update_available"),
-                T("tt_upd_failed").format(err=e))
+                T("tt_upd_failed").format(err=erreur))
             return
-        dlg.close()
-
         if not pose:
             QMessageBox.warning(self, T("update_available"), T("update_failed"))
             return
@@ -2225,6 +2425,21 @@ class MainWindow(QMainWindow):
 
         # Stop everything
         self._disconnect()
+        if self._connexion_en_cours and self._poller is not None:
+            poller, self._poller = self._poller, None
+            self._liberer_poller(poller)
+
+        # The night report is written in a background thread: let it finish
+        # (the files are on disk already, this is only the report), and never
+        # let a running QThread be destroyed -- that aborts the process.
+        for travail in list(self._travaux_nuit.values()) + [getattr(self, "_travail_relecture", None)]:
+            if travail is not None:
+                try:
+                    travail.wait(120_000)
+                except RuntimeError:
+                    pass
+        for poller in list(self._pollers_finissants):
+            poller.wait(5000)
 
         if self._fft_window:
             self._fft_window.close()

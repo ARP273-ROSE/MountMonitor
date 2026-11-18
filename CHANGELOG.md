@@ -6,6 +6,89 @@ behaviour changes, the patch number when only a defect is fixed.
 
 Figures quoted below were measured on real sessions, not estimated.
 
+## 4.1.0 — 2026-11-18
+
+Full audit: every figure checked against a synthetic signal whose truth is
+known, and the program measured on a full buffer. Aimed also at small
+observatory PCs (2-4 cores, 4 GB, old Intel graphics).
+
+### Fixed — figures
+- **FFT amplitude halved**: the Hann window was not compensated (2/n instead
+  of 2/Σw). A 1.5″ peak periodic error read 0.67″. Amplitudes are now
+  labelled ″ peak; the seismic axis says ADC counts.
+- **Live FFT, replay FFT and the .fft file worked on raw data**: a 20″/h drift
+  produced a 5000 s "peak" and hid a 480 s worm period. One spectrum module
+  for all of them now removes the drift and the dither steps (which made
+  phantom 10-20 min peaks in the report), uses the longest stretch without a
+  gap (a 40 min pause made periods 20 % too long), measures the sampling rate
+  on the data and refines the peak by zero-padding. The peak list gives
+  distinct lines, not the main peak and its neighbouring bins.
+- **Jitter without dithers included the drift**: an unguided target is a
+  single plateau; 0.2″ of jitter with a 5″/h drift read 5.9″, rated BAD.
+  A straight line is now removed from each plateau.
+- **PC-mount clock offset in ASCOM was fictitious**: the mount time was cut
+  to the second (0-1000 ms sawtooth, loop time 0 or 1000 ms). Hundredths kept,
+  and the PC reference is taken in the middle of the exchange.
+- **ASCOM coordinates quantised** to 0.15″ (RA) and 0.1″ (DEC) by their
+  conversion to text: four and three decimals now.
+- **Axial speed 3600 times too small**: :GaXa#/:GaXb# give degrees; sidereal
+  tracking showed 0.0042 ″/s. Steps across 0/360° are unwrapped; in replay,
+  equal time stamps are dropped instead of dividing by 1e-6.
+- **Replay across the end of daylight saving time** (LX200 local time): two
+  hours were read as one, halving every FFT period.
+- **Seismometer**: each reading of a batch gets its own time (they all had
+  the delivery time); tolerance lines follow the preferences (they stayed at
+  ±100).
+- **Axis labels**: no automatic SI prefixes ("kms", "m″" read as minutes).
+
+### Fixed — reliability
+- **Reconnection gave up for good after 5 attempts** (about 30 s): a mount
+  that rebooted was never found again. Attempts now continue, spaced 2, 4, 8…
+  up to 60 s.
+- **LX200 precision command**: `:U#` has no reply and TOGGLES the precision;
+  waiting for a reply cost 5 s and marked the new link as lost, and a mount
+  already in high precision went back to short formats (then every sample was
+  dropped). `:U2#` is sent without reading, and the short formats are read.
+  Nothing is sent through ASCOM (it would toggle the mount for NINA too).
+- **The connection, the mount checks and the target query no longer run on
+  the window thread**: an unreachable mount froze the window 5 s, every 30 s
+  with --connect. One thread owns the mount (ASCOM objects stay in the COM
+  apartment that created them); the window sends it requests.
+- **Running STDEV vectorised** (1.3 ms instead of 50 ms per buffer): the
+  poller lost 22 % of its samples at 10 Hz, more on a small PC.
+- **Dawn and park froze the window** about 7 s (25 s and more on a small PC):
+  the session is now read once, in a background thread, which also writes the
+  three reports. Opening a log file is done the same way.
+- **Memory leak**: each night's analysis window was hidden, not freed
+  (+100 MB per night).
+- **Seismometer data crossed threads unprotected** into the session files:
+  they now go through a queued signal. Its read buffer is bounded.
+- **One modal box per end of slew** when a setting diverged, piling up all
+  night: one non-modal box, updated, in the three languages.
+- **Armed in daylight while the mount already tracked**: nothing started at
+  sunset. The state is checked again every minute.
+- **Disk full**: the files are always closed, and the first write error is
+  shown once instead of being swallowed.
+- A stray byte from the mount no longer raises an exception (false crash
+  report).
+
+### Changed — lighter
+- Buffers are numpy rings: the graphs copy only the visible two minutes
+  (rebuilt seven 50,000-point arrays four times a second before).
+- Graph cadence adapts: 4/s, 2/s from the start on 2-4 cores, down to 1/s
+  when drawing takes too long; nothing is drawn while the window is minimised.
+  Antialiasing only from 8 threads up; OpenGL stays off.
+- The FFT window draws only what fits on screen.
+
+### Security
+- Update: SHA-256 of the archive checked against the one GitHub publishes,
+  size bounded, address checked again after redirects, download in a thread,
+  stricter extraction path check.
+- Reports: the machine name is no longer sent (random installation id
+  instead), host and user names are masked in traces; the report queue is
+  pruned even without consent.
+- .log10m files: decompression bounded.
+
 ## 4.0.0 — 2026-11-18
 
 ### Changed

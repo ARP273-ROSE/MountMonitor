@@ -52,7 +52,7 @@ class FFTWindow(QWidget):
         self._freq_plot.setBackground(Colors.BG_GRAPH)
         self._freq_plot.showGrid(x=True, y=True, alpha=0.15)
         self._freq_plot.setLabel('bottom', T('frequency_label'), units='Hz')
-        self._freq_plot.setLabel('left', T('amplitude'))
+        self._freq_plot.setLabel('left', T('amplitude_peak'))
         self._freq_plot.addLegend(offset=(10, 10))
 
         self._freq_ra = self._freq_plot.plot(
@@ -70,7 +70,7 @@ class FFTWindow(QWidget):
         self._period_plot.setBackground(Colors.BG_GRAPH)
         self._period_plot.showGrid(x=True, y=True, alpha=0.15)
         self._period_plot.setLabel('bottom', T('period_label'), units='s')
-        self._period_plot.setLabel('left', T('amplitude'))
+        self._period_plot.setLabel('left', T('amplitude_peak'))
 
         self._period_ra = self._period_plot.plot(
             pen=pg.mkPen(Colors.GRAPH_RA, width=1.5)
@@ -81,6 +81,11 @@ class FFTWindow(QWidget):
         self._period_seismic = self._period_plot.plot(
             pen=pg.mkPen(Colors.GRAPH_SEISMIC, width=1)
         )
+
+        # Thousands of bins every 2 s: draw only what fits on screen.
+        for plot in (self._freq_plot, self._period_plot):
+            plot.setDownsampling(auto=True, mode='peak')
+            plot.setClipToView(True)
 
         splitter.addWidget(self._freq_plot)
         splitter.addWidget(self._period_plot)

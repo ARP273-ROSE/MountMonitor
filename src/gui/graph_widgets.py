@@ -9,6 +9,7 @@ Each graph supports zoom, tolerance lines, STDEV overlay, min/max lines.
 """
 
 import logging
+import os
 from pathlib import Path
 from datetime import datetime
 
@@ -26,13 +27,29 @@ from ..utils.i18n import T
 
 
 def _setup_pyqtgraph():
-    """Configure pyqtgraph defaults for astronomy theme."""
+    """Configure pyqtgraph defaults for astronomy theme.
+
+    Antialiasing costs about 40 % of the drawing time: kept on machines with
+    eight threads or more, off on small observatory PCs (2-4 cores) where it
+    would compete with the polling. OpenGL stays off: old Intel iGPUs and
+    remote desktop sessions are where it fails.
+    """
     pg.setConfigOptions(
         background=Colors.BG_GRAPH,
         foreground=Colors.TEXT_SECONDARY,
-        antialias=True,
+        antialias=(os.cpu_count() or 2) >= 8,
         useOpenGL=False,
     )
+    # No automatic SI prefixes on the axes: they turned 4000 ms into "kms",
+    # 0.4" into "m"" (read as minutes) and 0.004 "/s into "m"/s".
+    if not getattr(pg.AxisItem, "_sans_prefixe", False):
+        _init = pg.AxisItem.__init__
+
+        def _init_sans_prefixe(self, *a, **k):
+            _init(self, *a, **k)
+            self.autoSIPrefix = False
+        pg.AxisItem.__init__ = _init_sans_prefixe
+        pg.AxisItem._sans_prefixe = True
 
 
 _setup_pyqtgraph()
@@ -312,12 +329,11 @@ class TrackingGraph(QWidget):
         self._data_curve.setData(rel_times, values)
 
         # Update STDEV (with optional corrected timestamps)
-        if stdev_values is not None and len(stdev_values) == len(rel_times):
-            if stdev_timestamps is not None:
-                stdev_rel = stdev_timestamps - t0
-                self._stdev_curve.setData(stdev_rel, stdev_values)
-            else:
-                self._stdev_curve.setData(rel_times, stdev_values)
+        if stdev_values is not None and stdev_timestamps is not None:
+            if len(stdev_values) == len(stdev_timestamps):
+                self._stdev_curve.setData(stdev_timestamps - t0, stdev_values)
+        elif stdev_values is not None and len(stdev_values) == len(rel_times):
+            self._stdev_curve.setData(rel_times, stdev_values)
 
         # Update min/max lines with annotations
         if min_val is not None and max_val is not None:
@@ -647,7 +663,7 @@ class SeismicGraph(QWidget):
         self._plot.setBackground(Colors.BG_GRAPH)
         self._plot.showGrid(x=False, y=True, alpha=0.1)
         self._plot.setTitle(T("seismic_title"), color='#aaaaaa', size='11pt')
-        self._plot.setLabel('left', T('amplitude'), color=Colors.TEXT_SECONDARY.name())
+        self._plot.setLabel('left', T('seismic_counts'), color=Colors.TEXT_SECONDARY.name())
         self._plot.setLabel('bottom', T('time_label'), units='s', color=Colors.TEXT_SECONDARY.name())
 
         # Data curve
@@ -679,7 +695,8 @@ class SeismicGraph(QWidget):
         layout.addWidget(self._plot)
 
     def update_data(self, timestamps: np.ndarray, values: np.ndarray,
-                    stdev_values: np.ndarray = None, largeur_s: float = None):
+                    stdev_values: np.ndarray = None, largeur_s: float = None,
+                    stdev_timestamps: np.ndarray = None):
         """Update seismic graph (au present si `largeur_s`)."""
         if len(timestamps) > 0:
             t0 = timestamps[-1] if largeur_s else timestamps[0]
@@ -688,7 +705,10 @@ class SeismicGraph(QWidget):
 
             rel_t = timestamps - t0
             self._data_curve.setData(rel_t, values)
-            if stdev_values is not None and len(stdev_values) == len(timestamps):
+            if stdev_values is not None and stdev_timestamps is not None:
+                if len(stdev_values) == len(stdev_timestamps):
+                    self._stdev_curve.setData(stdev_timestamps - t0, stdev_values)
+            elif stdev_values is not None and len(stdev_values) == len(timestamps):
                 self._stdev_curve.setData(rel_t, stdev_values)
 
             # Manual range

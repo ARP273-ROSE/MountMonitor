@@ -51,7 +51,7 @@ for k in range(3):                    # trois nuits de 8 h a 1,9 Hz
 
 for zoom, attendu in ((1, 120.0), (5, 24.0)):
     reglages.set("horizontal_zoom", zoom)
-    fen._refresh_graphs()
+    fen._refresh_graphs_now()
     for nom, g in (("AD", fen._ra_graph), ("DEC", fen._dec_graph),
                    ("temps", fen._time_graph), ("sismo", fen._seismic_graph)):
         (x0, x1), (y0, y1) = g._plot.getViewBox().viewRange()
@@ -67,7 +67,7 @@ for zoom, attendu in ((1, 120.0), (5, 24.0)):
     v(f"zoom {zoom} : echelle AD a la mesure du signal (±{y1:.2f}\")", y1 < 5)
 
 reglages.set("horizontal_zoom", 1)
-fen._refresh_graphs()
+fen._refresh_graphs_now()
 reperes = [(l.value(), lab.toPlainText())
            for l, lab in zip(fen._ra_graph._time_fixes, fen._ra_graph._time_fix_labels)
            if l.isVisible()]

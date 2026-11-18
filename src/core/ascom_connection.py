@@ -49,7 +49,14 @@ def _hours_to_hms(hours: float) -> str:
     m = int(remainder)
     s = (remainder - m) * 60
     sign = "-" if negative else ""
-    return f"{sign}{h:02d}:{m:02d}:{s:05.2f}"
+    # Four decimals (0.0015″): two decimals quantised the reading to
+    # 0.15″ x cos(dec), comparable with the jitter being measured.
+    s = round(s, 4)
+    if s >= 60.0:
+        s -= 60.0; m += 1
+    if m >= 60:
+        m -= 60; h += 1
+    return f"{sign}{h:02d}:{m:02d}:{s:07.4f}"
 
 
 def _degrees_to_dms(degrees: float) -> str:
@@ -60,7 +67,12 @@ def _degrees_to_dms(degrees: float) -> str:
     remainder = (degrees - d) * 60
     m = int(remainder)
     s = (remainder - m) * 60
-    return f"{sign}{d:02d}:{m:02d}:{s:04.1f}"
+    s = round(s, 3)
+    if s >= 60.0:
+        s -= 60.0; m += 1
+    if m >= 60:
+        m -= 60; d += 1
+    return f"{sign}{d:02d}:{m:02d}:{s:06.3f}"
 
 
 def _degrees_to_dms_lat(degrees: float) -> str:
@@ -108,7 +120,6 @@ class ASCOMConnection(MountConnection):
         self._protocol = ConnectionProtocol.ASCOM
         self._telescope = None  # COM object
         self._reconnect_attempts = 0
-        self._max_reconnect_attempts = 5
         self._lock = threading.Lock()
         self._com_initialized = False
         self._warned_properties: set = set()  # Rate-limit warnings per property
@@ -139,6 +150,12 @@ class ASCOMConnection(MountConnection):
             except OSError:
                 pass
             self._com_initialized = False
+
+    def thread_enter(self) -> None:
+        self._ensure_com_init()
+
+    def thread_exit(self) -> None:
+        self._com_uninit()
 
     def connect(self) -> bool:
         """Connect to mount via ASCOM driver.
@@ -197,15 +214,14 @@ class ASCOMConnection(MountConnection):
         self._connected = False
 
     def reconnect(self) -> bool:
-        """Attempt to reconnect after connection loss."""
-        if self._reconnect_attempts >= self._max_reconnect_attempts:
-            logger.error("ASCOM max reconnection attempts reached")
-            return False
+        """One reconnection attempt after a connection loss.
+
+        No ceiling: the attempts used to stop for good after five, about
+        thirty seconds, so a mount that rebooted (one to two minutes) was
+        never found again and the rest of the night was lost. The poller now
+        spaces the attempts out (2, 4, 8... up to 60 s)."""
         self._reconnect_attempts += 1
-        logger.info(
-            f"ASCOM reconnection attempt "
-            f"{self._reconnect_attempts}/{self._max_reconnect_attempts}"
-        )
+        logger.info(f"ASCOM reconnection attempt {self._reconnect_attempts}")
         return self.connect()
 
     def _safe_read(self, property_name: str, default=None):
@@ -323,13 +339,16 @@ class ASCOMConnection(MountConnection):
             utc_date = self._safe_read("UTCDate")
             if utc_date is not None:
                 try:
+                    # Hundredths kept: truncated to the second, the PC-mount
+                    # offset became a 0-1000 ms sawtooth and the mount loop
+                    # time read 0 or 1000 ms.
                     if isinstance(utc_date, datetime):
-                        return utc_date.strftime("%H:%M:%S")
+                        return utc_date.strftime("%H:%M:%S.%f")[:-4]
                     # Try converting OLE float date
                     from datetime import timedelta
                     ole_epoch = datetime(1899, 12, 30)
                     dt = ole_epoch + timedelta(days=float(utc_date))
-                    return dt.strftime("%H:%M:%S")
+                    return dt.strftime("%H:%M:%S.%f")[:-4]
                 except Exception:
                     pass
             # UTCDate not working — fall through to PC UTC clock
@@ -337,7 +356,7 @@ class ASCOMConnection(MountConnection):
             logger.warning("UTCDate unavailable from ASCOM driver, using PC UTC clock")
 
         # Fallback: use PC UTC time (time diff will be ~0 but loop times still useful)
-        return datetime.now(timezone.utc).strftime("%H:%M:%S")
+        return datetime.now(timezone.utc).strftime("%H:%M:%S.%f")[:-4]
 
     def get_firmware_version(self) -> str:
         """Get firmware/driver version from ASCOM.
@@ -593,9 +612,9 @@ class ASCOMConnection(MountConnection):
         For ASCOM, precision is inherent (floating point values).
         For 10Micron via ASCOM, try sending :U# via CommandString.
         """
-        # ASCOM natively provides high-precision float values,
-        # but for 10Micron mounts we also try the LX200 command
-        self.send_raw_command(":U#")
+        # ASCOM gives floating-point values: nothing to set. Sending the
+        # LX200 :U# here would TOGGLE the precision of the mount for every
+        # other program connected through the driver (NINA...).
         return True
 
     def is_gps_synced(self) -> Optional[bool]:

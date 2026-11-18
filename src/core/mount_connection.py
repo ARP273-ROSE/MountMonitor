@@ -156,6 +156,19 @@ class MountConnection(ABC):
         """Set mount to high precision output mode. Returns True on success."""
         return True
 
+    # The poller thread owns the connection: it opens it, polls it, runs the
+    # GUI's requests and closes it. These two hooks frame that thread (ASCOM
+    # initialises COM there, so the COM object lives in the apartment that
+    # uses it).
+    def thread_enter(self) -> None:
+        pass
+
+    def thread_exit(self) -> None:
+        pass
+
+    def abort(self) -> None:
+        """Unblock a read in progress from another thread (stop). Never raises."""
+
     def send_raw_command(self, command: str) -> Optional[str]:
         """Send a raw command and get the response. For advanced/10Micron commands."""
         return None

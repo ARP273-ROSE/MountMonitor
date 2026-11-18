@@ -535,6 +535,12 @@ TX = {
               "fenêtre est sans doute derrière une autre.",
         "nl": "MountMonitor is al geopend.\n\nKijk in de taakbalk: het venster staat "
               "waarschijnlijk achter een ander venster."},
+    "write_error": {"en": "Log files can no longer be written (disk full?)",
+                    "fr": "Les fichiers de session ne s'écrivent plus (disque plein ?)",
+                    "nl": "De logbestanden worden niet meer geschreven (schijf vol?)"},
+    "mount_alert_title": {"en": "Mount alert", "fr": "Alerte monture", "nl": "Waarschuwing montering"},
+    "mount_alert_text": {"en": "Mount settings check:", "fr": "Vérification de la monture :",
+                         "nl": "Controle van de montering:"},
     "about_texte": {
         "en": "<h2>MountMonitor {v}</h2><p>Real-time telescope mount monitoring.</p>"
               "<p>Successor of the original Java MountMonitor v3.37<br>by Nicolàs de Hilster "
@@ -812,6 +818,11 @@ TX = {
     "nl": "SEISMISCH — Trillingen",
 },
     "amplitude": {"en": "Amplitude", "fr": "Amplitude", "nl": "Amplitude"},
+    "seismic_counts": {"en": "Amplitude (ADC counts)", "fr": "Amplitude (coups ADC)",
+                       "nl": "Amplitude (ADC-tellingen)"},
+    "amplitude_peak": {"en": "Amplitude (\u2033 peak; seismic: ADC counts)",
+                       "fr": "Amplitude (\u2033 crête ; sismique : coups ADC)",
+                       "nl": "Amplitude (\u2033 piek; seismisch: ADC-tellingen)"},
     "axial_title": {
         "en": "AXIAL — Speed / Displacement",
         "fr": "AXIAL — Vitesse / Déplacement",

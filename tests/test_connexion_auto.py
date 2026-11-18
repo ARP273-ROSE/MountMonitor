@@ -53,6 +53,17 @@ def reglages(monkeypatch):
         s.set(k, v)
 
 
+def _attendre(win, delai=10.0):
+    """The connection is opened in the poller thread: wait for its answer."""
+    import time
+    fin = time.monotonic() + delai
+    while win._connexion_en_cours and time.monotonic() < fin:
+        APP.processEvents()
+        time.sleep(0.01)
+    APP.processEvents()
+    assert not win._connexion_en_cours, "pas de reponse de la connexion"
+
+
 def _fenetre(**kw):
     from src.gui.main_window import MainWindow
     return MainWindow(**kw)
@@ -76,10 +87,12 @@ def test_monture_muette_puis_nouvel_essai(reglages):
     assert (1500, win._connexion_automatique) in planifies
     planifies.clear()
     win._connexion_automatique()                       # 1er essai : refuse
+    _attendre(win)
     assert not win._connected
     assert win._essais_connexion == 1
     assert (30000, win._connexion_automatique) in planifies   # relance dans 30 s
     win._connexion_automatique()                       # 2e essai
+    _attendre(win)
     assert win._essais_connexion == 2
     win.hide()
 
@@ -89,6 +102,7 @@ def test_la_monture_repond_et_les_essais_s_arretent(reglages):
     s.set('mount_protocol', 'simulation')
     win = _fenetre(auto_connect=True)
     win._connexion_automatique()
+    _attendre(win)
     assert win._connected
     assert not win._connexion_auto_active
     planifies.clear()
@@ -112,8 +126,10 @@ def test_un_clic_de_l_utilisateur_arrete_les_essais(reglages):
     s.set('mount_protocol', 'lx200'); s.set('mount_ip', '127.0.0.1'); s.set('mount_port', _port_ferme())
     win = _fenetre(auto_connect=True)
     win._connexion_automatique()
+    _attendre(win)
     assert win._connexion_auto_active
     win._toggle_connection()                           # il clique sur Connecter (refuse aussi)
+    _attendre(win)
     assert not win._connexion_auto_active
     planifies.clear()
     win._connexion_automatique()                       # la relance deja planifiee ne fait rien
@@ -128,6 +144,7 @@ def test_ascom_sans_pilote_n_ouvre_pas_le_selecteur(reglages, monkeypatch):
     monkeypatch.setattr(pd, '_ascom_choose', lambda *a: pytest.fail('selecteur ASCOM ouvert'))
     win = _fenetre(auto_connect=True)
     win._connexion_automatique()
+    _attendre(win)
     assert not win._connexion_auto_active and not win._connected
     win.hide()
 
@@ -139,6 +156,7 @@ def test_delai_minimum_de_5_s(reglages):
     win = _fenetre(auto_connect=True)
     planifies.clear()
     win._connexion_automatique()
+    _attendre(win)
     assert (5000, win._connexion_automatique) in planifies
     win.hide()
 

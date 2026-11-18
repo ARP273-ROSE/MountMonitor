@@ -27,7 +27,6 @@ class LX200Connection(MountConnection):
         self._socket: Optional[socket.socket] = None
         self._protocol = ConnectionProtocol.LX200
         self._reconnect_attempts = 0
-        self._max_reconnect_attempts = 5
         # Le socket est partagé entre le QThread du poller et le thread GUI
         # (checks post-slew, get_target_ra/dec) : sans verrou, deux commandes
         # entrelacées se volent leurs réponses (une RA lue comme réponse d'un
@@ -72,13 +71,23 @@ class LX200Connection(MountConnection):
             self._socket = None
         self._connected = False
 
+    def abort(self) -> None:
+        s = self._socket
+        if s is not None:
+            try:
+                s.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+
     def reconnect(self) -> bool:
-        """Attempt to reconnect after connection loss."""
-        if self._reconnect_attempts >= self._max_reconnect_attempts:
-            logger.error("Max reconnection attempts reached")
-            return False
+        """One reconnection attempt after a connection loss.
+
+        No ceiling: the attempts used to stop for good after five, about
+        thirty seconds, so a mount that rebooted (one to two minutes) was
+        never found again and the rest of the night was lost. The poller now
+        spaces the attempts out (2, 4, 8... up to 60 s)."""
         self._reconnect_attempts += 1
-        logger.info(f"Reconnection attempt {self._reconnect_attempts}/{self._max_reconnect_attempts}")
+        logger.info(f"Reconnection attempt {self._reconnect_attempts}")
         return self.connect()
 
     # Maximum response size to prevent unbounded buffer growth (security)
@@ -112,7 +121,10 @@ class LX200Connection(MountConnection):
                         logger.warning(f"Response exceeded {self._MAX_RESPONSE_BYTES} bytes, aborting")
                         raise ConnectionError("Response too large")
 
-                decoded = response.decode('ascii').rstrip('#')
+                # A stray byte (line noise, another program on the port) must
+                # not escape as UnicodeDecodeError: it crashed the GUI-side
+                # checks and produced a false crash report.
+                decoded = response.decode('ascii', 'replace').rstrip('#')
                 return decoded
 
             except (socket.error, socket.timeout, OSError, ConnectionError) as e:
@@ -399,13 +411,25 @@ class LX200Connection(MountConnection):
         return warnings
 
     def set_high_precision(self) -> bool:
-        """Set high precision output mode: :U#
+        """Ultra-precision output (10Micron :U2#), sent WITHOUT reading a reply.
 
-        Toggles between low and high resolution. We send it
-        and check if we get high-res output.
-        """
-        self._send_command(':U#')
+        The old :U# has no reply: waiting for one cost the 5 s timeout and
+        then marked the fresh connection as lost. It also TOGGLES the
+        precision, so a mount already in high precision went back to the
+        short formats. :U2# sets it outright; a mount that does not know it
+        ignores it, and parse_ra/parse_dec read the short formats anyway."""
+        self._send_no_reply(':U2#')
         return True
+
+    def _send_no_reply(self, command: str) -> None:
+        if not self._socket or not self._connected:
+            return
+        with self._io_lock:
+            try:
+                self._socket.sendall(command.encode('ascii'))
+            except OSError as e:
+                logger.warning(f"Communication error: {e}")
+                self._connected = False
 
     def send_raw_command(self, command: str) -> Optional[str]:
         """Send any raw LX200 command."""

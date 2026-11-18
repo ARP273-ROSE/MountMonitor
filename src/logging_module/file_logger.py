@@ -46,6 +46,7 @@ class FileLogger:
     """
 
     def __init__(self, base_dir: Optional[Path] = None):
+        self.erreur_ecriture = None   # first write error, for the GUI
         if base_dir is None:
             # Les fichiers d'une nuit d'acquisition ne vivent pas dans le
             # dossier d'installation : il est efface a chaque mise a jour.
@@ -139,10 +140,18 @@ class FileLogger:
                 self._write_count = 0
             return True
         except OSError as e:
-            if not getattr(self, '_io_error_logged', False):
-                logger.warning(f"I/O error writing log data: {e}")
-                self._io_error_logged = True
+            self._signaler_erreur(e)
             return False
+
+    def _signaler_erreur(self, e: OSError):
+        """Remember the first write error (disk full, share gone) for the GUI.
+
+        Errors used to be swallowed: a full disk lost the rest of the night
+        without a word on screen."""
+        if not getattr(self, '_io_error_logged', False):
+            logger.warning(f"I/O error writing log data: {e}")
+            self._io_error_logged = True
+            self.erreur_ecriture = str(e)
 
     def _flush_all(self):
         """Flush all open log files to disk."""
@@ -151,8 +160,8 @@ class FileLogger:
             if f:
                 try:
                     f.flush()
-                except OSError:
-                    pass
+                except OSError as e:
+                    self._signaler_erreur(e)
 
     def _reset_minmax(self):
         """Reset running min/max statistics."""
@@ -635,11 +644,10 @@ class FileLogger:
         ts = datetime.now().strftime("%H:%M:%S")
         num_bins = len(frequencies)
 
-        # Find top 3 peaks
-        if len(magnitudes) > 3:
-            peak_indices = magnitudes.argsort()[::-1][:3]
-        else:
-            peak_indices = list(range(len(magnitudes)))
+        # Top 3 distinct peaks (local maxima), not the main peak and its
+        # two neighbouring bins.
+        from ..core.spectre import pics
+        peak_indices = pics(frequencies, magnitudes, n=3)
 
         peaks = []
         for idx in peak_indices:
@@ -727,21 +735,31 @@ class FileLogger:
         self._log_file.flush()
 
     def close(self):
-        """Close all log files and write summary. Flush before close."""
-        if self._log_file:
-            self.write_session_summary()
-            self.log_event("Logging stopped.")
-        self._flush_all()  # Final flush before closing
-        self._active = False
-        for attr in ['_log_file', '_dat_file', '_dti_file', '_sei_file', '_fft_file', '_env_file']:
-            f = getattr(self, attr)
-            if f:
-                try:
-                    f.close()
-                except OSError:
-                    pass
-                setattr(self, attr, None)
-        logger.info("Log files closed")
+        """Close all log files and write summary. Flush before close.
+
+        The files are closed whatever happens: an error while writing the
+        summary (disk full) used to leave all six open and the logger
+        marked active."""
+        try:
+            if self._log_file:
+                self.write_session_summary()
+                self.log_event("Logging stopped.")
+            self._flush_all()  # Final flush before closing
+        except Exception as e:
+            logger.warning(f"Session summary not written: {e}")
+            if isinstance(e, OSError):
+                self._signaler_erreur(e)
+        finally:
+            self._active = False
+            for attr in ['_log_file', '_dat_file', '_dti_file', '_sei_file', '_fft_file', '_env_file']:
+                f = getattr(self, attr)
+                if f:
+                    try:
+                        f.close()
+                    except (OSError, ValueError):
+                        pass
+                    setattr(self, attr, None)
+            logger.info("Log files closed")
 
     def new_files(self, session_info: SessionInfo):
         """Close current files and open new ones."""
