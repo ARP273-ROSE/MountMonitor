@@ -22,6 +22,10 @@ def parse_ra(ra_str: str) -> Optional[float]:
         minutes = int(m.group(2))
         sec = float(m.group(3))
         return h + minutes / 60.0 + sec / 3600.0
+    # Low-precision LX200 format HH:MM.T (tenths of a minute)
+    m = re.match(r'^(\d{1,2}):(\d{2}(?:\.\d+)?)$', ra_str)
+    if m:
+        return int(m.group(1)) + float(m.group(2)) / 60.0
     return None
 
 
@@ -39,6 +43,11 @@ def parse_dec(dec_str: str) -> Optional[float]:
         minutes = int(m.group(3))
         sec = float(m.group(4))
         return sign * (deg + minutes / 60.0 + sec / 3600.0)
+    # Low-precision LX200 format sDD*MM (whole arcminutes)
+    m = re.match(r'^([+-]?)(\d{1,3})[:*\xdf](\d{2})$', dec_str)
+    if m:
+        sign = -1 if m.group(1) == '-' else 1
+        return sign * (int(m.group(2)) + int(m.group(3)) / 60.0)
     return None
 
 

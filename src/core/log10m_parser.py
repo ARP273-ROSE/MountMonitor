@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
+_MAX_DECOMPRESSED = 512 * 1024 * 1024
 logger = logging.getLogger(__name__)
 
 # Julian Date epoch: JD 2451545.0 = 2000-01-01 12:00:00 UTC
@@ -264,7 +265,12 @@ def parse_log10m(filepath: str | Path, progress_callback=None) -> Log10mFile:
     try:
         with open(filepath, 'rb') as f:
             compressed = f.read()
-        decompressed = zlib.decompress(compressed)
+        # Bounded: a crafted or corrupt file must not inflate without limit.
+        d = zlib.decompressobj()
+        decompressed = d.decompress(compressed, _MAX_DECOMPRESSED)
+        if d.unconsumed_tail:
+            result.parse_errors.append("Decompressed data too large")
+            return result
         result.decompressed_size_bytes = len(decompressed)
         del compressed  # Free memory
     except zlib.error as e:

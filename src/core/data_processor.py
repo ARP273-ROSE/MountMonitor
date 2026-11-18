@@ -21,6 +21,12 @@ from ..utils.coordinates import (
 logger = logging.getLogger(__name__)
 
 
+
+def _ecart_angle_deg(a: float, b: float) -> float:
+    """a - b in degrees, brought into (-180, 180]."""
+    d = (a - b) % 360.0
+    return d - 360.0 if d > 180.0 else d
+
 class DataProcessor:
     """Central data processing engine.
 
@@ -208,12 +214,24 @@ class DataProcessor:
         if sample.pc_ntp_diff_ms is not None:
             self.ntp_buffer.append(now, sample.pc_ntp_diff_ms)
 
+    @staticmethod
+    def seismic_times(timestamp: float, n: int) -> list:
+        """Time of each value of a batch delivered at `timestamp`.
+
+        The seismometer hands over about one second of readings at a time;
+        stamping them all with the delivery time drew vertical bars on the
+        graph and wrote identical times in the .sei."""
+        if n <= 1:
+            return [timestamp] * n
+        dt = 1.0 / n
+        return [timestamp - (n - 1 - i) * dt for i in range(n)]
+
     def process_seismic_data(self, timestamp: float, values: list[float]):
         """Process seismometer data."""
         if not values:
             return
-        for v in values:
-            self.seismic_buffer.append(timestamp, v)
+        for t, v in zip(self.seismic_times(timestamp, len(values)), values):
+            self.seismic_buffer.append(t, v)
 
     def _process_axial_data(self, now: float, sample: MountSample):
         """Process axial position data: compute speeds and displacements."""
@@ -225,18 +243,21 @@ class DataProcessor:
         if dec_pos is not None:
             self.dec_axis_buffer.append(now, dec_pos)
 
-        # Compute raw speed (arcsec/s) from consecutive positions
+        # Raw speed in arcsec/s from consecutive positions. :GaXa#/:GaXb#
+        # give DEGREES: without the factor 3600, sidereal tracking
+        # (15.041"/s) was drawn as 0.0042 "/s. A step across 0/360 deg is
+        # unwrapped.
         if self._prev_ra_axis is not None and self._prev_axis_time is not None:
             dt = now - self._prev_axis_time
             if dt > 0:
                 if ra_pos is not None:
-                    ra_speed = (ra_pos - self._prev_ra_axis) / dt
+                    ra_speed = _ecart_angle_deg(ra_pos, self._prev_ra_axis) * 3600.0 / dt
                     sample.ra_axis_speed = ra_speed
                     self.ra_speed_raw_buffer.append(now, ra_speed)
                     self._ra_speed_history.append(ra_speed)
 
-                if dec_pos is not None:
-                    dec_speed = (dec_pos - self._prev_dec_axis) / dt
+                if dec_pos is not None and self._prev_dec_axis is not None:
+                    dec_speed = _ecart_angle_deg(dec_pos, self._prev_dec_axis) * 3600.0 / dt
                     sample.dec_axis_speed = dec_speed
                     self.dec_speed_raw_buffer.append(now, dec_speed)
                     self._dec_speed_history.append(dec_speed)
@@ -315,28 +336,11 @@ class DataProcessor:
             self.seismic_buffer.compute_running_stdev(self._running_range_seconds)
 
     def compute_fft(self, data: np.ndarray, sample_rate: float) -> tuple[np.ndarray, np.ndarray]:
-        """Compute FFT of data array.
+        """Spectrum of an evenly sampled series: (frequencies, PEAK amplitudes).
 
-        Returns (frequencies, magnitudes) arrays.
-        """
-        if len(data) < 4:
-            return np.array([]), np.array([])
-
-        # Remove DC component (subtract mean)
-        data = data - np.mean(data)
-
-        # Apply Hanning window to reduce spectral leakage
-        window = np.hanning(len(data))
-        windowed = data * window
-
-        # Compute FFT
-        n = len(windowed)
-        fft_result = np.fft.rfft(windowed)
-        magnitudes = 2.0 / n * np.abs(fft_result)
-        frequencies = np.fft.rfftfreq(n, d=1.0 / sample_rate)
-
-        # Skip DC component
-        return frequencies[1:], magnitudes[1:]
+        See src/core/spectre.py (Hann scaling, drift removal)."""
+        from .spectre import spectre_regulier
+        return spectre_regulier(np.asarray(data, dtype=np.float64), sample_rate)
 
     @property
     def actual_frequency(self) -> float:

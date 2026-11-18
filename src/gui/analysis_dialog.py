@@ -111,7 +111,8 @@ def construire_rapport(session, lang: str = 'fr') -> str:
     return dlg._run_analysis(lang)
 
 
-def sauver_rapport(chemin_dat, lang: str = 'fr', toutes_langues: bool = True):
+def sauver_rapport(chemin_dat, lang: str = 'fr', toutes_langues: bool = True,
+                   session=None):
     """Ecrit le rapport de nuit a cote du .dat, dans les trois langues.
 
         MountMonitor_20260921-220015-rapport-fr.txt
@@ -127,7 +128,8 @@ def sauver_rapport(chemin_dat, lang: str = 'fr', toutes_langues: bool = True):
         chemin_dat = _P(chemin_dat)
         if not chemin_dat.exists():
             return None
-        session = parse_dat_file(chemin_dat)
+        if session is None:
+            session = parse_dat_file(chemin_dat)
         if session.sample_count == 0:
             return None
         codes = list(LANGUES) if toutes_langues else [lang]
@@ -471,12 +473,12 @@ class AnalysisDialog(QDialog):
             # but a finite window turns it into a large low-frequency component
             # that dominates the spectrum and hides the worm period we are
             # actually looking for.
+            # The spectrum works on the real timestamps (gaps skipped) and
+            # removes the drift and the dither steps (src/core/spectre.py).
             if len(seg.ra_deviations) > 64:
-                freq = len(seg.ra_deviations) / max(1.0, seg.timestamps[-1] - seg.timestamps[0])
-                self._write_fft(lines, "RA", seg.ra_detrended, freq, fr, top_n=5, lg=lg)
+                self._write_fft(lines, "RA", seg.timestamps, seg.ra_deviations, fr, top_n=5, lg=lg)
             if len(seg.dec_deviations) > 64:
-                freq = len(seg.dec_deviations) / max(1.0, seg.timestamps[-1] - seg.timestamps[0])
-                self._write_fft(lines, "DEC", seg.dec_detrended, freq, fr, top_n=3, lg=lg)
+                self._write_fft(lines, "DEC", seg.timestamps, seg.dec_deviations, fr, top_n=3, lg=lg)
 
             lines.append("")
 
@@ -1095,32 +1097,26 @@ class AnalysisDialog(QDialog):
         lines.append("")
 
     def _write_fft(self, lines: list, axis_name: str,
-                   deviations: np.ndarray, sample_rate: float,
+                   timestamps: np.ndarray, deviations: np.ndarray,
                    fr: bool, top_n: int = 5, lg: str = 'en'):
+        """Write FFT analysis for one axis (amplitudes in arcsec PEAK)."""
         def _(cle, **kw):
             return R(cle, lg, **kw)
-        """Write FFT analysis for one axis."""
-        if len(deviations) < 64 or sample_rate <= 0:
+        from ..core.spectre import spectre, pics
+        t = np.asarray(timestamps, dtype=np.float64)
+        dev = np.asarray(deviations, dtype=np.float64)
+        if len(dev) < 64 or len(t) != len(dev):
             return
-
-        data = deviations - np.mean(deviations)
-        window = np.hanning(len(data))
-        windowed = data * window
-        n = len(windowed)
-        fft_result = np.fft.rfft(windowed)
-        magnitudes = 2.0 / n * np.abs(fft_result)
-        frequencies = np.fft.rfftfreq(n, d=1.0 / sample_rate)
-
-        freqs = frequencies[1:]
-        mags = magnitudes[1:]
-
+        freqs, mags = spectre(t, dev)
         if len(mags) == 0:
             return
 
-        peak_indices = np.argsort(mags)[::-1][:top_n]
+        peak_indices = pics(freqs, mags, n=top_n)
+        if not peak_indices:
+            return
 
         lines.append(_("fft_pics", axe=axis_name, n=top_n) + " :")
-        lines.append(f"  {'Rank':>4}  {'Frequency':>12}  {'Period':>12}  {'Amplitude':>12}")
+        lines.append(f"  {'Rank':>4}  {'Frequency':>12}  {'Period':>12}  {'Amp. (peak)':>12}")
         lines.append(f"  {'----':>4}  {'----------':>12}  {'------':>12}  {'---------':>12}")
 
         for rank, idx in enumerate(peak_indices, 1):
@@ -1148,7 +1144,7 @@ class AnalysisDialog(QDialog):
         if 120 < dominant_period < 900:
             lines.append(f"  [PE] " + _("pe_detectee"))
             lines.append(f"        {_('periode')} : {dominant_period:.1f} s ({dominant_period/60:.1f} min)")
-            lines.append(f"        Amplitude : {dominant_amp:.4f}\"")
+            lines.append(f"        Amplitude : {dominant_amp:.4f}\" (peak)")
             if dominant_amp < 0.5:
                 lines.append("        " + _("pe_tres_faible"))
             elif dominant_amp < 1.5:

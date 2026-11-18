@@ -4,6 +4,8 @@ Runs in a QThread, periodically queries the mount for RA, DEC, time,
 status, and axial data. Emits signals for the GUI to consume.
 """
 
+import queue
+import threading
 import time
 from ..utils.i18n import T
 import logging
@@ -42,6 +44,11 @@ class MountPoller(QThread):
     error = pyqtSignal(str)
     mount_info_ready = pyqtSignal(dict)     # Session info dict
     log_message = pyqtSignal(str)           # Log message for status panel
+    connect_result = pyqtSignal(bool)       # First connection attempt, made in this thread
+    request_done = pyqtSignal(object, object)  # (callback, result) of a submit()
+
+    # Reconnection: 2, 4, 8, 16, 32, then every 60 s, for as long as it takes.
+    RECONNECT_MAX_S = 60.0
 
     def __init__(self, connection: MountConnection, processor: DataProcessor,
                  frequency_hz: float = 2.0, parent=None):
@@ -64,6 +71,43 @@ class MountPoller(QThread):
         self._axial_enabled = False
         self._last_env_poll: float = 0.0
         self._env_poll_interval: float = 30.0  # Poll environment every 30 seconds
+        self._wake = threading.Event()         # interrupts every wait (stop)
+        self._requests: "queue.Queue" = queue.Queue()
+        self._connect_first = False
+
+    def connect_in_thread(self):
+        """Open the connection in this thread, then poll (GUI never blocks)."""
+        self._connect_first = True
+
+    def submit(self, fn, callback=None):
+        """Run fn(connection) in the poller thread, between two polls.
+
+        Every mount access from the GUI goes through here: one thread talks
+        to the mount (a COM object must stay in the apartment that created
+        it), and a slow mount never freezes the window. callback(result) is
+        called back in the GUI thread through request_done."""
+        self._requests.put((fn, callback))
+        self._wake.set()
+
+    def _run_requests(self):
+        while True:
+            try:
+                fn, callback = self._requests.get_nowait()
+            except queue.Empty:
+                return
+            try:
+                result = fn(self._connection)
+            except Exception as e:
+                logger.warning(f"Mount request failed: {e}")
+                result = None
+            if callback is not None:
+                self.request_done.emit(callback, result)
+
+    def _wait(self, seconds: float) -> None:
+        """Sleep that stop() and submit() interrupt."""
+        if seconds > 0:
+            self._wake.wait(seconds)
+            self._wake.clear()
 
     def set_frequency(self, hz: float):
         """Set polling frequency in Hz."""
@@ -82,35 +126,62 @@ class MountPoller(QThread):
         self._axial_enabled = enabled
 
     def run(self):
-        """Main polling loop."""
+        """Main polling loop (owns the connection for its whole life)."""
         self._running = True
+        try:
+            self._connection.thread_enter()
+            if self._connect_first:
+                ok = False
+                try:
+                    ok = bool(self._connection.connect())
+                except Exception as e:
+                    logger.error(f"Connection failed: {e}")
+                self.connect_result.emit(ok)
+                if not ok:
+                    return
+            self._poll_loop()
+        finally:
+            try:
+                self._connection.disconnect()
+            except Exception as e:
+                logger.debug(f"Disconnect error: {e}")
+            try:
+                self._connection.thread_exit()
+            except Exception:
+                pass
+            logger.info("Poller stopped")
+
+    def _poll_loop(self):
         logger.info(f"Poller started at {self._frequency_hz} Hz")
 
         # Initial mount info retrieval
         self._retrieve_mount_info()
 
-        interval = 1.0 / self._frequency_hz
         last_stdev_compute = 0.0
+        echecs = 0
 
         while self._running:
+            interval = 1.0 / self._frequency_hz
             loop_start = time.perf_counter()
+            self._run_requests()
 
             if self._paused:
-                time.sleep(0.1)
+                self._wait(0.1)
                 continue
 
             if not self._connection.connected:
-                self.connection_lost.emit()
-                # Try to reconnect
-                if hasattr(self._connection, 'reconnect'):
-                    if self._connection.reconnect():
-                        self.connection_restored.emit()
-                        self.log_message.emit("Connection restored")
-                    else:
-                        time.sleep(2.0)
-                        continue
+                if echecs == 0:
+                    # Once per loss, not every 2 s.
+                    self.connection_lost.emit()
+                if not self._running:
+                    break
+                if self._connection.reconnect():
+                    echecs = 0
+                    self.connection_restored.emit()
+                    self.log_message.emit("Connection restored")
                 else:
-                    time.sleep(2.0)
+                    echecs += 1
+                    self._wait(min(self.RECONNECT_MAX_S, 2.0 ** min(echecs, 6)))
                     continue
 
             try:
@@ -163,19 +234,11 @@ class MountPoller(QThread):
                 self.error.emit(str(e))
 
             # Precise timing
-            elapsed = time.perf_counter() - loop_start
-            sleep_time = interval - elapsed
-            if sleep_time > 0:
-                time.sleep(sleep_time)
+            self._sleep_remainder(loop_start, interval)
 
-        logger.info("Poller stopped")
-
-    @staticmethod
-    def _sleep_remainder(loop_start: float, interval: float) -> None:
+    def _sleep_remainder(self, loop_start: float, interval: float) -> None:
         """Dort ce qui reste de l'intervalle de polling courant."""
-        sleep_time = interval - (time.perf_counter() - loop_start)
-        if sleep_time > 0:
-            time.sleep(sleep_time)
+        self._wait(interval - (time.perf_counter() - loop_start))
 
     @staticmethod
     def _parse_mount_time_to_seconds(time_str: str) -> Optional[float]:
@@ -199,14 +262,6 @@ class MountPoller(QThread):
         """
         now = datetime.now()
         pc_time = time.time()
-        # Use same timezone as the mount for time diff computation:
-        # - ASCOM: UTCDate returns UTC → use PC UTC
-        # - LX200: :GL# returns local time → use PC local time
-        if self._connection.mount_time_is_utc:
-            pc_ref = datetime.now(timezone.utc)
-        else:
-            pc_ref = now
-        pc_seconds = pc_ref.hour * 3600.0 + pc_ref.minute * 60.0 + pc_ref.second + pc_ref.microsecond / 1e6
 
         # Get status
         status = self._connection.get_status()
@@ -218,8 +273,18 @@ class MountPoller(QThread):
                 self._slew_delay_start = time.time()
                 self.log_message.emit(T("poller_slewing"))
 
-        # Get mount time
+        # Get mount time. The PC reference is taken in the MIDDLE of the
+        # round trip: taken before the status query, it was early by a whole
+        # exchange (tens of ms) and the offset carried that bias.
+        t_avant = time.time()
         mount_time_str = self._connection.get_mount_time()
+        t_milieu = (t_avant + time.time()) / 2.0
+        # Same time zone as the mount: ASCOM UTCDate is UTC, LX200 :GL# local.
+        if self._connection.mount_time_is_utc:
+            pc_ref = datetime.fromtimestamp(t_milieu, timezone.utc)
+        else:
+            pc_ref = datetime.fromtimestamp(t_milieu)
+        pc_seconds = pc_ref.hour * 3600.0 + pc_ref.minute * 60.0 + pc_ref.second + pc_ref.microsecond / 1e6
 
         # Compute time differences
         if mount_time_str:
@@ -337,10 +402,18 @@ class MountPoller(QThread):
         except Exception as e:
             logger.debug(f"Mount settings check failed: {e}")
 
-    def stop(self):
-        """Stop the polling loop."""
+    def stop(self) -> bool:
+        """Stop the polling loop; True once the thread has ended.
+
+        Sleeps are interrupted at once; a read in progress is cut by
+        abort() (socket shutdown) rather than waited for. The thread closes
+        the connection itself on its way out."""
         self._running = False
-        self.wait(5000)
+        self._wake.set()
+        if self.wait(1500):
+            return True
+        self._connection.abort()
+        return self.wait(4000)
 
     def pause(self):
         """Pause polling."""

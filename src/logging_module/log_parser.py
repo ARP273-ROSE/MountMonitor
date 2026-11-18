@@ -41,6 +41,36 @@ _DELAI_APRES_SLEW = 5.0           # seconds ignored when tracking resumes
 _EXCURSION_ARCSEC = 30.0
 
 
+def _ecart_sans_pente(m: np.ndarray) -> float:
+    """Standard deviation around the best straight line."""
+    x = np.arange(len(m), dtype=np.float64)
+    a, b = np.polyfit(x, m, 1)
+    return float(np.std(m - (a * x + b)))
+
+
+def _derouler_heures(secondes):
+    """Seconds since midnight -> monotonic seconds.
+
+    Midnight: a backward jump of more than 12 h adds a day. End of daylight
+    saving time (LX200 :GL# is LOCAL time): a backward jump of about one
+    hour adds an hour. It was missed (the test required MORE than one hour
+    backwards), and two real hours were replayed as one: twice the sampling
+    rate, every FFT period halved."""
+    sortie = []
+    decalage = 0.0
+    prec = None
+    for t in secondes:
+        if prec is not None:
+            d = t - prec
+            if d < -43200:
+                decalage += 86400.0
+            elif -4000.0 < d < -3000.0:
+                decalage += 3600.0
+        sortie.append(t + decalage)
+        prec = t
+    return sortie
+
+
 @dataclass
 class TargetSegment:
     """A segment of tracking data on a single target."""
@@ -112,8 +142,11 @@ class TargetSegment:
         if not morceaux:
             return float(np.std(dev))
         # Median of the per-step spreads: robust to the few steps that contain
-        # the tail of a move.
-        return float(np.median([np.std(m) for m in morceaux]))
+        # the tail of a move. A straight line is removed from each step
+        # first: without dithers (unguided mount) the whole target is one
+        # step, and its drift was counted as jitter -- 0.2" read as 5.9",
+        # rated BAD.
+        return float(np.median([_ecart_sans_pente(m) for m in morceaux]))
 
     @property
     def ra_jitter(self) -> float:
@@ -766,15 +799,8 @@ def parse_dat_file(dat_path: Path) -> ParsedSession:
         assumed_rate = 2.0
         time_seconds = [i / assumed_rate for i in range(len(mount_times))]
 
-    # Handle midnight wrap: if time decreases, add 24h offset
-    corrected_times = []
-    offset = 0.0
-    prev_t = 0.0
-    for i, t in enumerate(time_seconds):
-        if i > 0 and t < prev_t - 3600:  # big backward jump = midnight
-            offset += 86400.0
-        corrected_times.append(t + offset)
-        prev_t = t
+    # Midnight and end of daylight saving time
+    corrected_times = _derouler_heures(time_seconds)
 
     # Convert to numpy arrays (ALL samples — raw)
     session.mount_times = mount_times
@@ -930,15 +956,8 @@ def parse_dti_file(dti_path: Path, session: ParsedSession) -> ParsedSession:
         return session
 
     if time_seconds:
-        # Handle midnight wrap
-        corrected = []
-        offset = 0.0
-        prev_t = 0.0
-        for i, t in enumerate(time_seconds):
-            if i > 0 and t < prev_t - 3600:
-                offset += 86400.0
-            corrected.append(t + offset)
-            prev_t = t
+        # Midnight and end of daylight saving time
+        corrected = _derouler_heures(time_seconds)
 
         session.time_mount_times = mount_times
         session.time_pc_mount_diff = np.array(pc_mount_diff)

@@ -105,7 +105,12 @@ def _open(url):
         'Accept': 'application/vnd.github+json',
     })
     ctx = ssl.create_default_context()
-    return urllib.request.urlopen(req, timeout=TIMEOUT, context=ctx)
+    r = urllib.request.urlopen(req, timeout=TIMEOUT, context=ctx)
+    # The address after the redirects must be trusted too.
+    if not _hote_de_confiance(r.geturl()):
+        r.close()
+        raise RuntimeError(f"Redirection refusee : {r.geturl()}")
+    return r
 
 
 def plateforme() -> str:
@@ -205,6 +210,8 @@ def check(current_version):
         'version': tag,
         'url': asset['browser_download_url'],
         'size': asset.get('size', 0),
+        # SHA-256 GitHub computes on every release asset ("sha256:<hex>").
+        'digest': asset.get('digest') or '',
         'notes': data.get('body') or '',
     }
 
@@ -223,24 +230,38 @@ def download_and_apply(update, progress=None):
     archive = tmpdir / 'update.zip'
 
     try:
+        import hashlib
+        empreinte = hashlib.sha256()
+        annonce = int(update.get('size') or 0)
+        plafond = max(annonce + 1024 * 1024, 64 * 1024 * 1024) if annonce else 512 * 1024 * 1024
         with _open(update['url']) as r, open(archive, 'wb') as f:
-            total = int(r.headers.get('Content-Length') or update.get('size') or 0)
+            total = int(r.headers.get('Content-Length') or annonce or 0)
             done = 0
             while True:
                 chunk = r.read(65536)
                 if not chunk:
                     break
-                f.write(chunk)
                 done += len(chunk)
+                if done > plafond:
+                    raise RuntimeError("Archive plus grosse qu'annoncee")
+                f.write(chunk)
+                empreinte.update(chunk)
                 if progress:
                     progress(done, total)
+        if annonce and done != annonce:
+            raise RuntimeError(f"Archive tronquee ({done} octets sur {annonce})")
+        # Integrity: the archive must be the one GitHub published.
+        attendu = (update.get('digest') or '').lower()
+        if attendu.startswith('sha256:') and empreinte.hexdigest() != attendu[7:]:
+            raise RuntimeError("Empreinte SHA-256 differente de celle publiee")
 
         extracted = tmpdir / 'contenu'
         with zipfile.ZipFile(archive) as z:
             # Refuse les chemins qui sortent du dossier d'extraction.
+            racine = extracted.resolve()
             for member in z.namelist():
                 dest = (extracted / member).resolve()
-                if not str(dest).startswith(str(extracted.resolve())):
+                if dest != racine and racine not in dest.parents:
                     raise RuntimeError(f"Archive suspecte : {member}")
             z.extractall(extracted)
             # zipfile ne restitue pas le bit d'execution. Sous Windows cela
