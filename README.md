@@ -171,7 +171,7 @@ each with an installer and automatic updates.
 
 ## Overview
 
-MountMonitor is a modernized rewrite of the original Java MountMonitor v3.37 by [Nicolàs de Hilster](https://dehilster.info/astronomy/mountmonitor.php) (2018-2021). It monitors telescope mount tracking performance in real-time, helping astrophotographers verify their mount behavior during imaging sessions.
+MountMonitor 4 is the successor of the original Java MountMonitor v3.37 by [Nicolàs de Hilster](https://dehilster.info/astronomy/mountmonitor.php) (2018-2021), rewritten in Python/PyQt6 and now developed jointly with its original author. It monitors telescope mount tracking performance in real-time, helping astrophotographers verify their mount behavior during imaging sessions.
 
 The application reads RA, DEC, and timing data from the mount, displays real-time graphs, computes running statistics, and logs everything to files for post-session analysis.
 
@@ -273,7 +273,7 @@ python main.py --connect
 
 ## Credits
 
-Based on [MountMonitor v3.37](https://dehilster.info/astronomy/mountmonitor.php) by Nicolàs de Hilster, PhD — Starmountain Survey & Consultancy BV (2018-2021).
+MountMonitor 4 continues [MountMonitor v3.37](https://dehilster.info/astronomy/mountmonitor.php) by Nicolàs de Hilster, PhD — Starmountain Survey & Consultancy BV (2018-2021), with his agreement, and is developed jointly with him.
 
 ## License
 

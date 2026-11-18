@@ -6,6 +6,15 @@ behaviour changes, the patch number when only a defect is fixed.
 
 Figures quoted below were measured on real sessions, not estimated.
 
+## 4.0.0 — 2026-11-18
+
+### Changed
+- **MountMonitor 4.0**: with the agreement of Nicolàs de Hilster, author of the
+  original Java MountMonitor (v3.37, 2018-2021), this program becomes its
+  successor and is now developed jointly. The numbering follows on from
+  v3.37: 4.0.0 comes after 1.33.0, and installed copies are offered the
+  update as usual. No change in behaviour from 1.33.0.
+
 ## 1.33.0 — 2026-11-10
 
 ### Added
