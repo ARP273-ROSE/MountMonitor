@@ -537,14 +537,14 @@ TX = {
               "waarschijnlijk achter een ander venster."},
     "about_texte": {
         "en": "<h2>MountMonitor {v}</h2><p>Real-time telescope mount monitoring.</p>"
-              "<p>Modernized rewrite of the original Java v3.37<br>by Nicolàs de Hilster "
-              "(2018-2021).</p><p>Python/PyQt6/pyqtgraph — © ARP273-ROSE, MIT License</p>",
+              "<p>Successor of the original Java MountMonitor v3.37<br>by Nicolàs de Hilster "
+              "(2018-2021), developed jointly with him.</p><p>Python/PyQt6/pyqtgraph — © ARP273-ROSE, MIT License</p>",
         "fr": "<h2>MountMonitor {v}</h2><p>Surveillance de monture télescope en temps réel.</p>"
-              "<p>Réécriture modernisée du programme original Java v3.37<br>par Nicolàs de "
-              "Hilster (2018-2021).</p><p>Python/PyQt6/pyqtgraph — © ARP273-ROSE, licence MIT</p>",
+              "<p>Successeur du MountMonitor v3.37 original (Java)<br>de Nicolàs de "
+              "Hilster (2018-2021), développé avec lui.</p><p>Python/PyQt6/pyqtgraph — © ARP273-ROSE, licence MIT</p>",
         "nl": "<h2>MountMonitor {v}</h2><p>Realtime bewaking van een telescoopmontering.</p>"
-              "<p>Gemoderniseerde herschrijving van het oorspronkelijke Java-programma v3.37<br>"
-              "door Nicolàs de Hilster (2018-2021).</p><p>Python/PyQt6/pyqtgraph — © ARP273-ROSE, "
+              "<p>Opvolger van het oorspronkelijke Java-programma MountMonitor v3.37<br>"
+              "van Nicolàs de Hilster (2018-2021), samen met hem ontwikkeld.</p><p>Python/PyQt6/pyqtgraph — © ARP273-ROSE, "
               "MIT-licentie</p>"},
     "menu_create_shortcut": {"en": "Create Desktop Shortcut", "fr": "Créer raccourci bureau", "nl": "Snelkoppeling maken"},
 
