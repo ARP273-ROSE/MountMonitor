@@ -12,6 +12,7 @@
     "shortcut_helper.py",
     "reporting.py",
     "updater.py",
+    "signature_maj.py",
     "kit_aide.py",
     "interface_kit.py"
   ],
@@ -77,9 +78,11 @@
     "tests/test_corrections_septembre.py",
     "tests/test_analyse_suivi.py",
     "tests/test_gui.py",
-    "tests/test_audit_novembre.py"
+    "tests/test_audit_novembre.py",
+    "tests/test_signature_maj.py"
   ],
   "rapports": {
     "poste": "installation"
-  }
+  },
+  "cle_publique_maj": "kHjUuLfq9BPw5+cmaBXwqFGMR4J9Jq5r0wBQLybZN0s="
 }

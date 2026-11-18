@@ -81,6 +81,12 @@ observatory PCs (2-4 cores, 4 GB, old Intel graphics).
 - The FFT window draws only what fits on screen.
 
 ### Security
+- **Signed updates**: each release publishes a manifest (version and SHA-256
+  of the update archives) signed with an Ed25519 key that is not in the
+  repository. From 4.1.0 on, the application installs an update only if its
+  archive is listed in a manifest signed by that key (public key in kit.json,
+  verified in pure Python, `signature_maj.py`). A stolen GitHub token can no
+  longer push code to installed copies.
 - Update: SHA-256 of the archive checked against the one GitHub publishes,
   size bounded, address checked again after redirects, download in a thread,
   stricter extraction path check.

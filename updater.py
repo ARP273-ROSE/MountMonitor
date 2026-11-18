@@ -206,14 +206,48 @@ def check(current_version):
                  tag, plate)
         return None
 
+    # Signed manifest published next to the archives (see signature_maj.py).
+    nom_signature = f"{_kit().get('nom_technique') or 'app'}-signature-{tag}.json".lower()
+    signature = next((a for a in data.get('assets', [])
+                      if (a.get('name') or '').lower() == nom_signature), None)
+
     return {
         'version': tag,
+        'nom': asset.get('name') or '',
+        'signature_url': signature['browser_download_url'] if signature else '',
         'url': asset['browser_download_url'],
         'size': asset.get('size', 0),
         # SHA-256 GitHub computes on every release asset ("sha256:<hex>").
         'digest': asset.get('digest') or '',
         'notes': data.get('body') or '',
     }
+
+
+def verifier_signature(update, sha256_hex: str) -> None:
+    """Refuse an archive that the publisher's key did not sign.
+
+    Required as soon as kit.json carries "cle_publique_maj": a release
+    without a signature, with a signature from another key, for another
+    version, or listing another SHA-256, is never installed."""
+    cle = _kit().get('cle_publique_maj') or ''
+    if not cle:
+        return
+    url = update.get('signature_url') or ''
+    if not url:
+        raise RuntimeError("Mise a jour non signee : refusee")
+    with _open(url) as r:
+        document = r.read(65536 + 1)
+    if len(document) > 65536:
+        raise RuntimeError("Signature de mise a jour trop grosse")
+    import signature_maj
+    try:
+        manifeste = signature_maj.lire_manifeste(document, cle)
+    except (ValueError, KeyError) as e:
+        raise RuntimeError(f"Signature refusee : {e}")
+    if str(manifeste.get('version')) != str(update.get('version')):
+        raise RuntimeError("Signature d'une autre version : refusee")
+    if (manifeste['fichiers'].get(update.get('nom') or '') or '').lower() != sha256_hex:
+        raise RuntimeError("Archive absente du manifeste signe : refusee")
 
 
 def download_and_apply(update, progress=None):
@@ -254,6 +288,7 @@ def download_and_apply(update, progress=None):
         attendu = (update.get('digest') or '').lower()
         if attendu.startswith('sha256:') and empreinte.hexdigest() != attendu[7:]:
             raise RuntimeError("Empreinte SHA-256 differente de celle publiee")
+        verifier_signature(update, empreinte.hexdigest())
 
         extracted = tmpdir / 'contenu'
         with zipfile.ZipFile(archive) as z:
