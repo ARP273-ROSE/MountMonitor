@@ -424,7 +424,20 @@ Three settings govern the record button. All three are \textbf{on by default}.
 \textbf{Start recording when the mount starts tracking.} The button then
 \emph{arms} the logger instead of starting it: nothing is written until the
 mount tracks. A mount connected at noon for a night beginning at 19:00 no
-longer records seven hours of nothing. A second click disarms.
+longer records seven hours of nothing. A second click disarms. The button says
+what it waits for: \emph{Armed: starts when the mount tracks}, or, when the
+mount already tracks in daylight, \emph{Armed: starts at nightfall}.
+
+\section{What the graphs show}
+
+\textbf{View > Time span}, or a right click on any graph, sets how much time
+the scrolling graphs show: from 30~s to one hour. The choice is kept.
+\textbf{View > Vertical scale} (also on the right click of the RA and DEC
+graphs): \emph{Data only} fits the curve and lets the tolerance lines leave
+the frame when tracking is much better than them; \emph{Tolerance},
+\emph{Maximum} (data and tolerance both visible) and \emph{Min/Max lines}.
+The clock drift under the time graph is a straight-line fit over the last
+half hour, spikes excluded, in ms per hour.
 
 \textbf{Suspend when the mount stops tracking}, with a two-minute grace delay.
 The delay exists for a reason: a stop may be transient --- a meridian flip, an

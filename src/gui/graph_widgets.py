@@ -127,6 +127,113 @@ def largeur_fenetre(zoom, base=LARGEUR_FENETRE_S):
     return float(base) / zoom
 
 
+# Largeurs proposees (menu Affichage et clic droit sur un graphe). Le zoom
+# horizontal ne savait que retrecir les deux minutes de depart : impossible
+# de voir une demi-heure de suivi, ce que faisait le MountMonitor Java.
+LARGEURS_S = (30, 60, 120, 300, 600, 1800, 3600)
+
+
+def largeur_affichee(valeur, base=LARGEUR_FENETRE_S):
+    """Largeur reglee (« time_span_s »), bornee a une valeur sensee."""
+    try:
+        v = float(valeur)
+    except (TypeError, ValueError):
+        return float(base)
+    if not (v > 0):
+        return float(base)
+    return min(max(v, 10.0), 4 * 3600.0)
+
+
+def nom_largeur(secondes):
+    s = int(round(secondes))
+    if s < 60:
+        return f"{s} s"
+    if s < 3600:
+        return f"{s // 60} min"
+    return f"{s / 3600:g} h"
+
+
+def pas_des_reperes(largeur):
+    """Pas des traits d'heure : une dizaine au plus a l'ecran, quelle que soit
+    la largeur (toutes les 30 s sur deux minutes, toutes les 5 min sur une
+    heure)."""
+    for pas in (30, 60, 120, 300, 600, 900, 1800, 3600):
+        if largeur / pas <= 10:
+            return float(pas)
+    return 3600.0
+
+
+def plage_verticale(mode, valeurs, tolerance, min_val=None, max_val=None):
+    """(bas, haut) de l'axe vertical d'un graphe de suivi selon le mode choisi.
+
+    - data : les donnees seules, centrees sur leur mediane — les lignes de
+      tolerance sortent du cadre quand le suivi est bien meilleur qu'elles ;
+    - tolerance : +-tolerance ;
+    - maximum : ce qui est le plus grand des deux (l'ancien comportement,
+      qui etait applique quel que soit le choix du menu) ;
+    - minmax : les lignes min/max de la nuit.
+    """
+    v = np.asarray(valeurs, dtype=float)
+    v = v[np.isfinite(v)]
+    tol = abs(float(tolerance or 0.0))
+    if mode == "tolerance" and tol > 0:
+        return -1.2 * tol, 1.2 * tol
+    if mode == "minmax" and min_val is not None and max_val is not None:
+        m = max(abs(min_val), abs(max_val), 0.05) * 1.2
+        return -m, m
+    if len(v) == 0:
+        m = max(tol, 0.1) * 1.3
+        return -m, m
+    if mode == "data":
+        centre = float(np.median(v))
+        demi = float(np.max(np.abs(v - centre))) * 1.3
+        demi = max(demi, 0.05)
+        return centre - demi, centre + demi
+    m = max(float(np.max(np.abs(v))), tol) * 1.3
+    return -m, m
+
+
+DUREE_DERIVE_S = 1800.0
+
+
+def derive_horloge(t, v, duree=DUREE_DERIVE_S):
+    """Derive de l'ecart PC - monture, en ms par heure.
+
+    Pente des moindres carres sur les `duree` dernieres secondes, apres
+    rejet des points aberrants (au-dela de 4 ecarts absolus medians de la
+    droite : une boucle lente donne un pic de plusieurs centaines de ms).
+    L'ancienne formule — dernier point moins premier point de la fenetre
+    affichee — sautait a chaque nouvel echantillon, puisque chaque point
+    porte des dizaines de millisecondes de bruit.
+
+    None tant qu'il n'y a pas deux minutes de donnees : une pente sur
+    quelques secondes ne veut rien dire.
+    """
+    t = np.asarray(t, dtype=float)
+    v = np.asarray(v, dtype=float)
+    ok = np.isfinite(t) & np.isfinite(v)
+    t, v = t[ok], v[ok]
+    if len(t) < 20:
+        return None
+    garde = t >= t[-1] - float(duree)
+    t, v = t[garde], v[garde]
+    if len(t) < 20 or t[-1] - t[0] < 120.0:
+        return None
+    x = (t - t[-1]) / 3600.0
+    for _ in range(2):
+        a, b = np.polyfit(x, v, 1)
+        r = v - (a * x + b)
+        mad = float(np.median(np.abs(r - np.median(r))))
+        if mad <= 0:
+            break
+        garde = np.abs(r) <= 4.0 * 1.4826 * mad
+        if garde.sum() < 20 or garde.all():
+            break
+        x, v = x[garde], v[garde]
+    a, _ = np.polyfit(x, v, 1)
+    return float(a)
+
+
 def debut_fenetre(timestamps, borne):
     """Indice du premier echantillon a garder pour tracer depuis `borne`.
 
@@ -184,6 +291,7 @@ class TrackingGraph(QWidget):
         self._title = title
         self._data_color = data_color
         self._tolerance = 1.5  # arcseconds
+        self._mode_vertical = "data"
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -198,7 +306,10 @@ class TrackingGraph(QWidget):
         self._plot.setLabel('bottom', T('time_label'), units='s', color=Colors.TEXT_SECONDARY.name())
         self._plot.getViewBox().disableAutoRange()
 
-        # Data line
+        # Data line. Une heure a 2 Hz fait 7200 points : on n'en dessine
+        # qu'un par pixel (pics conserves) et seulement dans le cadre.
+        self._plot.setDownsampling(auto=True, mode='peak')
+        self._plot.setClipToView(True)
         pen = pg.mkPen(color=data_color, width=1.5)
         self._data_curve = self._plot.plot(pen=pen, name=title)
 
@@ -365,16 +476,15 @@ class TrackingGraph(QWidget):
             )
 
         # Manually set range (replaces auto-range)
-        y_min = float(np.min(values))
-        y_max = float(np.max(values))
-        margin = max(abs(y_min), abs(y_max), self._tolerance) * 1.3
+        y_bas, y_haut = plage_verticale(self._mode_vertical, values,
+                                        self._tolerance, min_val, max_val)
         if largeur_s:
             x0, x1 = -float(largeur_s), 0.0
         else:
             x0 = fenetre_horizontale(self, rel_times, t_end,
                                      getattr(self, '_zoom_horizontal', 1))
             x1 = max(t_end, x0 + 1.0)
-        vb.setRange(xRange=(x0, x1), yRange=(-margin, margin), padding=0)
+        vb.setRange(xRange=(x0, x1), yRange=(y_bas, y_haut), padding=0)
         vb.blockSignals(False)
         accorder_les_axes(self._plot)
 
@@ -384,7 +494,7 @@ class TrackingGraph(QWidget):
         # Position overlays after range is set
         x_right = x1
         self._watermark.setPos((x0 + x1) / 2, 0)
-        self._stats_text.setPos(x_right, margin)
+        self._stats_text.setPos(x_right, y_haut)
         self._tol_upper_label.setPos(x_right, self._tolerance)
         self._tol_lower_label.setPos(x_right, -self._tolerance)
 
@@ -399,17 +509,14 @@ class TrackingGraph(QWidget):
         self._tol_lower_label.setText(f'{-arcsec:+.2f}"')
 
     def set_vertical_zoom(self, mode: str):
-        """Set vertical zoom mode: data, tolerance, maximum, minmax."""
-        vb = self._plot.getViewBox()
-        if mode == "data":
-            vb.enableAutoRange(axis=pg.ViewBox.YAxis)
-        elif mode == "tolerance":
-            margin = self._tolerance * 1.2
-            vb.setYRange(-margin, margin)
-        elif mode == "maximum":
-            vb.enableAutoRange(axis=pg.ViewBox.YAxis)
-        elif mode == "minmax":
-            vb.enableAutoRange(axis=pg.ViewBox.YAxis)
+        """Mode de l'axe vertical : data, tolerance, maximum, minmax.
+
+        Applique a chaque rafraichissement (voir `plage_verticale`). Avant,
+        le choix etait enregistre puis ecrase quatre fois par seconde par
+        une plage qui englobait toujours les lignes de tolerance.
+        """
+        if mode in ("data", "tolerance", "maximum", "minmax"):
+            self._mode_vertical = mode
 
     def export_to_image(self, directory: str):
         """Export graph as PNG to the specified directory."""
@@ -444,8 +551,9 @@ class TrackingGraph(QWidget):
         y_top = vr[1][1]
         a_min = t0 + max(x_min, float(rel_times[0]))
         a_max = t0 + min(x_max, float(t_max))
-        first_mark = int(np.ceil(a_min / 30.0))
-        last_mark = int(np.floor(a_max / 30.0))
+        pas = pas_des_reperes(x_max - x_min)
+        first_mark = int(np.ceil(a_min / pas))
+        last_mark = int(np.floor(a_max / pas))
         visible_marks = list(range(first_mark, last_mark + 1))
 
         # Limit to pool size
@@ -465,7 +573,7 @@ class TrackingGraph(QWidget):
         # Update pool items: assign visible marks to pool slots
         for i in range(len(self._time_fixes)):
             if i < len(visible_marks):
-                t_abs = 30.0 * visible_marks[i]
+                t_abs = pas * visible_marks[i]
                 t = t_abs - t0
                 self._time_fixes[i].setPos(t)
                 self._time_fixes[i].setVisible(True)
@@ -512,6 +620,8 @@ class TimeGraph(QWidget):
         self._plot.setBackground(Colors.BG_GRAPH)
         self._plot.showGrid(x=False, y=True, alpha=0.1)
         self._plot.setTitle(T("time_graph_title"), color='#aaaaaa', size='11pt')
+        self._plot.setDownsampling(auto=True, mode='peak')
+        self._plot.setClipToView(True)
         self._plot.setLabel('left', T('time_diff'), units='ms', color=Colors.TEXT_SECONDARY.name())
         self._plot.setLabel('bottom', T('time_label'), units='s', color=Colors.TEXT_SECONDARY.name())
         # pyqtgraph choisit tout seul un prefixe et le colle devant l'unite.
@@ -568,8 +678,13 @@ class TimeGraph(QWidget):
 
     def update_data(self, diff_t, diff_v, pc_loop_t=None, pc_loop_v=None,
                     mount_loop_t=None, mount_loop_v=None,
-                    ntp_t=None, ntp_v=None, largeur_s=None):
-        """Update time graph data (au present si `largeur_s`)."""
+                    ntp_t=None, ntp_v=None, largeur_s=None,
+                    derive_ms_h=None):
+        """Update time graph data (au present si `largeur_s`).
+
+        `derive_ms_h` : derive de l'horloge, ajustee sur les dernieres
+        minutes (voir `derive_horloge`). Sans elle, plus de derive affichee
+        plutot qu'une fausse."""
         if len(diff_t) > 0:
             t0 = diff_t[-1] if largeur_s else diff_t[0]
             vb = self._plot.getViewBox()
@@ -614,11 +729,8 @@ class TimeGraph(QWidget):
             parts = []
             if len(diff_v) > 0:
                 parts.append(f"PC-Mount: {diff_v[-1]:+.1f}ms")
-                if len(diff_v) > 20 and len(diff_t) > 20:
-                    dt = diff_t[-1] - diff_t[0]
-                    if dt > 0:
-                        drift = (diff_v[-1] - diff_v[0]) / (dt / 60.0)
-                        parts.append(f"Drift: {drift:+.2f}ms/min")
+                if derive_ms_h is not None:
+                    parts.append(f"Drift: {derive_ms_h:+.1f}ms/h")
             if pc_loop_v is not None and len(pc_loop_v) > 0:
                 parts.append(f"PC loop: {pc_loop_v[-1]:.1f}ms")
             if mount_loop_v is not None and len(mount_loop_v) > 0:
@@ -663,6 +775,8 @@ class SeismicGraph(QWidget):
         self._plot.setBackground(Colors.BG_GRAPH)
         self._plot.showGrid(x=False, y=True, alpha=0.1)
         self._plot.setTitle(T("seismic_title"), color='#aaaaaa', size='11pt')
+        self._plot.setDownsampling(auto=True, mode='peak')
+        self._plot.setClipToView(True)
         self._plot.setLabel('left', T('seismic_counts'), color=Colors.TEXT_SECONDARY.name())
         self._plot.setLabel('bottom', T('time_label'), units='s', color=Colors.TEXT_SECONDARY.name())
 

@@ -24,7 +24,9 @@ from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSlot, pyqtSignal
 from PyQt6.QtGui import QAction, QActionGroup, QFont, QIcon, QKeySequence
 
 from .graph_widgets import (TrackingGraph, TimeGraph, SeismicGraph, AxialGraph,
-                            couper_au_present, largeur_fenetre)
+                            couper_au_present, largeur_fenetre,
+                            largeur_affichee, nom_largeur, derive_horloge,
+                            LARGEURS_S)
 from .fft_window import FFTWindow
 from .analysis_dialog import AnalysisDialog, sauver_rapport
 from .log10m_dialog import Log10mAnalysisDialog
@@ -207,8 +209,10 @@ class MainWindow(QMainWindow):
             self._connexion_auto_active = True
             QTimer.singleShot(1500, self._connexion_automatique)
 
-        self._appliquer_zoom_horizontal(
-            self._settings.get("horizontal_zoom") or 1)
+        self._appliquer_zoom_horizontal(1)
+        self._set_vertical_zoom(self._settings.get("vertical_zoom_mode") or "data",
+                                enregistrer=False)
+        self._brancher_menus_graphes()
 
         self._update_title()
 
@@ -276,25 +280,10 @@ class MainWindow(QMainWindow):
         # View menu
         view_menu = menubar.addMenu(T("menu_view"))
 
-        # Horizontal zoom submenu
-        hz_menu = view_menu.addMenu(T("horizontal_zoom"))
-        for zoom in [1, 2, 3, 5, 10]:
-            action = QAction(f"{zoom}x", self)
-            action.setToolTip(T("tt_zoom_h").format(zoom=zoom))
-            action.triggered.connect(lambda checked, z=zoom: self._set_horizontal_zoom(z))
-            hz_menu.addAction(action)
-
-        # Vertical zoom submenu
-        vz_menu = view_menu.addMenu(T("vertical_zoom"))
-        for mode, label in [
-            ("data", T("zoom_data")),
-            ("tolerance", T("zoom_tolerance")),
-            ("maximum", T("zoom_maximum")),
-            ("minmax", T("zoom_minmax")),
-        ]:
-            action = QAction(label, self)
-            action.triggered.connect(lambda checked, m=mode: self._set_vertical_zoom(m))
-            vz_menu.addAction(action)
+        # Time span and vertical scale: same submenus as the right click on
+        # a graph (_menu_graphe), checked on the current choice.
+        self._remplir_menu_largeur(view_menu.addMenu(T("time_span")))
+        self._remplir_menu_vertical(view_menu.addMenu(T("vertical_zoom")))
 
         view_menu.addSeparator()
 
@@ -815,6 +804,8 @@ class MainWindow(QMainWindow):
                 self._demarrer_sur_suivi()
             else:
                 self._reprendre()
+        elif self._logging_armed:
+            self._maj_bouton_armement()
         elif self._logging_active and self._settings.get("pause_when_not_tracking"):
             # Any status other than TRACKING -- parked, idle, slewing --
             # starts the grace delay. Slews and autofocus finish well inside
@@ -1040,7 +1031,7 @@ class MainWindow(QMainWindow):
         statistiques de la nuit (min/max/ecart-type maximal) restent
         calculees sur tout le tampon, par DataBuffer.
         """
-        largeur = largeur_fenetre(self._settings.get("horizontal_zoom") or 1)
+        largeur = self._largeur()
 
         # Graph correction: shift STDEV timestamps back by half running range
         correct = self._settings.get("correct_graphs_for_range")
@@ -1081,6 +1072,7 @@ class MainWindow(QMainWindow):
                 ntp_t=ntp_t if len(ntp_t) > 0 else None,
                 ntp_v=ntp_v if len(ntp_v) > 0 else None,
                 largeur_s=largeur,
+                derive_ms_h=self._derive_horloge(),
             )
 
         # Axial graph
@@ -1208,7 +1200,8 @@ class MainWindow(QMainWindow):
     def _armer(self):
         """Wait for the mount to track before writing anything."""
         self._logging_armed = True
-        self._btn_logging.setText(T("btn_armed_log"))
+        self._jour_signale = False
+        self._maj_bouton_armement()
         self._status_panel.add_message(T("logging_armed"), Colors.STATUS_OK)
         # Already tracking when armed: start at once rather than wait for a
         # transition that has already happened -- unless it is broad daylight.
@@ -1227,6 +1220,24 @@ class MainWindow(QMainWindow):
             return
         if getattr(self, '_prev_mount_status', None) == MountStatus.TRACKING:
             self._demarrer_sur_suivi()
+        self._maj_bouton_armement()
+
+    def _maj_bouton_armement(self):
+        """Armed: the button says what it is waiting for.
+
+        It used to read « ARMED — waiting for tracking » while the status
+        line said the mount was tracking: what it was really waiting for was
+        the night (no session is opened in daylight, see _fait_jour).
+        """
+        if not self._logging_armed or self._logging_active:
+            self._btn_logging.setToolTip(T("tt_start_logging"))
+            return
+        suit = getattr(self, '_prev_mount_status', None) == MountStatus.TRACKING
+        if suit and self._fait_jour():
+            self._btn_logging.setText(T("btn_armed_night"))
+        else:
+            self._btn_logging.setText(T("btn_armed_log"))
+        self._btn_logging.setToolTip(T("tt_armed"))
 
     def _fait_jour(self) -> bool:
         """Le Soleil est-il leve ? False si on ne peut pas savoir.
@@ -1251,6 +1262,7 @@ class MainWindow(QMainWindow):
     def _desarmer(self):
         self._logging_armed = False
         self._btn_logging.setText(T("btn_start_log"))
+        self._btn_logging.setToolTip(T("tt_start_logging"))
         self._status_panel.add_message(T("logging_disarmed"))
 
     def _demarrer_sur_suivi(self):
@@ -1258,7 +1270,13 @@ class MainWindow(QMainWindow):
         if not self._logging_armed or self._logging_active:
             return
         if self._fait_jour():
-            # On reste arme : la nuit viendra.
+            # On reste arme : la nuit viendra. Dit une fois, et le bouton
+            # l'affiche, sans quoi « en attente du suivi » contredisait
+            # l'etat « la monture suit ».
+            self._maj_bouton_armement()
+            if not getattr(self, '_jour_signale', False):
+                self._jour_signale = True
+                self._status_panel.add_message(T("logging_armed_day"))
             return
         self._logging_armed = False
         self._start_logging()
@@ -1717,6 +1735,82 @@ class MainWindow(QMainWindow):
 
     # ── Zoom and reset ───────────────────────────────────────────
 
+    def _largeur(self) -> float:
+        """Seconds shown by the scrolling graphs (View > Time span)."""
+        return largeur_affichee(self._settings.get("time_span_s"))
+
+    def _derive_horloge(self):
+        """Clock drift in ms/h, fitted on the last half hour, recomputed
+        at most every 5 s (it is a slope, it does not move faster)."""
+        maintenant = time.monotonic()
+        cache = getattr(self, '_derive_cache', None)
+        if cache is not None and maintenant - cache[0] < 5.0:
+            return cache[1]
+        try:
+            t, v, _, _ = self._processor.time_diff_buffer.get_tail(1800.0)
+            d = derive_horloge(t, v)
+        except Exception as e:
+            logger.debug(f"Clock drift: {e}")
+            d = None
+        self._derive_cache = (maintenant, d)
+        return d
+
+    def _set_largeur(self, secondes: float):
+        self._settings.set("time_span_s", float(secondes))
+        self._settings.save()
+        self._refresh_graphs_now()
+
+    def _remplir_menu_largeur(self, menu):
+        groupe = QActionGroup(menu)
+        actuelle = self._largeur()
+        for s in LARGEURS_S:
+            a = QAction(nom_largeur(s), menu)
+            a.setCheckable(True)
+            a.setChecked(abs(s - actuelle) < 0.5)
+            a.triggered.connect(lambda checked, s=s: self._set_largeur(s))
+            groupe.addAction(a)
+            menu.addAction(a)
+        # Rebuilt on opening, so the tick follows a change made elsewhere.
+        menu.aboutToShow.connect(lambda m=menu: [
+            a.setChecked(abs(s - self._largeur()) < 0.5)
+            for a, s in zip(m.actions(), LARGEURS_S)])
+
+    def _remplir_menu_vertical(self, menu):
+        groupe = QActionGroup(menu)
+        modes = [("data", T("zoom_data")), ("tolerance", T("zoom_tolerance")),
+                 ("maximum", T("zoom_maximum")), ("minmax", T("zoom_minmax"))]
+        for mode, label in modes:
+            a = QAction(label, menu)
+            a.setCheckable(True)
+            a.triggered.connect(lambda checked, m=mode: self._set_vertical_zoom(m))
+            groupe.addAction(a)
+            menu.addAction(a)
+        menu.aboutToShow.connect(lambda m=menu: [
+            a.setChecked(mode == (self._settings.get("vertical_zoom_mode") or "data"))
+            for a, (mode, _) in zip(m.actions(), modes)])
+
+    def _brancher_menus_graphes(self):
+        """Right click on a graph: our menu, not pyqtgraph's.
+
+        pyqtgraph's own menu offered « X axis / Y axis » ranges that the
+        next refresh, a quarter of a second later, overwrote: the span
+        looked settable and never stayed.
+        """
+        for graphe in (self._ra_graph, self._dec_graph, self._time_graph,
+                       self._seismic_graph, self._axial_graph):
+            plot = graphe._plot
+            plot.setMenuEnabled(False)
+            plot.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+            plot.customContextMenuRequested.connect(
+                lambda pos, g=graphe: self._menu_graphe(g, pos))
+
+    def _menu_graphe(self, graphe, pos):
+        menu = QMenu(self)
+        self._remplir_menu_largeur(menu.addMenu(T("time_span")))
+        if graphe in (self._ra_graph, self._dec_graph):
+            self._remplir_menu_vertical(menu.addMenu(T("vertical_zoom")))
+        menu.exec(graphe._plot.mapToGlobal(pos))
+
     def _set_horizontal_zoom(self, zoom: int):
         """Applique le zoom horizontal aux graphes, et le retient.
 
@@ -1732,11 +1826,13 @@ class MainWindow(QMainWindow):
                        self._time_graph, self._seismic_graph):
             graphe._zoom_horizontal = zoom
 
-    def _set_vertical_zoom(self, mode: str):
+    def _set_vertical_zoom(self, mode: str, enregistrer: bool = True):
         self._ra_graph.set_vertical_zoom(mode)
         self._dec_graph.set_vertical_zoom(mode)
-        self._settings.set("vertical_zoom_mode", mode)
-        self._settings.save()
+        if enregistrer:
+            self._settings.set("vertical_zoom_mode", mode)
+            self._settings.save()
+            self._refresh_graphs_now()
 
     def _reset_minmax(self):
         self._processor.reset_minmax()
@@ -1941,7 +2037,7 @@ class MainWindow(QMainWindow):
         if len(t) == 0:
             return
         fin = float(t[-1])
-        largeur = largeur_fenetre(self._settings.get("horizontal_zoom") or 1)
+        largeur = self._largeur()
         depart = getattr(self, '_instant_dernier_dump', None)
         if depart is None or fin < depart:
             self._instant_dernier_dump = fin

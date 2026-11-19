@@ -442,9 +442,20 @@ TX = {
         "en": "No site known: set it in Preferences to get the twilights.",
         "fr": "Site inconnu : renseignez-le dans les préférences pour avoir les crépuscules.",
         "nl": "Locatie onbekend: stel deze in bij Voorkeuren voor de schemeringen."},
-    "btn_armed_log": {"en": "ARMED — waiting for tracking",
-                      "fr": "ARMÉ — en attente du suivi",
-                      "nl": "GEREED — wacht op volgen"},
+    "btn_armed_log": {"en": "Armed: starts when the mount tracks",
+                      "fr": "Armé : démarre quand la monture suit",
+                      "nl": "Gereed: start zodra de montering volgt"},
+    "btn_armed_night": {"en": "Armed: starts at nightfall",
+                        "fr": "Armé : démarre à la nuit",
+                        "nl": "Gereed: start bij het invallen van de nacht"},
+    "tt_armed": {
+        "en": "Nothing is being recorded yet. The log opens by itself once the mount tracks and the Sun is down. Click to disarm.",
+        "fr": "Rien n'est encore enregistré. Le journal s'ouvrira seul quand la monture suivra et que le Soleil sera couché. Cliquer pour désarmer.",
+        "nl": "Er wordt nog niets opgenomen. Het log opent vanzelf zodra de montering volgt en de zon onder is. Klik om uit te schakelen."},
+    "logging_armed_day": {
+        "en": "The mount tracks, but the Sun is up: recording will start at nightfall.",
+        "fr": "La monture suit, mais il fait jour : l'enregistrement démarrera à la nuit.",
+        "nl": "De montering volgt, maar de zon is op: de registratie start bij het invallen van de nacht."},
     "logging_armed": {
         "en": "Logger armed: recording starts when the mount begins tracking.",
         "fr": "Enregistreur armé : l'enregistrement démarrera quand la monture suivra.",
@@ -688,8 +699,9 @@ TX = {
 
     # Zoom
     "horizontal_zoom": {"en": "Horizontal Zoom", "fr": "Zoom horizontal", "nl": "Horizontale zoom"},
-    "vertical_zoom": {"en": "Vertical Zoom", "fr": "Zoom vertical", "nl": "Verticale zoom"},
-    "zoom_data": {"en": "Data (median centred)", "fr": "Données (centré médiane)", "nl": "Gegevens (gecentreerd op mediaan)"},
+    "time_span": {"en": "Time span", "fr": "Durée affichée", "nl": "Getoonde tijdspanne"},
+    "vertical_zoom": {"en": "Vertical scale", "fr": "Échelle verticale", "nl": "Verticale schaal"},
+    "zoom_data": {"en": "Data only (median centred)", "fr": "Données seules (centré médiane)", "nl": "Alleen gegevens (gecentreerd op mediaan)"},
     "zoom_tolerance": {"en": "Tolerance", "fr": "Tolérance", "nl": "Tolerantie"},
     "zoom_maximum": {"en": "Maximum (data/tolerance)", "fr": "Maximum (données/tolérance)", "nl": "Maximum (gegevens/tolerantie)"},
     "zoom_minmax": {"en": "Min/Max value lines", "fr": "Lignes Min/Max", "nl": "Min/Max-lijnen"},
