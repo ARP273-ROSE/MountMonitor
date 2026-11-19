@@ -1022,14 +1022,14 @@ Tous sont du texte : un tableur les ouvre directement.
 Quatre réglages modifient l'affichage au point qu'on peut croire à une panne.
 Les voici.
 
-\section{Le zoom vertical, quatre modes}
+\section{L'échelle verticale, quatre modes}
 
 \begin{center}
 \begin{tabularx}{\textwidth}{lX}
 \toprule
 \textbf{Mode} & \textbf{Effet} \\
 \midrule
-Données (centré médiane) & L'échelle suit les données. Les traits de
+Données seules (centré médiane) & L'échelle suit les données. Les traits de
 tolérance peuvent sortir de l'écran. \\
 Tolérance & L'échelle suit les tolérances. Les données peuvent sortir de
 l'écran. \\
@@ -1047,11 +1047,12 @@ nuit excellente et une nuit catastrophique se ressemblent, à la graduation
 près. C'est la cause numéro un des frayeurs inutiles.
 \end{warning}
 
-\section{Le zoom horizontal}
+\section{La durée affichée}
 
-Il fixe combien de données tiennent en largeur : au zoom 1, un point de
-donnée par pixel d'écran ; au zoom 5, cinq pixels par point, donc cinq fois
-moins d'histoire visible, mais en détail.
+Les graphes défilent au présent et montrent les dernières secondes, de
+\SI{30}{\second} à une heure (menu Affichage, ou clic droit sur un graphe).
+Sur une heure, les traits d'heure passent toutes les cinq minutes et chaque
+pixel garde le pic de ce qu'il résume : un écart bref reste visible.
 
 \section{La longueur de la fenêtre glissante}
 

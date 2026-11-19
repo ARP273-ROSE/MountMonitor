@@ -6,6 +6,41 @@ behaviour changes, the patch number when only a defect is fixed.
 
 Figures quoted below were measured on real sessions, not estimated.
 
+## 4.2.0 — 2026-11-19
+
+First feedback from Nicolàs de Hilster on 4.1.0.
+
+### Changed
+- **Time span from 30 s to one hour** (View > Time span, or right click on any
+  graph), kept between launches. The horizontal zoom could only shrink the
+  two-minute window; half an hour of tracking could not be seen. Time marks
+  space themselves out (every 5 min on one hour) and each pixel keeps the peak
+  of what it summarises, so an hour costs no more to draw than two minutes.
+- **Right click on a graph opens MountMonitor's menu**, not pyqtgraph's: its
+  "X axis / Y axis" ranges were overwritten by the next refresh, a quarter of a
+  second later, so the span looked settable and never stayed.
+- **Vertical scale applied**: the menu choice was saved, then overridden four
+  times a second by a range that always included the tolerance lines. *Data
+  only* now fits the curve and lets the tolerance lines leave the frame when
+  tracking is much better than them; the choice is restored at launch.
+- **Right-hand pane**: status, RA, DEC and rate boxes have a fixed height and
+  the history takes all the remaining height, following the window. The
+  values are no longer each boxed (a stylesheet meant for the frame also hit
+  every label inside it).
+- **Armed button says what it waits for**: "Armed: starts when the mount
+  tracks", or "Armed: starts at nightfall" when the mount already tracks in
+  daylight — the old "ARMED — waiting for tracking" contradicted a status line
+  saying the mount was tracking. A message says it once in the history, the
+  tooltip explains that nothing is recorded yet and that a click disarms.
+
+### Fixed
+- **Clock drift jumped with every sample**: it was the last point minus the
+  first of the visible window, each carrying tens of milliseconds of noise. It
+  is now a least-squares slope over the last half hour with spikes rejected
+  (slow loops), in ms/h, shown only once two minutes of data exist. On a
+  12 ms/h synthetic drift with 15 ms noise and 600 ms spikes it stays within
+  5 ms/h and moves by less than 1 ms/h between samples.
+
 ## 4.1.0 — 2026-11-18
 
 Full audit: every figure checked against a synthetic signal whose truth is

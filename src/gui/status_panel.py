@@ -9,6 +9,7 @@ redundant Qt style recalculations.
 """
 
 from PyQt6.QtWidgets import (
+    QSizePolicy,
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPlainTextEdit, QFrame, QGridLayout
 )
 from PyQt6.QtCore import Qt, QTimer
@@ -49,9 +50,16 @@ class StatusPanel(QWidget):
         layout.setSpacing(4)
 
         # Current values grid
+        # Fixed height: the history below takes all the room left, and grows
+        # with the window. The selector names this frame only -- a bare
+        # « QFrame » rule also matched every QLabel inside (a QLabel is a
+        # QFrame) and boxed each value in its own border.
         values_frame = QFrame()
+        values_frame.setObjectName("valeurs")
+        values_frame.setSizePolicy(QSizePolicy.Policy.Preferred,
+                                   QSizePolicy.Policy.Fixed)
         values_frame.setStyleSheet(
-            f"QFrame {{ background-color: {Colors.BG_MEDIUM.name()}; "
+            f"QFrame#valeurs {{ background-color: {Colors.BG_MEDIUM.name()}; "
             f"border: 1px solid {Colors.BORDER.name()}; border-radius: 4px; }}"
         )
         values_layout = QGridLayout(values_frame)
@@ -123,14 +131,13 @@ class StatusPanel(QWidget):
         self._log_text = QPlainTextEdit()
         self._log_text.setReadOnly(True)
         self._log_text.setFont(QFont('Source Code Pro', 9))
-        self._log_text.setMaximumHeight(200)
         self._log_text.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
         self._log_text.setStyleSheet(
             f"QPlainTextEdit {{ background-color: {Colors.BG_GRAPH.name()}; "
             f"color: {Colors.TEXT_SECONDARY.name()}; "
             f"border: 1px solid {Colors.BORDER.name()}; }}"
         )
-        layout.addWidget(self._log_text)
+        layout.addWidget(self._log_text, 1)
 
         # Message buffer for efficient batch insertion
         self._message_lines: list[str] = []
