@@ -173,7 +173,7 @@ powershell -NoProfile -Command ^
     "}"
 
 if not exist "%PY_INSTALLER%" (
-    :: Fallback to curl (has its own progress bar)
+    rem Fallback to curl - has its own progress bar
     echo  [INFO] Trying curl fallback...
     curl -L --progress-bar -o "%PY_INSTALLER%" "%PY_URL%"
 )
@@ -226,7 +226,7 @@ echo  [Step 2/4] Checking virtual environment... / Verification environnement vi
 set "VENV_OK=0"
 
 if exist "!VENV_DIR!\Scripts\python.exe" (
-    :: Verify venv is functional (not corrupted / not pointing to old Python)
+    rem Verify venv is functional - not corrupted / not pointing to old Python
     "!VENV_DIR!\Scripts\python.exe" -c "import sys; exit(0 if sys.version_info >= (3,10) else 1)" >nul 2>&1
     if !errorlevel! equ 0 (
         set "VENV_OK=1"
@@ -273,8 +273,8 @@ set "NEED_INSTALL=0"
 if not exist "!STAMP!" (
     set "NEED_INSTALL=1"
 ) else (
-    :: Compare requirements.txt content with stamp (stamp is a copy of requirements.txt)
-    :: This is robust regardless of locale, network path, or timezone
+    rem Compare requirements.txt content with stamp - stamp is a copy of requirements.txt
+    rem This is robust regardless of locale, network path, or timezone
     fc /b "!REQ_FILE!" "!STAMP!" >nul 2>&1
     if !errorlevel! neq 0 (
         echo             Requirements changed / Dependances modifiees
@@ -298,7 +298,7 @@ if "!NEED_INSTALL!"=="1" (
 
     "!PIP_CMD!" install --upgrade pip --quiet >nul 2>&1
 
-    :: Install dependencies
+    rem Install dependencies
     "!PIP_CMD!" install -r "!REQ_FILE!"
     if !errorlevel! neq 0 (
         echo.
@@ -309,7 +309,7 @@ if "!NEED_INSTALL!"=="1" (
         exit /b 1
     )
 
-    :: Save a copy of requirements.txt as stamp (for content comparison next time)
+    rem Save a copy of requirements.txt as stamp - for content comparison next time
     copy /y "!REQ_FILE!" "!STAMP!" >nul 2>&1
 
     echo.

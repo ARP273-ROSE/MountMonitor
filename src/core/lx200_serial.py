@@ -100,7 +100,7 @@ class LX200SerialConnection(LX200Connection):
     # Maximum response size to prevent unbounded buffer growth (security)
     _MAX_RESPONSE_BYTES = 4096
 
-    def _send_command(self, command: str) -> Optional[str]:
+    def _send_command(self, command: str, fixed_len: Optional[int] = None) -> Optional[str]:
         """Send a command via serial and receive the response.
 
         Commands start with : and responses end with #.
@@ -110,7 +110,7 @@ class LX200SerialConnection(LX200Connection):
             return None
 
         with self._io_lock:
-            return self._send_command_locked(command)
+            return self._send_command_locked(command, fixed_len)
 
     def _send_no_reply(self, command: str) -> None:
         if not self._serial or not self._connected:
@@ -122,7 +122,8 @@ class LX200SerialConnection(LX200Connection):
                 logger.warning(f"Serial communication error: {e}")
                 self._connected = False
 
-    def _send_command_locked(self, command: str) -> Optional[str]:
+    def _send_command_locked(self, command: str,
+                             fixed_len: Optional[int] = None) -> Optional[str]:
         try:
             self._serial.reset_input_buffer()
             self._serial.write(command.encode('ascii'))
@@ -138,7 +139,10 @@ class LX200SerialConnection(LX200Connection):
                     logger.warning("Serial read timeout")
                     return None
                 response += byte
-                if byte == b'#':
+                if fixed_len is not None:
+                    if len(response) >= fixed_len:
+                        break      # :GREF#, :Gdat#... answer without '#'
+                elif byte == b'#':
                     break
                 if len(response) > self._MAX_RESPONSE_BYTES:
                     logger.warning(f"Serial response exceeded {self._MAX_RESPONSE_BYTES} bytes")

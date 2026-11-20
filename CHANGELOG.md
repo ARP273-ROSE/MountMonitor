@@ -6,6 +6,32 @@ behaviour changes, the patch number when only a defect is fixed.
 
 Figures quoted below were measured on real sessions, not estimated.
 
+## 4.4.2 — 2026-11-20
+
+Nicolàs de Hilster's test of 4.4.1 on his 10Micron GM3000HPS (firmware 3.2.5):
+the solar tracking alert never came, and the link timed out every minute.
+
+### Fixed
+- **Mount checks made the link time out**: `:GREF#` (refraction on/off) and
+  `:Gdat#` (dual tracking) answer one character, '0' or '1', WITHOUT the
+  closing '#' (MountWizzard4 lists them as COMMAND_B). MM4 waited for the '#':
+  5 s timeout and reconnection at every check -- every minute with a 1 min
+  check interval. They are now read as one character.
+- **Shifted replies**: the late '1' of such an answer was read as the start of
+  the next reply, shifting the ones after it -- the status read PARKED while
+  the mount tracked, so the tracking-rate check was skipped and the solar
+  rate never raised the alert. Leftover bytes are now dropped before each
+  command.
+- **GPS check used a command that does not exist** (`:gps#`): now `:gtgpps#`
+  from firmware 3.2.5, `:gtg#` before.
+- **The `:PRlist#` check after each slew** (follow object, tracking
+  correction, tracking speed) followed up with `:PRnext#`, a command we could
+  not confirm; it is switched off until the exact sequence is confirmed. The
+  tracking rate is checked through `:GT#`.
+- **launch.bat** printed "The system cannot find the drive specified": `::`
+  comments inside parenthesised blocks are read as drive labels by cmd.exe;
+  they are `rem` now.
+
 ## 4.4.1 — 2026-11-20
 
 ### Changed
