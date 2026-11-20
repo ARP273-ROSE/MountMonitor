@@ -28,6 +28,12 @@ the solar tracking alert never came, and the link timed out every minute.
   correction, tracking speed) followed up with `:PRnext#`, a command we could
   not confirm; it is switched off until the exact sequence is confirmed. The
   tracking rate is checked through `:GT#`.
+- **Settings file versioned** (suggestion of Nicolàs de Hilster): it now
+  carries `settings_version`. A file from an older MountMonitor is converted
+  step by step at load (files without a number count as version 0); one from
+  a newer version is left untouched. An unreadable file is kept aside as
+  `settings.json.corrupt` instead of being overwritten by the defaults at the
+  next save. The obsolete `tolerance_as_ha_seconds` key is dropped.
 - **launch.bat** printed "The system cannot find the drive specified": `::`
   comments inside parenthesised blocks are read as drive labels by cmd.exe;
   they are `rem` now.

@@ -684,7 +684,6 @@ class MainWindow(QMainWindow):
         self._status_panel.set_tolerances(
             self._settings.get("tolerance_ra_arcsec"),
             self._settings.get("tolerance_dec_arcsec"),
-            as_ha_seconds=self._settings.get("tolerance_as_ha_seconds"),
         )
 
         self._refresh_timer.start()
@@ -2122,7 +2121,6 @@ class MainWindow(QMainWindow):
         self._status_panel.set_tolerances(
             self._settings.get("tolerance_ra_arcsec"),
             self._settings.get("tolerance_dec_arcsec"),
-            as_ha_seconds=self._settings.get("tolerance_as_ha_seconds"),
         )
 
     # ── Graph dump ─────────────────────────────────────────────
