@@ -79,6 +79,8 @@ DEFAULTS = {
     "seismometer_range": 2000,
 
     # Mount checks
+    "mount_check_interval_min": 5,         # mount settings checked again (0 = off)
+    "mount_alert_popup": True,             # alert window when a setting is wrong
     "check_refraction_status": True,       # :GREF# correction on/off
     "check_refraction_status_value": "enabled",
     "check_refraction_enabled": True,      # :WSG# update mode

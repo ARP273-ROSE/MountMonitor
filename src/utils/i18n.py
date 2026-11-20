@@ -18,6 +18,16 @@ TX = {
         "en": "Show right ascension in degrees rather than hours",
         "fr": "Afficher l'ascension droite en degrés plutôt qu'en heures",
         "nl": "De rechte klimming in graden tonen in plaats van in uren"},
+    "mount_alert_disable": {
+        "en": "This window can be switched off in Preferences > Miscellaneous.",
+        "fr": "Cette fenêtre peut être désactivée dans Préférences > Divers.",
+        "nl": "Dit venster kan worden uitgeschakeld in Voorkeuren > Overig."},
+    "pref_alert_popup": {
+        "en": "Show an alert window when a mount setting is wrong",
+        "fr": "Afficher une fenêtre d'alerte quand un réglage de la monture est faux",
+        "nl": "Een waarschuwingsvenster tonen als een instelling van de montering fout is"},
+    "pref_check_interval": {"en": "Check again every", "fr": "Revérifier toutes les",
+                            "nl": "Opnieuw controleren elke"},
     "sei_pas_de_port": {
         "en": "Seismometer enabled but no serial port chosen (Preferences > Auxiliary).",
         "fr": "Sismomètre activé mais aucun port série choisi (Préférences > Auxiliaire).",
@@ -336,9 +346,9 @@ TX = {
         "fr": "Fréquence d'échantillonnage sismomètre",
         "nl": "Bemonsteringsfrequentie van de seismometer"},
     "tt_sei_offset": {
-        "en": "Offset to center data around zero",
-        "fr": "Décalage pour centrer les données sur zéro",
-        "nl": "Verschuiving om de gegevens rond nul te centreren"},
+        "en": "Added to every reading to centre the data on zero (as in MountMonitor 3): a sensor resting around -300 needs 300.",
+        "fr": "Ajouté à chaque mesure pour centrer les données sur zéro (comme MountMonitor 3) : un capteur au repos vers -300 demande 300.",
+        "nl": "Opgeteld bij elke meting om de gegevens rond nul te centreren (zoals MountMonitor 3): een sensor die rond -300 rust, vraagt 300."},
     "tt_sei_range": {
         "en": "Vertical range for seismic graph",
         "fr": "Plage verticale du graphe sismique",
@@ -640,6 +650,8 @@ TX = {
     "pref_running_range": {"en": "Running range (s)", "fr": "Plage glissante (s)", "nl": "Lopend bereik (s)"},
     "pref_reference": {"en": "Reference", "fr": "Référence", "nl": "Referentie"},
     "pref_tolerance_ra": {"en": "RA tolerance (arcsec)", "fr": "Tolérance AD (arcsec)", "nl": "RK-tolerantie (boogseconden)"},
+    "pref_tolerance_ra_s": {"en": "RA tolerance (seconds of time)", "fr": "Tolérance AD (secondes de temps)",
+                            "nl": "RK-tolerantie (tijdseconden)"},
     "pref_tolerance_dec": {"en": "DEC tolerance (arcsec)", "fr": "Tolérance DÉC (arcsec)", "nl": "DEC-tolerantie (boogseconden)"},
     "pref_log_mode": {"en": "Logging", "fr": "Journalisation", "nl": "Loggen"},
     "pref_ntp_enabled": {"en": "Use NTP server", "fr": "Utiliser un serveur NTP", "nl": "NTP-server gebruiken"},

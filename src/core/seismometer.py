@@ -138,7 +138,11 @@ class Seismometer:
                     raw_val = valeur_de_ligne(line)
                     if raw_val is None:
                         continue
-                    offset_val = raw_val - self._offset
+                    # Centred = raw + offset, as in MountMonitor 3
+                    # (addToSeismicArray: value + m_SeismometerOffset). The
+                    # sign was reversed: a sensor reading around -300 with an
+                    # offset of 300 sat at -600 instead of 0.
+                    offset_val = raw_val + self._offset
                     values.append(offset_val)
                     freq_count += 1
                     with self._lock:

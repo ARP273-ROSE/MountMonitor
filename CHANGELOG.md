@@ -6,6 +6,32 @@ behaviour changes, the patch number when only a defect is fixed.
 
 Figures quoted below were measured on real sessions, not estimated.
 
+## 4.3.1 — 2026-11-20
+
+Nicolàs de Hilster's test of 4.3.0 on his 10Micron.
+
+### Fixed
+- **A mount left in solar mode raised no alarm**: the tracking-rate check
+  accepted any `:GT#` answer starting with "60" -- solar (60.3) passed for
+  sidereal (60.2). The answer is now classified (60.2 sidereal, 60.3 solar,
+  62.4 lunar, as MountWizzard4 reads them; ASCOM names as before).
+- **Seismometer offset sign**: MountMonitor 3 centres the data as reading +
+  offset; MM4 subtracted it, so a sensor resting near -300 with an offset of
+  300 sat at -600. The .sei columns keep the MM3 order (raw, centred).
+- **RA tolerance label** said "arcsec" while the value was in seconds of
+  time; it now names the unit in use.
+
+### Changed
+- **Mount settings checked every 5 minutes** (adjustable, 0 = off), not only
+  at connection and after a slew. One alert window, on top of the other
+  programs and flashing in the taskbar, updated rather than stacked, closed by
+  itself once the mount is put right, and switchable off in Preferences. The
+  history records a check only when its outcome changes.
+- **Graphs aligned**: same left and right axis widths on every graph, so a
+  spike in RA sits right above the same instant in the time graph.
+- **Time graph**: the mount-loop curve is drawn half-transparent under the
+  green PC-loop curve.
+
 ## 4.3.0 — 2026-11-20
 
 Second comparison with MountMonitor 3 by Nicolàs de Hilster, side by side on a
