@@ -432,8 +432,14 @@ gereedgezet en start zodra de montering begint te volgen.
 
 \section{De logger gereedzetten}
 
-Drie instellingen sturen de opnameknop aan. Alle drie staan \textbf{standaard
-aan}.
+Deze instellingen staan samen in \textbf{Voorkeuren > Algemeen > Onbemande
+werking}, en onder een rechtsklik op de opnameknop. Voor een observatorium-pc die
+alles bij het opstarten start: MountMonitor starten met \texttt{--connect} (of
+\emph{Met de montering verbinden zodra MountMonitor opent} aanvinken); het
+probeert opnieuw tot de montering antwoordt en zet zichzelf gereed. De drie
+instellingen hieronder staan \textbf{standaard aan}. De bestanden worden
+minstens elke 5~s naar de schijf geschreven: een stroomonderbreking kost
+hooguit enkele seconden.
 
 \textbf{Registratie starten zodra de montering begint te volgen.} De knop zet
 de logger dan \emph{gereed} in plaats van hem te starten: er wordt niets
@@ -461,7 +467,10 @@ voorbijgaande aard zijn --- een meridiaanommekeer, een autofocus, een zwenking
 tussen twee doelen --- en afbreken bij het eerste meetpunt zou bij elke dither
 een gat slaan.
 
-\textbf{De nacht beëindigen bij zonsopkomst.} Een nacht is één geheel:
+\textbf{Alleen 's nachts: opnemen na zonsondergang, de nacht afsluiten bij
+zonsopkomst.} Uitgevinkt, voor sessies overdag (zonnewaarnemingen), start de
+registratie zodra de montering volgt en loopt ze tot u haar stopt. Aangevinkt
+is een nacht één geheel:
 parkeert de montering om 02~u en gaat zij om 03~u verder, dan wordt de
 registratie onderbroken en hervat \emph{in hetzelfde bestand}. Alleen het
 daglicht sluit de sessie af en zet het rapport in gang --- en alleen wanneer de

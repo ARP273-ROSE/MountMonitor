@@ -14,6 +14,7 @@ Stored in a Logs/ subdirectory.
 
 import os
 import tempfile
+import time
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -21,6 +22,8 @@ from typing import Optional, TextIO
 
 from ..models.mount_data import MountSample, MountStatus, TimeSample, SessionInfo, EnvironmentSample, PierSide
 from ..utils.coordinates import format_ra, format_dec
+
+FLUSH_S = 5.0
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +86,10 @@ class FileLogger:
         # Buffered flush: avoid flushing every single write (perf on NAS)
         self._write_count: int = 0
         self._flush_interval: int = 20  # Flush every N writes
+        # ... and at least every FLUSH_S seconds, down to the disk (fsync):
+        # a power cut at the observatory then costs a few seconds, not
+        # whatever the operating system still held in its cache.
+        self._dernier_flush: float = time.monotonic()
 
         # Tracking-only statistics for session summary
         self._tracking_count: int = 0
@@ -135,7 +142,12 @@ class FileLogger:
         try:
             file_obj.write(data)
             self._write_count += 1
-            if self._write_count >= self._flush_interval:
+            maintenant = time.monotonic()
+            if maintenant - self._dernier_flush >= FLUSH_S:
+                self._flush_all(sur_disque=True)
+                self._write_count = 0
+                self._dernier_flush = maintenant
+            elif self._write_count >= self._flush_interval:
                 self._flush_all()
                 self._write_count = 0
             return True
@@ -153,15 +165,18 @@ class FileLogger:
             self._io_error_logged = True
             self.erreur_ecriture = str(e)
 
-    def _flush_all(self):
-        """Flush all open log files to disk."""
+    def _flush_all(self, sur_disque: bool = False):
+        """Flush all open log files; with `sur_disque`, to the disk itself."""
         for f in [self._log_file, self._dat_file, self._dti_file,
                   self._sei_file, self._fft_file, self._env_file]:
             if f:
                 try:
                     f.flush()
-                except OSError as e:
-                    self._signaler_erreur(e)
+                    if sur_disque:
+                        os.fsync(f.fileno())
+                except (OSError, ValueError) as e:
+                    if isinstance(e, OSError):
+                        self._signaler_erreur(e)
 
     def _reset_minmax(self):
         """Reset running min/max statistics."""

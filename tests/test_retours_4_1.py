@@ -113,3 +113,43 @@ def test_panneau_droit_historique_extensible(fenetre):
     from PyQt6.QtWidgets import QFrame
     cadre = p.findChild(QFrame, "valeurs")
     assert cadre.sizePolicy().verticalPolicy() == QSizePolicy.Policy.Fixed
+
+
+def test_fichiers_ecrits_sur_disque_toutes_les_5_s(tmp_path, monkeypatch):
+    from src.logging_module import file_logger as fl
+    appels = []
+    monkeypatch.setattr(fl.os, "fsync", lambda fd: appels.append(fd))
+    lg = fl.FileLogger.__new__(fl.FileLogger)
+    f = open(tmp_path / "x.dat", "w")
+    for nom in ("_log_file", "_dti_file", "_sei_file", "_fft_file", "_env_file"):
+        setattr(lg, nom, None)
+    lg._dat_file = f
+    lg._write_count, lg._flush_interval = 0, 20
+    lg._dernier_flush = fl.time.monotonic() - 6
+    assert lg._safe_write(f, "a\n")
+    assert appels, "pas d'écriture forcée sur le disque après 5 s"
+    f.close()
+
+
+def test_options_automatiques_au_premier_onglet_et_au_clic_droit(fenetre, monkeypatch):
+    from src.gui.preferences_dialog import PreferencesDialog
+    from src.utils.i18n import T
+    from PyQt6.QtWidgets import QGroupBox
+    d = PreferencesDialog(fenetre._settings, fenetre)
+    titres = [g.title() for g in d.findChildren(QGroupBox)]
+    assert T("pref_unattended") in titres
+    d.close()
+    # « La nuit seulement » décoché en plein jour, monture qui suit : départ immédiat
+    from src.models.mount_data import MountStatus
+    w = fenetre
+    w._prev_mount_status = MountStatus.TRACKING
+    partis = []
+    monkeypatch.setattr(w, "_start_logging", lambda: partis.append(1))
+    monkeypatch.setattr(w._settings, "set", lambda k, v: None)
+    jour = {"v": True}
+    monkeypatch.setattr(w, "_fait_jour", lambda: jour["v"])
+    w._armer()
+    assert not partis
+    jour["v"] = False
+    w._option_auto("close_at_sunrise", False)
+    assert partis
