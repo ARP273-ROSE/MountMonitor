@@ -213,7 +213,7 @@ def test_controles_dans_l_ordre_de_mm3_et_refraction_separee(fenetre):
         it = grille.itemAtPosition(ligne, 0)
         if it and isinstance(it.widget(), QCheckBox):
             ordre.append(it.widget().text())
-    assert ordre == attendus
+    assert ordre[:5] == attendus
     d.close()
     # correction de réfraction coupée : un seul avertissement, pas le mode
     w = fenetre
@@ -237,3 +237,61 @@ def test_ra_en_secondes_de_temps_ou_en_secondes_d_arc(fenetre, monkeypatch):
 def test_courbe_verte_au_dessus_dans_le_graphe_du_temps(fenetre):
     g = fenetre._time_graph
     assert g._pc_loop_curve.zValue() > max(g._mount_loop_curve.zValue(), g._diff_curve.zValue())
+
+
+# ── Retours du 20/11/2026 soir (4.3.0 sur sa monture) ────────────────────
+
+def test_vitesse_solaire_n_est_plus_prise_pour_siderale():
+    from src.core.mount_connection import classer_vitesse
+    assert classer_vitesse("60.2") == "sidereal"
+    assert classer_vitesse("60.3") == "solar"          # passait pour sidéral
+    assert classer_vitesse("62.4#") == "lunar"
+    assert classer_vitesse("Solar") == "solar"         # ASCOM
+    assert classer_vitesse("59.1") is None
+    assert classer_vitesse(None) is None
+
+
+def test_alerte_vitesse_unique_et_historique_sans_repetition(fenetre, monkeypatch):
+    from src.utils.i18n import T
+    w = fenetre
+    vals = {"check_tracking_rate": True, "check_tracking_rate_value": "sidereal",
+            "check_refraction_status": False, "check_refraction_enabled": False,
+            "check_gps_sync": False, "check_dual_tracking": False, "mount_alert_popup": True}
+    orig = w._settings.get
+    monkeypatch.setattr(w._settings, "get", lambda k: vals.get(k, orig(k)))
+    msgs = []
+    w._status_panel.add_message = lambda m, c=None: msgs.append(m)
+    for _ in range(3):                                  # contrôle périodique
+        w._juger_controles({"rate": "60.3"}, True)
+    assert sum(T("val_solar") in m for m in msgs) == 1  # une ligne, pas trois
+    boite = w._boite_alerte
+    assert boite.isVisible() and T("val_solar") in boite.text()
+    w._juger_controles({"rate": "60.2"}, True)          # corrigé au clavier
+    assert not boite.isVisible()
+
+
+def test_sismometre_centre_comme_mm3():
+    from src.core.seismometer import Seismometer
+    s = Seismometer(offset=300)
+    recus = []
+    s.set_callback(lambda t, v: recus.extend(v))
+
+    class Port:
+        def __init__(self):
+            self.donnees = [b"-354\r\n-344\r\n-256\r\n"]
+            self.in_waiting = 0
+        def read(self, n):
+            s._running = bool(self.donnees) and s._running
+            return self.donnees.pop(0) if self.donnees else b""
+    s._serial = Port()
+    s._running = True
+    s._read_loop()
+    assert s.get_recent_data(3) == [-54.0, -44.0, 44.0]
+
+
+def test_graphes_alignes_a_droite(fenetre):
+    from src.gui.graph_widgets import LARGEUR_AXE_DROIT, LARGEUR_AXE_GAUCHE
+    for g in (fenetre._ra_graph, fenetre._dec_graph, fenetre._time_graph, fenetre._seismic_graph):
+        pi = g._plot.getPlotItem()
+        assert pi.getAxis('right').fixedWidth == LARGEUR_AXE_DROIT
+        assert pi.getAxis('left').fixedWidth == LARGEUR_AXE_GAUCHE

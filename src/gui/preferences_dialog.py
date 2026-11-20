@@ -287,7 +287,10 @@ class PreferencesDialog(QDialog):
                            float(self._settings.get("tolerance_ra_arcsec") or 1.5))
         self._ra_degres.toggled.connect(
             lambda on: self._unite_tol_ra(on, self._tol_ra_arcsec()))
-        tol_form.addRow(T("pref_tolerance_ra"), self._tol_ra)
+        self._tol_ra_label = QLabel()
+        tol_form.addRow(self._tol_ra_label, self._tol_ra)
+        self._tol_ra_label.setText(T("pref_tolerance_ra" if self._ra_degres.isChecked()
+                                     else "pref_tolerance_ra_s"))
 
         self._tol_dec = QDoubleSpinBox()
         self._tol_dec.setRange(0.05, 60.0)
@@ -562,6 +565,17 @@ class PreferencesDialog(QDialog):
         self._tracking_rate_value.setToolTip(T("tt_chk_rate_val"))
         checks_grid.addWidget(self._tracking_rate_value, 5, 1)
 
+        self._alert_popup = QCheckBox(T("pref_alert_popup"))
+        self._alert_popup.setChecked(bool(self._settings.get("mount_alert_popup")))
+        checks_grid.addWidget(self._alert_popup, 6, 0, 1, 2)
+        self._check_interval = QSpinBox()
+        self._check_interval.setRange(0, 120)
+        self._check_interval.setSuffix(" min")
+        self._check_interval.setSpecialValueText("—")
+        self._check_interval.setValue(int(self._settings.get("mount_check_interval_min") or 0))
+        checks_grid.addWidget(QLabel(T("pref_check_interval")), 7, 0)
+        checks_grid.addWidget(self._check_interval, 7, 1)
+
         layout.addWidget(checks_group)
         layout.addStretch()
         return widget
@@ -570,14 +584,16 @@ class PreferencesDialog(QDialog):
         """RA tolerance in arcseconds of RA (degrees mode) or seconds of
         time (hours mode, 15 times smaller), like MountMonitor 3."""
         self._tol_ra_en_s = not en_degres
+        if getattr(self, '_tol_ra_label', None) is not None:
+            self._tol_ra_label.setText(T("pref_tolerance_ra" if en_degres else "pref_tolerance_ra_s"))
         if en_degres:
             self._tol_ra.setDecimals(2)
             self._tol_ra.setRange(0.05, 60.0)
             self._tol_ra.setSuffix("\"")
             self._tol_ra.setValue(arcsec)
         else:
-            self._tol_ra.setDecimals(3)
-            self._tol_ra.setRange(0.003, 4.0)
+            self._tol_ra.setDecimals(4)
+            self._tol_ra.setRange(0.0033, 4.0)
             self._tol_ra.setSuffix(" s")
             self._tol_ra.setValue(arcsec / 15.0)
 
@@ -674,6 +690,8 @@ class PreferencesDialog(QDialog):
         s.set("seismometer_range", self._sei_range.value())
 
         # Misc
+        s.set("mount_alert_popup", self._alert_popup.isChecked())
+        s.set("mount_check_interval_min", self._check_interval.value())
         s.set("check_refraction_status", self._check_refr_status.isChecked())
         s.set("check_refraction_status_value", self._refr_status_value.currentData())
         s.set("check_refraction_enabled", self._check_refraction.isChecked())

@@ -213,6 +213,7 @@ class MainWindow(QMainWindow):
         self._set_vertical_zoom(self._settings.get("vertical_zoom_mode") or "data",
                                 enregistrer=False)
         self._brancher_menus_graphes()
+        self._armer_controle_periodique()
 
         self._update_title()
 
@@ -982,12 +983,13 @@ class MainWindow(QMainWindow):
         # glissant courant). Sans cet appel le fichier restait vide.
         if self._logging_active and values:
             # Le module sismomètre livre des valeurs déjà recentrées
-            # (raw - offset) : on reconstruit le brut pour la 1re colonne.
+            # (brut + offset, comme MM3) : on reconstruit le brut pour la
+            # 1re colonne.
             offset = float(self._settings.get("seismometer_offset") or 0.0)
             stdev_arr = self._processor.seismic_buffer.get_stdev_array()
             stdev = float(stdev_arr[-1]) if len(stdev_arr) else 0.0
             for t, v in zip(self._processor.seismic_times(timestamp, len(values)), values):
-                self._file_logger.log_seismic_data(t, v + offset, v, stdev)
+                self._file_logger.log_seismic_data(t, v - offset, v, stdev)
 
     # ── Graph refresh ────────────────────────────────────────────
 
@@ -2117,6 +2119,7 @@ class MainWindow(QMainWindow):
         self._dec_graph.set_tolerance(self._settings.get("tolerance_dec_arcsec"))
 
         self._status_panel.set_ra_en_degres(self._settings.get("ra_in_degrees"))
+        self._armer_controle_periodique()
         self._appliquer_sismometre()
         self._refresh_graphs_now()
 
@@ -2177,6 +2180,24 @@ class MainWindow(QMainWindow):
         self._status_panel.add_message(T("graphs_exported"))
 
     # ── Mount checks ────────────────────────────────────────────
+
+    def _controle_periodique(self):
+        """Mount settings checked again every few minutes, not only at
+        connection and after a slew: a setting changed on the keypad in the
+        middle of a target went unnoticed until the next slew."""
+        if self._connected and self._connection:
+            self._run_mount_checks()
+
+    def _armer_controle_periodique(self):
+        minutes = float(self._settings.get("mount_check_interval_min") or 0)
+        t = getattr(self, '_timer_controles', None)
+        if t is None:
+            t = self._timer_controles = QTimer(self)
+            t.timeout.connect(self._controle_periodique)
+        if minutes > 0:
+            t.start(int(minutes * 60_000))
+        else:
+            t.stop()
 
     def _run_mount_checks(self):
         """Run mount setting checks based on preferences.
@@ -2268,31 +2289,44 @@ class MainWindow(QMainWindow):
             expected_val = self._settings.get("check_tracking_rate_value")
             rate = r.get("rate")
             if rate is not None:
-                rate_lower = str(rate).lower().strip()
-                if expected_val.lower() in rate_lower or rate_lower.startswith("60"):
-                    ok_checks.append(T("chk_rate_ok").format(v=rate) + " \u2713")
+                from ..core.mount_connection import classer_vitesse
+                nom = classer_vitesse(rate)
+                lu = T(f"val_{nom}") if nom else f"{rate}"
+                if nom == (expected_val or "").lower():
+                    ok_checks.append(T("chk_rate_ok").format(v=lu) + " \u2713")
                 else:
-                    warnings.append(T("chk_rate_ko").format(a=rate, e=expected_val))
+                    warnings.append(T("chk_rate_ko").format(a=lu, e=T(f"val_{expected_val}")))
 
-        # Display results
-        for msg in ok_checks:
-            self._status_panel.add_message(msg, Colors.STATUS_OK)
-            if self._logging_active:
-                self._file_logger.log_event(f"Check OK: {msg}")
-
-        if warnings:
+        # Display results. The periodic check (every few minutes) writes to
+        # the history only when the outcome changes, not every time.
+        bilan = (tuple(ok_checks), tuple(warnings))
+        nouveau = bilan != getattr(self, '_dernier_bilan_controles', None)
+        self._dernier_bilan_controles = bilan
+        if nouveau:
+            for msg in ok_checks:
+                self._status_panel.add_message(msg, Colors.STATUS_OK)
+                if self._logging_active:
+                    self._file_logger.log_event(f"Check OK: {msg}")
             for msg in warnings:
                 self._status_panel.add_message(f"\u26a0 {msg}", Colors.STATUS_WARNING)
                 if self._logging_active:
                     self._file_logger.log_event(f"Check WARNING: {msg}")
+        if warnings:
             self._alerte_monture(warnings)
+        else:
+            boite = getattr(self, "_boite_alerte", None)
+            if boite is not None and boite.isVisible():
+                boite.hide()          # put right: the alert goes by itself
 
     def _alerte_monture(self, warnings: list):
         """ONE non-modal box, updated in place.
 
         A modal box per end of slew piled up all night in front of an empty
         chair, each one a nested event loop."""
-        texte = T("mount_alert_text") + "\n\n" + "\n".join(f"\u26a0 {w}" for w in warnings)
+        if not self._settings.get("mount_alert_popup"):
+            return
+        texte = (T("mount_alert_text") + "\n\n" + "\n".join(f"\u26a0 {w}" for w in warnings)
+                 + "\n\n" + T("mount_alert_disable"))
         boite = getattr(self, "_boite_alerte", None)
         if boite is None:
             boite = QMessageBox(self)
@@ -2300,10 +2334,17 @@ class MainWindow(QMainWindow):
             boite.setWindowTitle(T("mount_alert_title"))
             boite.setStandardButtons(QMessageBox.StandardButton.Ok)
             boite.setModal(False)
+            # On top of the other windows, even when MountMonitor is behind
+            # NINA: a wrong mount setting spoils the night, it must be seen.
+            boite.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
             self._boite_alerte = boite
         boite.setText(texte)
         boite.show()
         boite.raise_()
+        boite.activateWindow()
+        # Taskbar / dock flashes until the window is looked at.
+        QApplication.alert(self, 0)
+        QApplication.alert(boite, 0)
 
     # ── Help ─────────────────────────────────────────────────────
 

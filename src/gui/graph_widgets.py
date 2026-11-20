@@ -56,6 +56,25 @@ _setup_pyqtgraph()
 
 
 
+LARGEUR_AXE_GAUCHE = 70
+LARGEUR_AXE_DROIT = 62
+
+
+def aligner_les_axes(plot):
+    """Same left and right axis widths on every graph, so that the plot areas
+    line up: a spike in RA sits right above the same instant in the time
+    graph (time jumps cause RA jumps). The RA/DEC graphs carry the sigma
+    axis on the right; the others get an empty one of the same width."""
+    pi = plot.getPlotItem()
+    pi.getAxis('left').setWidth(LARGEUR_AXE_GAUCHE)
+    pi.showAxis('right')
+    droit = pi.getAxis('right')
+    droit.setWidth(LARGEUR_AXE_DROIT)
+    droit.setStyle(showValues=False, tickLength=0)
+    droit.setPen(pg.mkPen(None))
+    return droit
+
+
 def accorder_les_axes(plot):
     """Recopie la plage du repere sur les graduations.
 
@@ -325,6 +344,7 @@ class TrackingGraph(QWidget):
 
         # Create plot widget — disable auto-range to prevent signal cascades
         self._plot = pg.PlotWidget()
+        self._axe_droit = aligner_les_axes(self._plot)
         self._plot.setBackground(Colors.BG_GRAPH)
         self._plot.showGrid(x=False, y=True, alpha=0.1)
         self._plot.setTitle(title, color=data_color.name(), size='11pt')
@@ -352,6 +372,7 @@ class TrackingGraph(QWidget):
         pi.showAxis('right')
         pi.scene().addItem(self._vb_sd)
         axe_d = pi.getAxis('right')
+        axe_d.setStyle(showValues=True, tickLength=5)
         axe_d.linkToView(self._vb_sd)
         axe_d.setLabel('σ', units='"', color=Colors.GRAPH_STDEV.name())
         axe_d.enableAutoSIPrefix(False)
@@ -696,6 +717,7 @@ class TimeGraph(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         self._plot = pg.PlotWidget()
+        self._axe_droit = aligner_les_axes(self._plot)
         self._plot.setBackground(Colors.BG_GRAPH)
         self._plot.showGrid(x=False, y=True, alpha=0.1)
         self._plot.setTitle(T("time_graph_title"), color='#aaaaaa', size='11pt')
@@ -723,8 +745,10 @@ class TimeGraph(QWidget):
             pen=pg.mkPen(Colors.GRAPH_TIME_PC, width=1),
             name="PC loop"
         )
+        rouge = QColor(Colors.GRAPH_TIME_MOUNT)
+        rouge.setAlpha(150)      # under the green, without hiding it
         self._mount_loop_curve = self._plot.plot(
-            pen=pg.mkPen(Colors.GRAPH_TIME_MOUNT, width=1),
+            pen=pg.mkPen(rouge, width=1),
             name="Mount loop"
         )
         # Green (PC loop) drawn on top, as in MountMonitor 3: the mount loop
@@ -854,6 +878,7 @@ class SeismicGraph(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         self._plot = pg.PlotWidget()
+        self._axe_droit = aligner_les_axes(self._plot)
         self._plot.setBackground(Colors.BG_GRAPH)
         self._plot.showGrid(x=False, y=True, alpha=0.1)
         self._plot.setTitle(T("seismic_title"), color='#aaaaaa', size='11pt')
@@ -967,6 +992,7 @@ class AxialGraph(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         self._plot = pg.PlotWidget()
+        self._axe_droit = aligner_les_axes(self._plot)
         self._plot.setBackground(Colors.BG_GRAPH)
         self._plot.showGrid(x=False, y=True, alpha=0.1)
         self._plot.setTitle(T("axial_title"), color='#aaaaaa', size='11pt')
