@@ -7,6 +7,7 @@ _current_lang = "en"
 # Translation dictionary: key -> {en: ..., fr: ...}
 TX = {
     # Main window
+    "loop_time": {"en": "Loop time", "fr": "Temps de boucle", "nl": "Lustijd"},
     "open_log_title": {"en": "Open log file", "fr": "Ouvrir un fichier log",
                        "nl": "Logbestand openen"},
     "open_log_filter": {"en": "Data files (*.dat);;All files (*)",

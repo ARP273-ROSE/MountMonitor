@@ -295,3 +295,21 @@ def test_graphs_right_aligned(window):
         pi = g._plot.getPlotItem()
         assert pi.getAxis('right').fixedWidth == RIGHT_AXIS_WIDTH
         assert pi.getAxis('left').fixedWidth == LEFT_AXIS_WIDTH
+
+
+# ── Feedback of 20/11/2026 night: time graph as in MM3 ───────────────────
+
+def test_loop_times_centred_on_their_average(window):
+    from src.gui.graph_widgets import loop_average
+    assert loop_average([990.0, 1010.0], [1000.0, 1000.0]) == pytest.approx(1000.0)
+    assert loop_average(None, []) == 0.0
+    g = window._time_graph
+    t = np.arange(0, 120, 1.0) + 1e6
+    g.update_data(t, -300 + 0 * t, t, 1000 + np.sin(t) * 20, t, 1000 + np.cos(t) * 40,
+                  span_s=120)
+    y = g._pc_loop_curve.yData           # raw data, before clipping
+    assert abs(float(np.mean(y))) < 10                  # centred, not at 1000
+    assert g._right_axis.offset == pytest.approx(1000.0, abs=5)
+    assert g._right_axis.tickStrings([0.0, 100.0], 1, 1) == ["1000", "1100"]
+    (_, _), (y0, y1) = g._plot.getViewBox().viewRange()
+    assert y1 - y0 < 600                                # no 1300 ms stretch

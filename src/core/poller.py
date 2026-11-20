@@ -301,8 +301,12 @@ class MountPoller(QThread):
                 # Compute loop times
                 pc_loop_ms = 0.0
                 mount_loop_ms = 0.0
+                # PC loop = PC time at the :GL# answer minus the previous one,
+                # as in MountMonitor 3 (pcNew - pcOld). It used the start of
+                # the polling cycle, set by the timer: a flat line that hid
+                # the latency jitter the mount loop shows.
                 if self._last_pc_time_for_loop is not None:
-                    pc_loop_ms = (pc_time - self._last_pc_time_for_loop) * 1000.0
+                    pc_loop_ms = (t_mid - self._last_pc_time_for_loop) * 1000.0
 
                 if self._last_mount_time_parsed is not None:
                     mount_dt = mount_seconds - self._last_mount_time_parsed
@@ -321,7 +325,7 @@ class MountPoller(QThread):
 
                 self._last_mount_time_parsed = mount_seconds
 
-        self._last_pc_time_for_loop = pc_time
+        self._last_pc_time_for_loop = t_mid
         self._last_mount_time = mount_time_str
 
         # Get RA
