@@ -49,12 +49,12 @@ class FileLogger:
     """
 
     def __init__(self, base_dir: Optional[Path] = None):
-        self.erreur_ecriture = None   # first write error, for the GUI
+        self.write_error = None   # first write error, for the GUI
         if base_dir is None:
-            # Les fichiers d'une nuit d'acquisition ne vivent pas dans le
-            # dossier d'installation : il est efface a chaque mise a jour.
-            from ..config.paths import dossier_journaux
-            base_dir = dossier_journaux()
+            # An acquisition night's files do not live in the installation
+            # folder: it is wiped on every update.
+            from ..config.paths import logs_folder
+            base_dir = logs_folder()
         self._base_dir = base_dir
         self._base_dir.mkdir(parents=True, exist_ok=True)
 
@@ -89,7 +89,7 @@ class FileLogger:
         # ... and at least every FLUSH_S seconds, down to the disk (fsync):
         # a power cut at the observatory then costs a few seconds, not
         # whatever the operating system still held in its cache.
-        self._dernier_flush: float = time.monotonic()
+        self._last_flush: float = time.monotonic()
 
         # Tracking-only statistics for session summary
         self._tracking_count: int = 0
@@ -142,20 +142,20 @@ class FileLogger:
         try:
             file_obj.write(data)
             self._write_count += 1
-            maintenant = time.monotonic()
-            if maintenant - self._dernier_flush >= FLUSH_S:
-                self._flush_all(sur_disque=True)
+            now = time.monotonic()
+            if now - self._last_flush >= FLUSH_S:
+                self._flush_all(to_disk=True)
                 self._write_count = 0
-                self._dernier_flush = maintenant
+                self._last_flush = now
             elif self._write_count >= self._flush_interval:
                 self._flush_all()
                 self._write_count = 0
             return True
         except OSError as e:
-            self._signaler_erreur(e)
+            self._report_error(e)
             return False
 
-    def _signaler_erreur(self, e: OSError):
+    def _report_error(self, e: OSError):
         """Remember the first write error (disk full, share gone) for the GUI.
 
         Errors used to be swallowed: a full disk lost the rest of the night
@@ -163,20 +163,20 @@ class FileLogger:
         if not getattr(self, '_io_error_logged', False):
             logger.warning(f"I/O error writing log data: {e}")
             self._io_error_logged = True
-            self.erreur_ecriture = str(e)
+            self.write_error = str(e)
 
-    def _flush_all(self, sur_disque: bool = False):
-        """Flush all open log files; with `sur_disque`, to the disk itself."""
+    def _flush_all(self, to_disk: bool = False):
+        """Flush all open log files; with `to_disk`, to the disk itself."""
         for f in [self._log_file, self._dat_file, self._dti_file,
                   self._sei_file, self._fft_file, self._env_file]:
             if f:
                 try:
                     f.flush()
-                    if sur_disque:
+                    if to_disk:
                         os.fsync(f.fileno())
                 except (OSError, ValueError) as e:
                     if isinstance(e, OSError):
-                        self._signaler_erreur(e)
+                        self._report_error(e)
 
     def _reset_minmax(self):
         """Reset running min/max statistics."""
@@ -661,8 +661,8 @@ class FileLogger:
 
         # Top 3 distinct peaks (local maxima), not the main peak and its
         # two neighbouring bins.
-        from ..core.spectre import pics
-        peak_indices = pics(frequencies, magnitudes, n=3)
+        from ..core.spectrum import find_peaks
+        peak_indices = find_peaks(frequencies, magnitudes, n=3)
 
         peaks = []
         for idx in peak_indices:
@@ -763,7 +763,7 @@ class FileLogger:
         except Exception as e:
             logger.warning(f"Session summary not written: {e}")
             if isinstance(e, OSError):
-                self._signaler_erreur(e)
+                self._report_error(e)
         finally:
             self._active = False
             for attr in ['_log_file', '_dat_file', '_dti_file', '_sei_file', '_fft_file', '_env_file']:

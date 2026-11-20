@@ -8,9 +8,8 @@ DEFAULTS = {
     "mount_ip": "192.168.1.1",
     "mount_port": 3492,
     "serial_port": "",
-    # 9600 bauds : la valeur de sortie d'usine des 10Micron. La monture
-    # permet d'en changer dans son menu, et la liaison est alors muette
-    # tant que les deux bouts ne sont pas d'accord.
+    # 9600 baud: the 10Micron factory setting. The mount lets you change it
+    # in its menu, and the link then stays silent until both ends agree.
     "serial_baudrate": 9600,
     "ascom_driver": "",
     "language": "auto",  # auto, fr, en
@@ -23,7 +22,7 @@ DEFAULTS = {
     "tolerance_ra_arcsec": 1.5,
     "tolerance_dec_arcsec": 1.5,
     "tolerance_as_ha_seconds": False,
-    # Afficher l'ascension droite en degres d'arc plutot qu'en heures.
+    # Show right ascension in degrees of arc rather than in hours.
     "ra_in_degrees": False,
     "tolerance_seismic_percent": 5.0,
     "axial_mode": "off",  # off, velocity, displacement
@@ -58,10 +57,9 @@ DEFAULTS = {
     "history_lines": 50,
     "reset_mode": "manual",  # manual, slewing
     # manual, slewing, parking, full
-    # « full » reproduit le comportement du MountMonitor Java : une image
-    # est enregistree chaque fois que la largeur du graphe s'est remplie
-    # de donnees neuves, ce qui laisse un carnet photographique continu
-    # de la nuit.
+    # "full" reproduces the Java MountMonitor behaviour: an image is saved
+    # each time the graph's width has filled with new data, which leaves a
+    # continuous photographic record of the night.
     "dump_mode": "manual",
     "close_files_mode": "manual",  # manual, slewing, parking
 

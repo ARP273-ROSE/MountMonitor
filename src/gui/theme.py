@@ -56,8 +56,8 @@ class Colors:
     BORDER_FOCUS = QColor(80, 130, 200)
 
 
-#: les couleurs de la palette figee, par role (interface_kit.REPLIS)
-COULEURS = {
+#: the colours of the frozen palette, by role (interface_kit.REPLIS)
+COLOURS = {
     "fenetre": Colors.BG_DARK.name(), "texte": Colors.TEXT_PRIMARY.name(),
     "base": Colors.BG_LIGHT.name(), "base_alt": Colors.BG_MEDIUM.name(),
     "bouton": Colors.BG_LIGHT.name(), "texte_bouton": Colors.TEXT_PRIMARY.name(),
@@ -97,23 +97,23 @@ def apply_dark_theme(app: QApplication):
     palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text, Colors.TEXT_MUTED)
     palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText, Colors.TEXT_MUTED)
 
-    # Apparence FIGEE (kit commun, interface_kit) : style Fusion, palette
-    # COMPLETE dans les trois groupes, police embarquee et feuille de style ;
-    # ni le theme clair/sombre du systeme ni ses polices ne s'en melent.
+    # FROZEN appearance (shared kit, interface_kit): Fusion style, COMPLETE
+    # palette in all three groups, embedded font and style sheet; neither
+    # the system light/dark theme nor its fonts get a say.
     try:
         import interface_kit
         from pathlib import Path
-        racine = Path(__file__).resolve().parent.parent.parent
-        interface_kit.appliquer_style(app, COULEURS, polices=racine / "polices",
-                                      famille="Source Sans 3", taille=10, feuille=FEUILLE)
+        root = Path(__file__).resolve().parent.parent.parent
+        interface_kit.appliquer_style(app, COLOURS, polices=root / "polices",
+                                      famille="Source Sans 3", taille=10, feuille=STYLESHEET)
     except Exception:
         app.setStyle("Fusion")
         app.setPalette(palette)
-        app.setStyleSheet(FEUILLE)
+        app.setStyleSheet(STYLESHEET)
 
 
-#: feuille de style de l'application (reglages fins au-dessus de la palette)
-FEUILLE = """
+#: application style sheet (fine-tuning on top of the palette)
+STYLESHEET = """
         QMainWindow {
             background-color: #14141a;
         }

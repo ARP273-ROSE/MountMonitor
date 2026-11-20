@@ -28,10 +28,10 @@ _TARGET_CHANGE_ARCSEC = 300.0     # 5 arcmin from the target = new target
 _MIN_SEGMENT_SAMPLES = 20         # Minimum samples to consider a segment valid
 _REF_WINDOW = 256                 # samples used to refresh the reference position
 _STDEV_SETTLE_S = 60.0            # running-STDEV window: see _settled_stdevs()
-_FUSION_S = 10.0                  # crossings closer than this are one move
-_FENETRE_APRES = 60               # samples examined after a move
-_MARGE_MOUVEMENT = 2              # samples dropped after a move, see jitter()
-_DELAI_APRES_SLEW = 5.0           # seconds ignored when tracking resumes
+_MERGE_S = 10.0                  # crossings closer than this are one move
+_WINDOW_AFTER = 60               # samples examined after a move
+_MOVE_MARGIN = 2              # samples dropped after a move, see jitter()
+_DELAY_AFTER_SLEW = 5.0           # seconds ignored when tracking resumes
 
 # ── Excursion rejection inside a segment ──────────────────────────────────
 # Dithers, re-centering slews and autofocus moves happen WHILE the mount still
@@ -41,14 +41,14 @@ _DELAI_APRES_SLEW = 5.0           # seconds ignored when tracking resumes
 _EXCURSION_ARCSEC = 30.0
 
 
-def _ecart_sans_pente(m: np.ndarray) -> float:
+def _detrended_spread(m: np.ndarray) -> float:
     """Standard deviation around the best straight line."""
     x = np.arange(len(m), dtype=np.float64)
     a, b = np.polyfit(x, m, 1)
     return float(np.std(m - (a * x + b)))
 
 
-def _derouler_heures(secondes):
+def _unwrap_hours(seconds):
     """Seconds since midnight -> monotonic seconds.
 
     Midnight: a backward jump of more than 12 h adds a day. End of daylight
@@ -56,19 +56,19 @@ def _derouler_heures(secondes):
     hour adds an hour. It was missed (the test required MORE than one hour
     backwards), and two real hours were replayed as one: twice the sampling
     rate, every FFT period halved."""
-    sortie = []
-    decalage = 0.0
+    output = []
+    shift = 0.0
     prec = None
-    for t in secondes:
+    for t in seconds:
         if prec is not None:
             d = t - prec
             if d < -43200:
-                decalage += 86400.0
+                shift += 86400.0
             elif -4000.0 < d < -3000.0:
-                decalage += 3600.0
-        sortie.append(t + decalage)
+                shift += 3600.0
+        output.append(t + shift)
         prec = t
-    return sortie
+    return output
 
 
 @dataclass
@@ -93,16 +93,16 @@ class TargetSegment:
     dec_residual: np.ndarray = field(default_factory=lambda: np.array([]))
     # Observing site, read back from the header: decimal degrees, longitude
     # positive east. Needed on replay, when the mount is long gone.
-    mouvements: list = field(default_factory=list)
+    moves: list = field(default_factory=list)
     site_lat: float | None = None
     site_lon: float | None = None
     site_elev: float | None = None
     start_iso: object = None
     excursions_removed: int = 0       # dithers / re-centering excluded from stats
     excursion_max_arcsec: float = 0.0 # largest excursion seen, for the report
-    mouvements: list = field(default_factory=list)   # see _mouvements()
+    moves: list = field(default_factory=list)   # see _mouvements()
 
-    def _paliers(self, dev: np.ndarray) -> np.ndarray:
+    def _plateaus(self, dev: np.ndarray) -> np.ndarray:
         """Indices where the mount was repositioned (dither, re-centering).
 
         Between two exposures the sequencer moves the mount and it STAYS there:
@@ -116,9 +116,9 @@ class TargetSegment:
         d = np.abs(np.diff(np.asarray(dev, dtype=np.float64)))
         # Robust noise scale: most samples are inside a step, so the median
         # absolute difference describes the noise, not the steps.
-        ech = float(np.median(d))
-        seuil = max(8.0 * ech, 0.5)
-        return np.flatnonzero(d > seuil) + 1
+        scale = float(np.median(d))
+        threshold = max(8.0 * scale, 0.5)
+        return np.flatnonzero(d > threshold) + 1
 
     def jitter(self, dev: np.ndarray) -> float:
         """Tracking jitter: the spread the mount shows WHILE it holds a position.
@@ -130,23 +130,23 @@ class TargetSegment:
         dev = np.asarray(dev, dtype=np.float64)
         if len(dev) < 8:
             return float(np.std(dev)) if len(dev) else 0.0
-        bords = np.concatenate(([0], self._paliers(dev), [len(dev)]))
+        edges_idx = np.concatenate(([0], self._plateaus(dev), [len(dev)]))
         # Drop a couple of samples after each step: the move itself is not
         # tracking error and must not count as one. Measured on the
         # 2026-09-22 session the effect is small -- RA unchanged, DEC 5%
         # lower at most -- which is the point: the figure must not depend on
         # how often the sequencer dithers.
-        morceaux = [dev[a + _MARGE_MOUVEMENT:b] if a > 0 else dev[a:b]
-                    for a, b in zip(bords[:-1], bords[1:])
-                    if b - a - (_MARGE_MOUVEMENT if a > 0 else 0) >= 8]
-        if not morceaux:
+        chunks = [dev[a + _MOVE_MARGIN:b] if a > 0 else dev[a:b]
+                    for a, b in zip(edges_idx[:-1], edges_idx[1:])
+                    if b - a - (_MOVE_MARGIN if a > 0 else 0) >= 8]
+        if not chunks:
             return float(np.std(dev))
         # Median of the per-step spreads: robust to the few steps that contain
         # the tail of a move. A straight line is removed from each step
         # first: without dithers (unguided mount) the whole target is one
         # step, and its drift was counted as jitter -- 0.2" read as 5.9",
         # rated BAD.
-        return float(np.median([_ecart_sans_pente(m) for m in morceaux]))
+        return float(np.median([_detrended_spread(m) for m in chunks]))
 
     @property
     def ra_jitter(self) -> float:
@@ -157,34 +157,34 @@ class TargetSegment:
         return self.jitter(self.dec_deviations)
 
     @property
-    def repositionnements(self) -> int:
+    def recentrings(self) -> int:
         """How many times the sequencer moved the mount during this segment."""
-        ra = set(self._paliers(self.ra_deviations).tolist())
-        dec = set(self._paliers(self.dec_deviations).tolist())
+        ra = set(self._plateaus(self.ra_deviations).tolist())
+        dec = set(self._plateaus(self.dec_deviations).tolist())
         # a dither moves both axes: merge indices closer than 3 samples
-        tous = sorted(ra | dec)
+        merged = sorted(ra | dec)
         n = 0
         prec = -10
-        for i in tous:
+        for i in merged:
             if i - prec > 3:
                 n += 1
             prec = i
         return n
 
     @property
-    def amplitude_repositionnement(self) -> float:
+    def recentring_amplitude(self) -> float:
         """Median size of those moves, in arcsec."""
-        idx = sorted(set(self._paliers(self.ra_deviations).tolist())
-                     | set(self._paliers(self.dec_deviations).tolist()))
+        idx = sorted(set(self._plateaus(self.ra_deviations).tolist())
+                     | set(self._plateaus(self.dec_deviations).tolist()))
         if not idx:
             return 0.0
-        sauts = []
+        jumps = []
         for i in idx:
             if 0 < i < len(self.ra_deviations):
-                sauts.append(float(np.hypot(
+                jumps.append(float(np.hypot(
                     self.ra_deviations[i] - self.ra_deviations[i - 1],
                     self.dec_deviations[i] - self.dec_deviations[i - 1])))
-        return float(np.median(sauts)) if sauts else 0.0
+        return float(np.median(jumps)) if jumps else 0.0
 
     def _detrended(self, dev: np.ndarray) -> tuple[np.ndarray, float]:
         """Deviations with the linear drift removed, and that drift in "/h.
@@ -258,7 +258,7 @@ class ParsedSession:
     samples_in_segments: int = 0
     ra_jitter: float = 0.0
     dec_jitter: float = 0.0
-    repositionnements: int = 0
+    recentrings: int = 0
     # Timestamps ALIGNED with ra_deviations / dec_deviations. The plain
     # `timestamps` array holds every sample of the file, while the deviations
     # only hold the samples kept in the segments: plotting one against the
@@ -327,20 +327,20 @@ class ParsedSession:
 
     @property
     def effective_frequency(self) -> float:
-        """Cadence reelle des echantillons, en hertz.
+        """Actual sample rate, in hertz.
 
-        La duree peut valoir zero alors qu'il y a des echantillons : une
-        session tenant dans la meme seconde, un fichier tronque dont toutes
-        les lignes portent la meme heure. La division levait alors une
-        exception au beau milieu de la construction du rapport — et l'ouverture
-        d'un fichier .dat n'est pas protegee : l'application tombait.
+        The duration can be zero even though there are samples: a session
+        fitting within one second, a truncated file whose lines all carry the
+        same time. The division then raised an exception right in the middle
+        of building the report — and opening a .dat file is not guarded: the
+        application went down.
         """
         if len(self.timestamps) < 2:
             return 0.0
-        duree = self.duration_seconds
-        if duree <= 0:
+        duration = self.duration_seconds
+        if duration <= 0:
             return 0.0
-        return (len(self.timestamps) - 1) / duree
+        return (len(self.timestamps) - 1) / duration
 
 
 def _parse_time_to_seconds(t_str: str) -> float:
@@ -427,9 +427,9 @@ def _settled_stdevs(t: np.ndarray, stdevs: np.ndarray,
     # interrupts acquisition, and the window straddles the gap afterwards.
     if len(t) > 2:
         dt = np.diff(t)
-        pas = float(np.median(dt))
-        if pas > 0:
-            for i in np.flatnonzero(dt > 5.0 * pas):
+        step = float(np.median(dt))
+        if step > 0:
+            for i in np.flatnonzero(dt > 5.0 * step):
                 out[(t > t[i]) & (t < t[i + 1] + _STDEV_SETTLE_S)] = 0.0
     # And around every repositioning: the mount is MOVED between exposures,
     # so for one window length afterwards the running STDEV measures the step
@@ -437,15 +437,15 @@ def _settled_stdevs(t: np.ndarray, stdevs: np.ndarray,
     # jitter already applies by splitting on steps.
     if dev is not None and len(dev) == len(t) > 8:
         d = np.abs(np.diff(np.asarray(dev, dtype=np.float64)))
-        ech = float(np.median(d))
-        seuil = max(8.0 * ech, 0.5)
-        for i in np.flatnonzero(d > seuil):
+        scale = float(np.median(d))
+        threshold = max(8.0 * scale, 0.5)
+        for i in np.flatnonzero(d > threshold):
             out[(t >= t[i]) & (t < t[i] + _STDEV_SETTLE_S)] = 0.0
     return out
 
 
 @dataclass
-class Mouvement:
+class Move:
     """One commanded move: a dither, a re-centering, or something else.
 
     Raw threshold crossings are NOT movements. A single re-centering of 70"
@@ -455,16 +455,16 @@ class Mouvement:
     0.79" when the real median move was 7.9" -- an order of magnitude, and
     in the flattering direction.
     """
-    debut: int = 0
-    fin: int = 0
+    start: int = 0
+    end: int = 0
     instant: float = 0.0
     amplitude: float = 0.0        # arcsec, end to end
-    duree: float = 0.0            # seconds
-    classe: str = "dither"        # dither | recentrage | anomalie
-    jitter_apres: float = 0.0
+    duration: float = 0.0            # seconds
+    kind: str = "dither"        # dither | recentrage | anomalie
+    jitter_after: float = 0.0
 
 
-def _mouvements(ra_dev, dec_dev, t, seuil_recentrage=25.0) -> list:
+def _moves(ra_dev, dec_dev, t, recentre_threshold=25.0) -> list:
     """Group threshold crossings into movements and label them.
 
     Crossings closer together than ``_FUSION_S`` belong to one move. The
@@ -477,44 +477,44 @@ def _mouvements(ra_dev, dec_dev, t, seuil_recentrage=25.0) -> list:
     if n < 8 or len(t) != n:
         return []
     d = np.hypot(np.diff(ra_dev), np.diff(dec_dev))
-    ech = float(np.median(d))
-    seuil = max(8.0 * ech, 0.5)
-    idx = np.flatnonzero(d > seuil) + 1
+    scale = float(np.median(d))
+    threshold = max(8.0 * scale, 0.5)
+    idx = np.flatnonzero(d > threshold) + 1
     if not len(idx):
         return []
-    groupes = [[int(idx[0])]]
+    groups = [[int(idx[0])]]
     for i in idx[1:]:
-        if t[i] - t[groupes[-1][-1]] <= _FUSION_S:
-            groupes[-1].append(int(i))
+        if t[i] - t[groups[-1][-1]] <= _MERGE_S:
+            groups[-1].append(int(i))
         else:
-            groupes.append([int(i)])
+            groups.append([int(i)])
 
     # Reference spread: how tight the mount is between moves. A move is an
     # anomaly when what follows it is markedly worse than that.
-    bords = np.concatenate(([0], idx, [n]))
-    calmes = [np.hypot(np.std(ra_dev[a:b]), np.std(dec_dev[a:b]))
-              for a, b in zip(bords[:-1], bords[1:]) if b - a >= 8]
-    calme = float(np.median(calmes)) if calmes else 0.0
+    edges_idx = np.concatenate(([0], idx, [n]))
+    quiet_parts = [np.hypot(np.std(ra_dev[a:b]), np.std(dec_dev[a:b]))
+              for a, b in zip(edges_idx[:-1], edges_idx[1:]) if b - a >= 8]
+    quiet = float(np.median(quiet_parts)) if quiet_parts else 0.0
 
     out = []
-    for g in groupes:
+    for g in groups:
         a = max(0, g[0] - 1)
         b = min(g[-1], n - 1)
-        m = Mouvement(
-            debut=a, fin=b, instant=float(t[a]),
+        m = Move(
+            start=a, end=b, instant=float(t[a]),
             amplitude=float(np.hypot(ra_dev[b] - ra_dev[a], dec_dev[b] - dec_dev[a])),
-            duree=float(t[b] - t[a]),
+            duration=float(t[b] - t[a]),
         )
-        fin_fenetre = min(n, b + 1 + _FENETRE_APRES)
-        if fin_fenetre - (b + 1) >= 8:
-            m.jitter_apres = float(np.hypot(np.std(ra_dev[b + 1:fin_fenetre]),
-                                            np.std(dec_dev[b + 1:fin_fenetre])))
-        if calme > 0 and m.jitter_apres > max(5.0 * calme, 1.0):
-            m.classe = "anomalie"
-        elif m.amplitude >= seuil_recentrage:
-            m.classe = "recentrage"
+        window_end = min(n, b + 1 + _WINDOW_AFTER)
+        if window_end - (b + 1) >= 8:
+            m.jitter_after = float(np.hypot(np.std(ra_dev[b + 1:window_end]),
+                                            np.std(dec_dev[b + 1:window_end])))
+        if quiet > 0 and m.jitter_after > max(5.0 * quiet, 1.0):
+            m.kind = "anomalie"
+        elif m.amplitude >= recentre_threshold:
+            m.kind = "recentrage"
         else:
-            m.classe = "dither"
+            m.kind = "dither"
         out.append(m)
     return out
 
@@ -535,15 +535,15 @@ def _baseline(t: np.ndarray, v: np.ndarray, block_s: float = 180.0) -> np.ndarra
     if len(edges) < 2:
         return np.full(n, float(np.median(v)))
     idx = np.clip(np.searchsorted(edges, t, side='right') - 1, 0, len(edges) - 2)
-    centres, meds = [], []
+    centers, meds = [], []
     for b in range(len(edges) - 1):
         m = idx == b
         if int(np.sum(m)) >= 3:
-            centres.append(float(np.mean(t[m])))
+            centers.append(float(np.mean(t[m])))
             meds.append(float(np.median(v[m])))
-    if len(centres) < 2:
+    if len(centers) < 2:
         return np.full(n, float(np.median(v)))
-    return np.interp(t, np.array(centres), np.array(meds))
+    return np.interp(t, np.array(centers), np.array(meds))
 
 
 def _segment_tracking_data(
@@ -659,7 +659,7 @@ def _segment_tracking_data(
             dec_stdevs=_settled_stdevs(timestamps[idx], dec_stdevs[idx], dec_dev[keep]),
             ra_residual=ra_res[keep],
             dec_residual=dec_res[keep],
-            mouvements=_mouvements(ra_dev[keep], dec_dev[keep], timestamps[idx]),
+            moves=_moves(ra_dev[keep], dec_dev[keep], timestamps[idx]),
             excursions_removed=n_out,
             excursion_max_arcsec=sep_max,
         )
@@ -719,12 +719,12 @@ def parse_dat_file(dat_path: Path) -> ParsedSession:
                         # Decimal degrees, longitude positive EAST -- the
                         # writer normalises both the mount's sexagesimal
                         # LX200 (positive west) and the preferences.
-                        champs = line.split('\t')[1:]
+                        fields = line.split('\t')[1:]
                         try:
-                            session.site_lat = float(champs[0])
-                            session.site_lon = float(champs[1])
-                            if len(champs) > 2 and champs[2].strip():
-                                session.site_elev = float(champs[2])
+                            session.site_lat = float(fields[0])
+                            session.site_lon = float(fields[1])
+                            if len(fields) > 2 and fields[2].strip():
+                                session.site_elev = float(fields[2])
                         except (IndexError, ValueError):
                             session.site_lat = session.site_lon = None
                     elif line.startswith("Start:"):
@@ -800,7 +800,7 @@ def parse_dat_file(dat_path: Path) -> ParsedSession:
         time_seconds = [i / assumed_rate for i in range(len(mount_times))]
 
     # Midnight and end of daylight saving time
-    corrected_times = _derouler_heures(time_seconds)
+    corrected_times = _unwrap_hours(time_seconds)
 
     # Convert to numpy arrays (ALL samples — raw)
     session.mount_times = mount_times
@@ -824,12 +824,12 @@ def parse_dat_file(dat_path: Path) -> ParsedSession:
     # The live logger has a delay_after_slew setting for the same reason,
     # but it defaults to 0 and does nothing on replay -- a file already
     # written carries every sample.
-    if len(tracking_mask) > 1 and _DELAI_APRES_SLEW > 0:
-        reprises = np.flatnonzero(tracking_mask[1:] & ~tracking_mask[:-1]) + 1
-        for i in reprises:
-            fin = session.timestamps[i] + _DELAI_APRES_SLEW
+    if len(tracking_mask) > 1 and _DELAY_AFTER_SLEW > 0:
+        resumes = np.flatnonzero(tracking_mask[1:] & ~tracking_mask[:-1]) + 1
+        for i in resumes:
+            end = session.timestamps[i] + _DELAY_AFTER_SLEW
             j = i
-            while j < len(tracking_mask) and session.timestamps[j] < fin:
+            while j < len(tracking_mask) and session.timestamps[j] < end:
                 tracking_mask[j] = False
                 j += 1
     session.tracking_mask = tracking_mask
@@ -866,8 +866,8 @@ def parse_dat_file(dat_path: Path) -> ParsedSession:
             _w = float(sum(g.sample_count for g in segments)) or 1.0
             session.ra_jitter = sum(g.ra_jitter * g.sample_count for g in segments) / _w
             session.dec_jitter = sum(g.dec_jitter * g.sample_count for g in segments) / _w
-            session.repositionnements = sum(g.repositionnements for g in segments)
-            session.mouvements = [m for g in segments for m in g.mouvements]
+            session.recentrings = sum(g.recentrings for g in segments)
+            session.moves = [m for g in segments for m in g.moves]
             session.deviation_timestamps = np.concatenate([g.timestamps for g in segments])
             session.deviation_ra_stdevs = np.concatenate([g.ra_stdevs for g in segments])
             session.deviation_dec_stdevs = np.concatenate([g.dec_stdevs for g in segments])
@@ -957,7 +957,7 @@ def parse_dti_file(dti_path: Path, session: ParsedSession) -> ParsedSession:
 
     if time_seconds:
         # Midnight and end of daylight saving time
-        corrected = _derouler_heures(time_seconds)
+        corrected = _unwrap_hours(time_seconds)
 
         session.time_mount_times = mount_times
         session.time_pc_mount_diff = np.array(pc_mount_diff)

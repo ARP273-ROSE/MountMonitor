@@ -1,47 +1,46 @@
 # -*- coding: utf-8 -*-
-"""Ou l'application ecrit ses donnees.
+"""Where the application writes its data.
 
-Lancee depuis les sources — ce que fait son auteur — MountMonitor ecrit a cote
-de son code : les journaux dans `Logs/`, les reglages a la racine. C'est
-pratique, et rien ne le remet en cause.
+Run from source — as its author does — MountMonitor writes next to its code:
+logs in `Logs/`, settings at the root. It is convenient, and nothing calls
+that into question.
 
-Installee, c'est intenable. Le dossier d'installation appartient a
-l'installeur : il en efface le contenu avant de poser une nouvelle version,
-precisement pour qu'aucun fichier d'une version passee n'y survive. Les
-journaux d'une nuit d'acquisition et les reglages de la monture y
-disparaitraient a la premiere mise a jour.
+Installed, that is untenable. The installation folder belongs to the
+installer: it wipes its contents before laying down a new version, precisely
+so that no file from a past version survives there. An acquisition night's
+logs and the mount settings would vanish at the first update.
 
-Installee, l'application ecrit donc dans `%LOCALAPPDATA%\\MountMonitor`, qui ne
-depend d'aucune version.
+Installed, the application therefore writes to `%LOCALAPPDATA%\\MountMonitor`,
+which does not depend on any version.
 
-Rien n'est deplace : les deux cas ne se rencontrent jamais sur une meme
-machine, et un deplacement automatique de donnees d'acquisition est
-exactement le genre d'operation qu'on ne fait pas dans le dos de quelqu'un.
+Nothing is moved: the two cases never meet on the same machine, and an
+automatic move of acquisition data is exactly the kind of operation one does
+not do behind someone's back.
 """
 
 import os
 import sys
 from pathlib import Path
 
-_RACINE_PROJET = Path(__file__).resolve().parent.parent.parent
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
-def est_empaquete() -> bool:
-    """Vrai si l'on tourne depuis le paquet autonome (python embarque a cote).
+def is_packaged() -> bool:
+    """True when running from the standalone package (Python bundled alongside).
 
-    Le paquet range le code dans `app/` et l'interpreteur dans `python/`, cote
-    a cote. C'est la signature la plus sure : elle ne depend ni d'une variable
-    d'environnement ni d'un drapeau qu'on pourrait oublier de poser.
+    The package puts the code in `app/` and the interpreter in `python/`, side
+    by side. It is the most reliable signature: it depends neither on an
+    environment variable nor on a flag one might forget to set.
     """
-    python = _RACINE_PROJET.parent / 'python'
-    # Windows : python/python.exe ; macOS et Linux : python/bin/python3.
+    python = _PROJECT_ROOT.parent / 'python'
+    # Windows: python/python.exe; macOS and Linux: python/bin/python3.
     return (python / 'python.exe').exists() or (python / 'bin' / 'python3').exists()
 
 
-def dossier_donnees() -> Path:
-    """Dossier ou ecrire journaux, reglages et rapports."""
-    if not est_empaquete():
-        return _RACINE_PROJET
+def data_folder() -> Path:
+    """Folder where logs, settings and reports are written."""
+    if not is_packaged():
+        return _PROJECT_ROOT
 
     if sys.platform == 'win32':
         base = Path(os.environ.get('LOCALAPPDATA')
@@ -49,50 +48,50 @@ def dossier_donnees() -> Path:
     else:
         base = Path(os.environ.get('XDG_DATA_HOME')
                     or Path.home() / '.local' / 'share')
-    dossier = base / 'MountMonitor'
-    dossier.mkdir(parents=True, exist_ok=True)
-    _reprendre_anciennes_donnees(dossier)
-    return dossier
+    folder = base / 'MountMonitor'
+    folder.mkdir(parents=True, exist_ok=True)
+    _migrate_old_data(folder)
+    return folder
 
 
-_REPRISE_FAITE = False
+_MIGRATION_DONE = False
 
 
-def _reprendre_anciennes_donnees(dossier: Path) -> None:
-    """Versions <= 1.31 sous macOS et Linux : le paquet ne se reconnaissait pas,
-    et reglages, rapports et journaux de session s'ecrivaient dans `app/`.
-    On les recopie une fois dans le dossier de donnees, sans rien effacer, et
-    sans jamais ecraser ce qui s'y trouve deja."""
-    global _REPRISE_FAITE
-    if _REPRISE_FAITE or sys.platform == 'win32':
+def _migrate_old_data(folder: Path) -> None:
+    """Versions <= 1.31 on macOS and Linux: the package did not recognise itself,
+    and settings, reports and session logs were written into `app/`.
+    They are copied once into the data folder, without deleting anything and
+    without ever overwriting what is already there."""
+    global _MIGRATION_DONE
+    if _MIGRATION_DONE or sys.platform == 'win32':
         return
-    _REPRISE_FAITE = True
+    _MIGRATION_DONE = True
     import shutil
-    for nom in ('mountmonitor_settings.json', 'reglages_rapports.json', 'Logs'):
-        ancien, neuf = _RACINE_PROJET / nom, dossier / nom
-        if not ancien.exists():
+    for name in ('mountmonitor_settings.json', 'reglages_rapports.json', 'Logs'):
+        old_path, new_path = _PROJECT_ROOT / name, folder / name
+        if not old_path.exists():
             continue
         try:
-            if ancien.is_dir():
-                for f in ancien.rglob('*'):
-                    cible = neuf / f.relative_to(ancien)
+            if old_path.is_dir():
+                for f in old_path.rglob('*'):
+                    target = new_path / f.relative_to(old_path)
                     if f.is_dir():
-                        cible.mkdir(parents=True, exist_ok=True)
-                    elif not cible.exists():
-                        cible.parent.mkdir(parents=True, exist_ok=True)
-                        shutil.copy2(f, cible)
-            elif not neuf.exists():
-                shutil.copy2(ancien, neuf)
+                        target.mkdir(parents=True, exist_ok=True)
+                    elif not target.exists():
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(f, target)
+            elif not new_path.exists():
+                shutil.copy2(old_path, new_path)
         except OSError:
             pass
 
 
-def dossier_journaux() -> Path:
-    """Dossier des fichiers de session (.log, .dat, .dti, .sei, .fft, .env)."""
-    journaux = dossier_donnees() / 'Logs'
-    journaux.mkdir(parents=True, exist_ok=True)
-    return journaux
+def logs_folder() -> Path:
+    """Folder for session files (.log, .dat, .dti, .sei, .fft, .env)."""
+    logs = data_folder() / 'Logs'
+    logs.mkdir(parents=True, exist_ok=True)
+    return logs
 
 
-def fichier_reglages() -> Path:
-    return dossier_donnees() / 'mountmonitor_settings.json'
+def settings_file() -> Path:
+    return data_folder() / 'mountmonitor_settings.json'

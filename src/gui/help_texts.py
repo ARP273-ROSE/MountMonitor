@@ -9,7 +9,7 @@ what the application actually does now.
 Each entry is a list of (heading, body) pairs. The body is Qt rich text.
 """
 
-AIDE = {
+HELP = {
     'en': [
         ("Quick start", """
 <ol>
@@ -297,13 +297,13 @@ geanonimiseerd.</p>"""),
     ],
 }
 
-TITRE = {'en': "Help", 'fr': "Aide", 'nl': "Hulp"}
+TITLE = {'en': "Help", 'fr': "Aide", 'nl': "Hulp"}
 
 
-def aide_html(langue: str, version: str) -> str:
+def help_html(language: str, version: str) -> str:
     """Full help document for one language, as Qt rich text."""
-    sections = AIDE.get(langue) or AIDE['en']
-    morceaux = [f"<h2>MountMonitor v{version}</h2>"]
-    for titre, corps in sections:
-        morceaux.append(f"<h3>{titre}</h3>{corps}")
-    return "\n".join(morceaux)
+    sections = HELP.get(language) or HELP['en']
+    chunks = [f"<h2>MountMonitor v{version}</h2>"]
+    for title, body in sections:
+        chunks.append(f"<h3>{title}</h3>{body}")
+    return "\n".join(chunks)

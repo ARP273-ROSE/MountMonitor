@@ -28,9 +28,9 @@ class StatusPanel(QWidget):
         super().__init__(parent)
         try:
             from ..config.settings import Settings
-            self._ra_en_degres = bool(Settings().get("ra_in_degrees"))
+            self._ra_in_degrees = bool(Settings().get("ra_in_degrees"))
         except Exception:
-            self._ra_en_degres = False
+            self._ra_in_degrees = False
         self._max_lines = max_lines
         self._tolerance_ra_arcsec = 1.5
         self._tolerance_dec_arcsec = 1.5
@@ -55,11 +55,11 @@ class StatusPanel(QWidget):
         # « QFrame » rule also matched every QLabel inside (a QLabel is a
         # QFrame) and boxed each value in its own border.
         values_frame = QFrame()
-        values_frame.setObjectName("valeurs")
+        values_frame.setObjectName("values")
         values_frame.setSizePolicy(QSizePolicy.Policy.Preferred,
                                    QSizePolicy.Policy.Fixed)
         values_frame.setStyleSheet(
-            f"QFrame#valeurs {{ background-color: {Colors.BG_MEDIUM.name()}; "
+            f"QFrame#values {{ background-color: {Colors.BG_MEDIUM.name()}; "
             f"border: 1px solid {Colors.BORDER.name()}; border-radius: 4px; }}"
         )
         values_layout = QGridLayout(values_frame)
@@ -142,10 +142,10 @@ class StatusPanel(QWidget):
         # Message buffer for efficient batch insertion
         self._message_lines: list[str] = []
 
-    def set_ra_en_degres(self, en_degres: bool):
+    def set_ra_in_degrees(self, in_degrees: bool):
         """Applied at once from the preferences (it used to be read only when
         the window was built, so ticking it seemed to do nothing)."""
-        self._ra_en_degres = bool(en_degres)
+        self._ra_in_degrees = bool(in_degrees)
 
     def set_tolerances(self, ra_arcsec: float, dec_arcsec: float,
                        as_ha_seconds: bool = False, declination_deg: float = 0.0):
@@ -157,7 +157,7 @@ class StatusPanel(QWidget):
 
     def update_mount_sample(self, sample: MountSample):
         """Update display with new mount data."""
-        if getattr(self, '_ra_en_degres', False):
+        if getattr(self, '_ra_in_degrees', False):
             self._ra_value.setText(format_ra_degrees(sample.ra_hours))
         else:
             self._ra_value.setText(sample.ra_raw_str or format_ra(sample.ra_hours))
@@ -170,7 +170,7 @@ class StatusPanel(QWidget):
         import math
         cos_d = max(abs(math.cos(math.radians(self._declination_deg))), 1e-3)
         ra_dev = sample.ra_deviation_arcsec / cos_d          # arcsec of RA
-        if self._ra_en_degres:
+        if self._ra_in_degrees:
             self._ra_dev.setText(f"\u0394 {ra_dev:+.2f}\"")
         else:
             self._ra_dev.setText(f"\u0394 {ra_dev / 15.0:+.3f}s")
@@ -210,7 +210,7 @@ class StatusPanel(QWidget):
         import math
         cos_d = max(abs(math.cos(math.radians(self._declination_deg))), 1e-3)
         sd = ra_stdev / cos_d                                   # arcsec of RA
-        if self._ra_en_degres:
+        if self._ra_in_degrees:
             self._ra_stdev.setText(f"σ {sd:.2f}\"")
         else:
             self._ra_stdev.setText(f"σ {sd / 15.0:.3f}s")

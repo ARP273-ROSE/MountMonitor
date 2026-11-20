@@ -32,8 +32,8 @@ class LX200SerialConnection(LX200Connection):
         self._serial: Optional[serial.Serial] = None
         self._protocol = ConnectionProtocol.LX200
         self._reconnect_attempts = 0
-        # __init__ de LX200Connection sauté (super(LX200Connection, ...)) :
-        # le verrou d'E/S partagé poller/GUI doit être recréé ici.
+        # LX200Connection.__init__ is skipped (super(LX200Connection, ...)):
+        # the I/O lock shared by poller and GUI must be recreated here.
         self._io_lock = threading.Lock()
 
     @property

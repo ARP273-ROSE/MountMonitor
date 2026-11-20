@@ -166,9 +166,9 @@ class FFTWindow(QWidget):
         for plot, name in [(self._freq_plot, "FFT_Freq"), (self._period_plot, "FFT_Period")]:
             filename = dir_path / f"{name}_{timestamp}.png"
             try:
-                exporter = pg.exporters.ImageExporter(plot.plotItem)
-                exporter.parameters()['width'] = 1600
-                exporter.export(str(filename))
+                export = pg.exporters.ImageExporter(plot.plotItem)
+                export.parameters()['width'] = 1600
+                export.export(str(filename))
                 logger.info(f"FFT exported: {filename}")
             except Exception as e:
                 logger.warning(f"Failed to export FFT: {e}")

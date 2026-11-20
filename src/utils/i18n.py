@@ -7,6 +7,11 @@ _current_lang = "en"
 # Translation dictionary: key -> {en: ..., fr: ...}
 TX = {
     # Main window
+    "open_log_title": {"en": "Open log file", "fr": "Ouvrir un fichier log",
+                       "nl": "Logbestand openen"},
+    "open_log_filter": {"en": "Data files (*.dat);;All files (*)",
+                        "fr": "Fichiers de données (*.dat);;Tous les fichiers (*)",
+                        "nl": "Gegevensbestanden (*.dat);;Alle bestanden (*)"},
     "app_title": {"en": "MountMonitor", "fr": "MountMonitor", "nl": "MountMonitor"},
     "menu_file": {"en": "File", "fr": "Fichier", "nl": "Bestand"},
     "menu_edit": {"en": "Edit", "fr": "Édition", "nl": "Bewerken"},
@@ -56,8 +61,8 @@ TX = {
     "poller_wrong_setup": {"en": "WRONG SET-UP", "fr": "RÉGLAGE INCORRECT",
                            "nl": "ONJUISTE INSTELLING"},
 
-    # Panneau d'etat : ces lignes etaient ecrites en anglais en dur, si bien
-    # que le journal melangeait la langue de l'utilisateur et l'anglais.
+    # Status panel: these lines used to be hard-coded in English, so the
+    # log mixed the user's language with English.
     "pan_mount": {"en": "Mount", "fr": "Monture", "nl": "Montering"},
     "pan_firmware": {"en": "Firmware", "fr": "Micrologiciel", "nl": "Firmware"},
     "pan_id": {"en": "ID", "fr": "Identifiant", "nl": "Identificatie"},
@@ -989,12 +994,12 @@ TX = {
 # Supported languages, in the order they appear in Preferences.
 # Dutch is there because MountMonitor started as a Dutch program: the original
 # v3.37 is by Nicolàs de Hilster (Starmountain Survey & Consultancy BV).
-LANGUES = {
+LANGUAGES = {
     'en': "English",
     'fr': "Français",
     'nl': "Nederlands",
 }
-LANGUE_DEFAUT = 'en'
+DEFAULT_LANGUAGE = 'en'
 
 
 def detect_language() -> str:
@@ -1017,8 +1022,8 @@ def detect_language() -> str:
         pass
     try:  # Windows display language, which is what the user actually reads
         import ctypes
-        nom = ctypes.windll.kernel32.GetUserDefaultUILanguage()  # type: ignore[attr-defined]
-        codes.append(locale.windows_locale.get(nom, ''))
+        name = ctypes.windll.kernel32.GetUserDefaultUILanguage()  # type: ignore[attr-defined]
+        codes.append(locale.windows_locale.get(name, ''))
     except Exception:
         pass
     try:
@@ -1034,10 +1039,10 @@ def detect_language() -> str:
         code = (code or '').strip().lower().replace('-', '_')
         if not code or code in ('c', 'posix'):
             continue
-        racine = code.split('_')[0].split('.')[0]
-        if racine in LANGUES:
-            return racine
-    return LANGUE_DEFAUT
+        root = code.split('_')[0].split('.')[0]
+        if root in LANGUAGES:
+            return root
+    return DEFAULT_LANGUAGE
 
 
 def set_language(lang: str):
@@ -1045,11 +1050,11 @@ def set_language(lang: str):
     global _current_lang
     if lang == 'auto':
         _current_lang = detect_language()
-    elif lang in LANGUES:
+    elif lang in LANGUAGES:
         _current_lang = lang
     else:
         # An unknown code must not leave the interface half-translated.
-        _current_lang = LANGUE_DEFAUT
+        _current_lang = DEFAULT_LANGUAGE
 
 
 def get_language() -> str:
@@ -1067,15 +1072,15 @@ def T(key: str, lang: str | None = None) -> str:
     entry = TX.get(key)
     if entry is None:
         return key
-    valeur = entry.get(l)
-    if valeur:
-        return valeur
-    return entry.get(LANGUE_DEFAUT) or key
+    value = entry.get(l)
+    if value:
+        return value
+    return entry.get(DEFAULT_LANGUAGE) or key
 
 
-def langues_disponibles() -> dict:
+def available_languages() -> dict:
     """Code -> native name, for the Preferences dialog."""
-    return dict(LANGUES)
+    return dict(LANGUAGES)
 
 
 # Auto-detect on import

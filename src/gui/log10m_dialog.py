@@ -82,14 +82,33 @@ _NL = {
 }
 
 
+_GSTAT_NL = {
+    0: "Volgen", 1: "Gestopt", 2: "Naar parkeerpositie", 3: "Ontparkeren",
+    4: "Naar thuispositie", 5: "Geparkeerd", 6: "Zwenken (GoTo)",
+    7: "Niet volgen (model OK)", 8: "Volgen (buiten limieten)", 9: "Buiten limieten",
+    10: "Volgen (ingreep nodig)", 11: "Update nodig", 98: "Onbekend", 99: "Fout",
+}
+
+
+def _state_label(seg) -> str:
+    """Mount state name in the interface language (EN, FR or NL)."""
+    from ..utils.i18n import get_language
+    language = get_language()
+    if language == "fr":
+        return seg.state_name_fr
+    if language == "nl":
+        return _GSTAT_NL.get(seg.gstat, seg.state_name)
+    return seg.state_name
+
+
 def _tr(en: str, fr: str) -> str:
     """The text in the interface language (the one chosen in the Language
     menu, not the system locale): French, Dutch, otherwise English."""
     from ..utils.i18n import get_language
-    langue = get_language()
-    if langue == "fr":
+    language = get_language()
+    if language == "fr":
         return fr
-    if langue == "nl":
+    if language == "nl":
         return _NL.get(en, en)
     return en
 
@@ -129,17 +148,17 @@ GSTAT_COLORS = {
 class ParseWorker(QThread):
     """Background worker for parsing .log10m files."""
     progress = pyqtSignal(int)
-    # Ni « finished », ni « list ».
+    # Neither "finished" nor "list".
     #
-    # QThread possede deja un signal « finished », emis quand le fil se
-    # termine : le redeclarer ici le masque, et tout ce qui compte sur le
-    # signal de Qt — une liberation differee, par exemple — recevrait celui-ci
-    # a la place, sans avertissement.
+    # QThread already has a "finished" signal, emitted when the thread
+    # ends: redeclaring it here masks it, and anything relying on Qt's
+    # signal — a deferred delete, for instance — would receive this one
+    # instead, without warning.
     #
-    # `object` plutot que `list` parce que PyQt convertit une charge declaree
-    # `list` element par element ; ce sont ici des objets Log10mFile, pas des
-    # types Qt.
-    resultat_pret = pyqtSignal(object)   # list[Log10mFile]
+    # `object` rather than `list` because PyQt converts a payload declared
+    # `list` element by element; these are Log10mFile objects, not Qt
+    # types.
+    result_ready = pyqtSignal(object)   # list[Log10mFile]
     error = pyqtSignal(str)
 
     def __init__(self, filepaths: list[Path]):
@@ -158,7 +177,7 @@ class ParseWorker(QThread):
                 parsed = parse_log10m(fp, progress_callback=cb)
                 results.append(parsed)
 
-            self.resultat_pret.emit(results)
+            self.result_ready.emit(results)
         except Exception as e:
             self.error.emit(str(e))
 
@@ -248,7 +267,7 @@ class Log10mAnalysisDialog(QDialog):
 
         self._worker = ParseWorker(filepaths)
         self._worker.progress.connect(self._progress.setValue)
-        self._worker.resultat_pret.connect(self._on_parse_done)
+        self._worker.result_ready.connect(self._on_parse_done)
         self._worker.error.connect(self._on_parse_error)
         self._worker.start()
 
@@ -499,9 +518,7 @@ class Log10mAnalysisDialog(QDialog):
 
             if seg.gstat not in seen_states:
                 seen_states.add(seg.gstat)
-                from ..utils.i18n import get_language
-                name = seg.state_name_fr if get_language() == "fr" else seg.state_name
-                y_ticks.append((seg.gstat, name))
+                y_ticks.append((seg.gstat, _state_label(seg)))
 
         # Set Y axis ticks
         y_axis = plot.getAxis('left')
@@ -694,20 +711,20 @@ class Log10mAnalysisDialog(QDialog):
         layout = QVBoxLayout(self._tab_events)
 
         self._events_table = QTableWidget()
-        self._events_table.setColumnCount(5)
+        # One state column, in the interface language. A second "State (FR)"
+        # column was shown whatever the language, and Dutch had none.
+        self._events_table.setColumnCount(4)
         self._events_table.setHorizontalHeaderLabels([
             _tr("Time (UTC)", "Heure (UTC)"),
             _tr("Duration", "Durée"),
             _tr("State", "État"),
-            _tr("State (FR)", "État (FR)"),
             _tr("Details", "Détails"),
         ])
         header = self._events_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
 
         self._events_table.setAlternatingRowColors(True)
         layout.addWidget(self._events_table)
@@ -733,16 +750,11 @@ class Log10mAnalysisDialog(QDialog):
             dur_item = QTableWidgetItem(_fmt_duration(seg.duration_seconds))
             self._events_table.setItem(i, 1, dur_item)
 
-            # State EN
-            state_item = QTableWidgetItem(seg.state_name)
+            # State, in the interface language
+            state_item = QTableWidgetItem(_state_label(seg))
             color = GSTAT_COLORS.get(seg.gstat, QColor(150, 150, 150))
             state_item.setForeground(QBrush(color))
             self._events_table.setItem(i, 2, state_item)
-
-            # State FR
-            state_fr_item = QTableWidgetItem(seg.state_name_fr)
-            state_fr_item.setForeground(QBrush(color))
-            self._events_table.setItem(i, 3, state_fr_item)
 
             # Details
             details = ""
@@ -753,4 +765,4 @@ class Log10mAnalysisDialog(QDialog):
                 details = _tr("Long tracking session",
                              "Longue session de suivi")
             detail_item = QTableWidgetItem(details)
-            self._events_table.setItem(i, 4, detail_item)
+            self._events_table.setItem(i, 3, detail_item)

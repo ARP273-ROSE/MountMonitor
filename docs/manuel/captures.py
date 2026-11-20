@@ -13,51 +13,51 @@ import tempfile
 import time
 from pathlib import Path
 
-RACINE = Path(__file__).resolve().parents[2]
-SORTIE = Path(__file__).resolve().parent / "captures"
+ROOT = Path(__file__).resolve().parents[2]
+OUTPUT_DIR = Path(__file__).resolve().parent / "captures"
 
 
-def attendre(app, delai):
-    fin = time.time() + delai
-    while time.time() < fin:
+def wait_for(app, delay):
+    end = time.time() + delay
+    while time.time() < end:
         app.processEvents()
         time.sleep(0.02)
 
 
-def une_langue(langue: str):
-    sys.path.insert(0, str(RACINE))
+def one_language(language: str):
+    sys.path.insert(0, str(ROOT))
     from PyQt6.QtWidgets import QApplication
     app = QApplication(sys.argv)
     import reporting
-    dossier = Path(tempfile.mkdtemp(prefix="mm-captures-"))
-    (dossier / "reglages_rapports.json").write_text('{"envoi_autorise": false}', encoding="utf-8")
-    reporting.init(dossier, application="mountmonitor-captures")
+    folder = Path(tempfile.mkdtemp(prefix="mm-captures-"))
+    (folder / "reglages_rapports.json").write_text('{"envoi_autorise": false}', encoding="utf-8")
+    reporting.init(folder, application="mountmonitor-captures")
     # settings and session logs in the throwaway folder, never the real ones
     from src.config import paths
-    paths.dossier_donnees = lambda: dossier
-    paths.dossier_journaux = lambda: dossier / "Logs"
-    paths.fichier_reglages = lambda: dossier / "mountmonitor_settings.json"
+    paths.data_folder = lambda: folder
+    paths.logs_folder = lambda: folder / "Logs"
+    paths.settings_file = lambda: folder / "mountmonitor_settings.json"
     from src.config.settings import Settings
-    Settings().set("language", langue)
+    Settings().set("language", language)
     from src.gui.theme import apply_dark_theme
     apply_dark_theme(app)
     from src.gui.main_window import MainWindow
     w = MainWindow(sim_mode="all")
     w.resize(1500, 900)
     w.show()
-    attendre(app, 30.0)                  # simulated mount: data flows by itself
-    w.grab().save(str(SORTIE / f"{langue}-principal.png"))
+    wait_for(app, 30.0)                  # simulated mount: data flows by itself
+    w.grab().save(str(OUTPUT_DIR / f"{language}-principal.png"))
     w.hide()
-    print(f"{langue}: screenshot written")
+    print(f"{language}: screenshot written")
 
 
 def main():
-    SORTIE.mkdir(parents=True, exist_ok=True)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     if len(sys.argv) > 1 and sys.argv[1] in ("en", "fr", "nl"):
-        une_langue(sys.argv[1])
+        one_language(sys.argv[1])
         os._exit(0)
-    for langue in ("en", "fr", "nl"):
-        subprocess.run([sys.executable, "-B", __file__, langue], check=True)
+    for language in ("en", "fr", "nl"):
+        subprocess.run([sys.executable, "-B", __file__, language], check=True)
 
 
 if __name__ == "__main__":

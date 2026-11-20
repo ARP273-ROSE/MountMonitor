@@ -13,13 +13,13 @@ from collections import deque
 
 logger = logging.getLogger(__name__)
 
-_FIN = re.compile(rb'\r\n|\r|\n')
-_NOMBRE = re.compile(r'[-+]?\d+(?:[.,]\d+)?')
+_EOL = re.compile(rb'\r\n|\r|\n')
+_NUMBER = re.compile(r'[-+]?\d+(?:[.,]\d+)?')
 
 
-def valeur_de_ligne(ligne: bytes):
+def line_value(line: bytes):
     """First number of a line from the AD converter, or None."""
-    m = _NOMBRE.search(ligne.decode('ascii', errors='ignore'))
+    m = _NUMBER.search(line.decode('ascii', errors='ignore'))
     if not m:
         return None
     try:
@@ -39,7 +39,7 @@ class Seismometer:
                  offset: int = 300, data_range: int = 2000, baudrate: int = 9600):
         self._port = port
         self._baudrate = int(baudrate or 9600)
-        self.erreur: str = ""            # why start() failed, for the window
+        self.error: str = ""            # why start() failed, for the window
         self._frequency_hz = frequency_hz
         self._offset = offset
         self._range = data_range
@@ -87,11 +87,11 @@ class Seismometer:
             logger.info(f"Seismometer started on {self._port} at {self._frequency_hz} Hz")
             return True
         except ImportError:
-            self.erreur = "pyserial not installed"
-            logger.error(self.erreur)
+            self.error = "pyserial not installed"
+            logger.error(self.error)
             return False
         except Exception as e:
-            self.erreur = str(e)
+            self.error = str(e)
             logger.error(f"Failed to open serial port {self._port}: {e}")
             return False
 
@@ -115,7 +115,7 @@ class Seismometer:
         values = []
         freq_start = time.time()
         freq_count = 0
-        derniere_livraison = time.time()
+        latest_release = time.time()
 
         while self._running and self._serial:
             try:
@@ -124,7 +124,7 @@ class Seismometer:
                     continue
 
                 buffer += data
-                if len(buffer) > 4096 and not _FIN.search(buffer):
+                if len(buffer) > 4096 and not _EOL.search(buffer):
                     # Wrong port or baud rate: no line ever ends. Unbounded,
                     # the buffer grew all night and every search in it
                     # cost more than the last.
@@ -133,9 +133,9 @@ class Seismometer:
                 # One value per line. Lines may end in CR+LF, LF or CR alone
                 # (only CR+LF was accepted: any other device gave nothing at
                 # all, without a word); the first number on the line is taken.
-                *lignes, buffer = _FIN.split(buffer)
-                for line in lignes:
-                    raw_val = valeur_de_ligne(line)
+                *lines, buffer = _EOL.split(buffer)
+                for line in lines:
+                    raw_val = line_value(line)
                     if raw_val is None:
                         continue
                     # Centred = raw + offset, as in MountMonitor 3
@@ -153,8 +153,8 @@ class Seismometer:
                 # the setting used to deliver nothing for 20 s at a time).
                 now = time.time()
                 if values and (len(values) >= self._frequency_hz
-                               or now - derniere_livraison >= 1.0):
-                    derniere_livraison = now
+                               or now - latest_release >= 1.0):
+                    latest_release = now
                     if self._callback:
                         self._callback(now, values.copy())
                     values.clear()

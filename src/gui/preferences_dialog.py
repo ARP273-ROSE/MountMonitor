@@ -14,7 +14,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 
 from ..config.settings import Settings
-from ..utils.i18n import T, langues_disponibles
+from ..utils.i18n import T, available_languages
 from ..core.seismometer import Seismometer
 
 import logging
@@ -106,7 +106,7 @@ class PreferencesDialog(QDialog):
         self._protocol.addItems(["LX200 (TCP/IP)", T("proto_lx200_serie"), "ASCOM",
                                  T("proto_simulation")])
         if sys.platform != "win32":
-            # ASCOM n'existe que sous Windows : l'entree reste visible, grisee
+            # ASCOM only exists on Windows: the entry stays visible, greyed out
             item = self._protocol.model().item(2)
             if item is not None:
                 item.setEnabled(False)
@@ -137,14 +137,14 @@ class PreferencesDialog(QDialog):
         self._serial_port.setToolTip(T("tt_serial_port"))
         conn_form.addRow(T("pref_serial_port"), self._serial_port)
 
-        # Vitesse de la liaison série. Elle était figée à 9600 bauds ; une
-        # monture réglée autrement ne répondait alors rien du tout, sans que
-        # rien n'indique pourquoi.
+        # Serial link speed. It was fixed at 9600 baud; a mount set
+        # otherwise then answered nothing at all, with nothing to tell
+        # why.
         self._serial_baudrate = QComboBox()
-        for vitesse in (9600, 19200, 38400, 57600, 115200):
-            self._serial_baudrate.addItem(str(vitesse), vitesse)
-        actuelle = self._settings.get("serial_baudrate")
-        index = self._serial_baudrate.findData(actuelle)
+        for rate in (9600, 19200, 38400, 57600, 115200):
+            self._serial_baudrate.addItem(str(rate), rate)
+        current_value = self._settings.get("serial_baudrate")
+        index = self._serial_baudrate.findData(current_value)
         self._serial_baudrate.setCurrentIndex(index if index >= 0 else 0)
         self._serial_baudrate.setToolTip(T("tt_serial_baud"))
         conn_form.addRow(T("bauds"), self._serial_baudrate)
@@ -218,13 +218,13 @@ class PreferencesDialog(QDialog):
         # one-line change there, and each one is named in its own tongue —
         # someone looking for their language does not read the current one.
         self._language = QComboBox()
-        self._codes_langue = ["auto"] + list(langues_disponibles().keys())
+        self._language_codes = ["auto"] + list(available_languages().keys())
         self._language.addItem(T("lang_auto"))
-        for code, nom in langues_disponibles().items():
-            self._language.addItem(nom)
-        courant = self._settings.get("language")
+        for code, name in available_languages().items():
+            self._language.addItem(name)
+        current_lang = self._settings.get("language")
         self._language.setCurrentIndex(
-            self._codes_langue.index(courant) if courant in self._codes_langue else 0
+            self._language_codes.index(current_lang) if current_lang in self._language_codes else 0
         )
         self._language.setToolTip(T("tt_language"))
         layout_form.addRow(T("pref_language"), self._language)
@@ -279,17 +279,17 @@ class PreferencesDialog(QDialog):
         self._tol_ra = QDoubleSpinBox()
         self._tol_ra.setToolTip(T("tt_tol_ra"))
         # RA unit first: it decides how the RA tolerance below is entered.
-        self._ra_degres = QCheckBox(T("pref_ra_degrees"))
-        self._ra_degres.setChecked(bool(self._settings.get("ra_in_degrees")))
-        self._ra_degres.setToolTip(T("tt_ra_degrees"))
-        tol_form.addRow(self._ra_degres)
-        self._unite_tol_ra(bool(self._settings.get("ra_in_degrees")),
+        self._ra_degrees_cb = QCheckBox(T("pref_ra_degrees"))
+        self._ra_degrees_cb.setChecked(bool(self._settings.get("ra_in_degrees")))
+        self._ra_degrees_cb.setToolTip(T("tt_ra_degrees"))
+        tol_form.addRow(self._ra_degrees_cb)
+        self._ra_tol_unit(bool(self._settings.get("ra_in_degrees")),
                            float(self._settings.get("tolerance_ra_arcsec") or 1.5))
-        self._ra_degres.toggled.connect(
-            lambda on: self._unite_tol_ra(on, self._tol_ra_arcsec()))
+        self._ra_degrees_cb.toggled.connect(
+            lambda on: self._ra_tol_unit(on, self._tol_ra_arcsec()))
         self._tol_ra_label = QLabel()
         tol_form.addRow(self._tol_ra_label, self._tol_ra)
-        self._tol_ra_label.setText(T("pref_tolerance_ra" if self._ra_degres.isChecked()
+        self._tol_ra_label.setText(T("pref_tolerance_ra" if self._ra_degrees_cb.isChecked()
                                      else "pref_tolerance_ra_s"))
 
         self._tol_dec = QDoubleSpinBox()
@@ -487,8 +487,8 @@ class PreferencesDialog(QDialog):
         checks_grid.addWidget(self._check_refr_status, 1, 0)
 
         self._refr_status_value = QComboBox()
-        for valeur in ("enabled", "disabled"):
-            self._refr_status_value.addItem(T(f"val_{valeur}"), valeur)
+        for value in ("enabled", "disabled"):
+            self._refr_status_value.addItem(T(f"val_{value}"), value)
         self._refr_status_value.setCurrentIndex(
             0 if self._settings.get("check_refraction_status_value") != "disabled" else 1)
         checks_grid.addWidget(self._refr_status_value, 1, 1)
@@ -523,8 +523,8 @@ class PreferencesDialog(QDialog):
         checks_grid.addWidget(self._check_gps, 3, 0)
 
         self._gps_sync_value = QComboBox()
-        for valeur, cle in (("synchronising", "val_sync"), ("not synchronising", "val_nosync")):
-            self._gps_sync_value.addItem(T(cle), valeur)
+        for value, key in (("synchronising", "val_sync"), ("not synchronising", "val_nosync")):
+            self._gps_sync_value.addItem(T(key), value)
         gps_val_map = {"synchronising": 0, "not synchronising": 1}
         self._gps_sync_value.setCurrentIndex(
             gps_val_map.get(self._settings.get("check_gps_sync_value"), 0)
@@ -539,8 +539,8 @@ class PreferencesDialog(QDialog):
         checks_grid.addWidget(self._check_dual, 4, 0)
 
         self._dual_tracking_value = QComboBox()
-        for valeur in ("enabled", "disabled"):
-            self._dual_tracking_value.addItem(T(f"val_{valeur}"), valeur)
+        for value in ("enabled", "disabled"):
+            self._dual_tracking_value.addItem(T(f"val_{value}"), value)
         dual_val_map = {"enabled": 0, "disabled": 1}
         self._dual_tracking_value.setCurrentIndex(
             dual_val_map.get(self._settings.get("check_dual_tracking_value"), 0)
@@ -555,9 +555,9 @@ class PreferencesDialog(QDialog):
         checks_grid.addWidget(self._check_tracking, 5, 0)
 
         self._tracking_rate_value = QComboBox()
-        # libelle traduit, valeur LX200 en donnee (c'est elle qu'on enregistre)
-        for valeur in ("sidereal", "lunar", "solar", "king"):
-            self._tracking_rate_value.addItem(T(f"val_{valeur}"), valeur)
+        # translated label, LX200 value as data (that is what gets saved)
+        for value in ("sidereal", "lunar", "solar", "king"):
+            self._tracking_rate_value.addItem(T(f"val_{value}"), value)
         rate_val_map = {"sidereal": 0, "lunar": 1, "solar": 2, "king": 3}
         self._tracking_rate_value.setCurrentIndex(
             rate_val_map.get(self._settings.get("check_tracking_rate_value"), 0)
@@ -580,13 +580,13 @@ class PreferencesDialog(QDialog):
         layout.addStretch()
         return widget
 
-    def _unite_tol_ra(self, en_degres: bool, arcsec: float):
+    def _ra_tol_unit(self, in_degrees: bool, arcsec: float):
         """RA tolerance in arcseconds of RA (degrees mode) or seconds of
         time (hours mode, 15 times smaller), like MountMonitor 3."""
-        self._tol_ra_en_s = not en_degres
+        self._tol_ra_in_s = not in_degrees
         if getattr(self, '_tol_ra_label', None) is not None:
-            self._tol_ra_label.setText(T("pref_tolerance_ra" if en_degres else "pref_tolerance_ra_s"))
-        if en_degres:
+            self._tol_ra_label.setText(T("pref_tolerance_ra" if in_degrees else "pref_tolerance_ra_s"))
+        if in_degrees:
             self._tol_ra.setDecimals(2)
             self._tol_ra.setRange(0.05, 60.0)
             self._tol_ra.setSuffix("\"")
@@ -599,7 +599,7 @@ class PreferencesDialog(QDialog):
 
     def _tol_ra_arcsec(self) -> float:
         v = float(self._tol_ra.value())
-        return v * 15.0 if getattr(self, '_tol_ra_en_s', False) else v
+        return v * 15.0 if getattr(self, '_tol_ra_in_s', False) else v
 
     def _on_protocol_changed(self, index: int):
         """Enable/disable fields based on protocol."""
@@ -646,8 +646,8 @@ class PreferencesDialog(QDialog):
         s.set("ascom_driver", self._ascom_driver.text())
         s.set("graph_textbox_ratio", self._graph_ratio.value())
         i = self._language.currentIndex()
-        s.set("language", self._codes_langue[i] if 0 <= i < len(self._codes_langue) else "auto")
-        s.set("ra_in_degrees", self._ra_degres.isChecked())
+        s.set("language", self._language_codes[i] if 0 <= i < len(self._language_codes) else "auto")
+        s.set("ra_in_degrees", self._ra_degrees_cb.isChecked())
         s.set("site_latitude", self._site_lat.text().strip())
         s.set("site_longitude", self._site_lon.text().strip())
         s.set("site_elevation_m", self._site_elev.text().strip())

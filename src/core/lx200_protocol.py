@@ -27,10 +27,10 @@ class LX200Connection(MountConnection):
         self._socket: Optional[socket.socket] = None
         self._protocol = ConnectionProtocol.LX200
         self._reconnect_attempts = 0
-        # Le socket est partagé entre le QThread du poller et le thread GUI
-        # (checks post-slew, get_target_ra/dec) : sans verrou, deux commandes
-        # entrelacées se volent leurs réponses (une RA lue comme réponse d'un
-        # Gstat). Toute paire envoi/réception doit être atomique.
+        # The socket is shared between the poller's QThread and the GUI thread
+        # (post-slew checks, get_target_ra/dec): without a lock, two interleaved
+        # commands steal each other's replies (an RA read as the reply to a
+        # Gstat). Every send/receive pair must be atomic.
         self._io_lock = threading.Lock()
 
     @property
@@ -202,8 +202,8 @@ class LX200Connection(MountConnection):
     def get_product_name(self) -> str:
         """Get product name: :GVP# -> product string"""
         result = self._send_command(':GVP#')
-        # Mémorisé pour check_mount_settings(), qui ne s'applique qu'aux
-        # montures 10Micron — sans ça le check post-slew ne tournait jamais.
+        # Remembered for check_mount_settings(), which only applies to
+        # 10Micron mounts — without it the post-slew check never ran.
         self._product_name = result or "Unknown"
         return self._product_name
 
