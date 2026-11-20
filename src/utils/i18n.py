@@ -18,6 +18,25 @@ TX = {
         "en": "Show right ascension in degrees rather than hours",
         "fr": "Afficher l'ascension droite en degrés plutôt qu'en heures",
         "nl": "De rechte klimming in graden tonen in plaats van in uren"},
+    "sei_pas_de_port": {
+        "en": "Seismometer enabled but no serial port chosen (Preferences > Auxiliary).",
+        "fr": "Sismomètre activé mais aucun port série choisi (Préférences > Auxiliaire).",
+        "nl": "Seismometer ingeschakeld maar geen seriële poort gekozen (Voorkeuren > Hulpapparatuur)."},
+    "sei_echec": {
+        "en": "Seismometer: cannot open {port} ({e}). Is another program (JamaSeis?) using it?",
+        "fr": "Sismomètre : impossible d'ouvrir {port} ({e}). Un autre programme (JamaSeis ?) l'utilise-t-il ?",
+        "nl": "Seismometer: kan {port} niet openen ({e}). Gebruikt een ander programma (JamaSeis?) de poort?"},
+    "sei_demarre": {"en": "Seismometer reading {port} at {baud} baud.",
+                    "fr": "Sismomètre : lecture de {port} à {baud} bauds.",
+                    "nl": "Seismometer leest {port} op {baud} baud."},
+    "sei_muet": {
+        "en": "Seismometer: no value received from {port} in 15 s. Check the port, the baud rate, and that the device sends one number per line.",
+        "fr": "Sismomètre : aucune valeur reçue de {port} en 15 s. Vérifier le port, la vitesse (bauds) et que l'appareil envoie un nombre par ligne.",
+        "nl": "Seismometer: geen waarde ontvangen van {port} in 15 s. Controleer de poort, de baudrate en of het apparaat één getal per regel stuurt."},
+    "tt_ra_degrees": {
+        "en": "Hours: RA shown as h:m:s, its deviations, sigma and tolerance in seconds of time (s). Degrees: RA in degrees, all of them in arcseconds of RA (15 times larger). Applied at once.",
+        "fr": "Heures : AD en h:m:s, ses écarts, son sigma et sa tolérance en secondes de temps (s). Degrés : AD en degrés, tout cela en secondes d'arc d'AD (15 fois plus). Appliqué aussitôt.",
+        "nl": "Uren: RA als u:m:s, afwijkingen, sigma en tolerantie in tijdseconden (s). Graden: RA in graden, dat alles in boogseconden RA (15 keer groter). Direct toegepast."},
     "poller_slewing": {"en": "Mount is slewing...", "fr": "La monture pivote...",
                        "nl": "De montering zwenkt..."},
     "poller_checks_ok": {
@@ -872,23 +891,36 @@ TX = {
     "mode_full": {"en": "When the graph fills", "fr": "Quand le graphe est plein", "nl": "Wanneer de grafiek vol is"},
 
     # Mount checks labels
+    "check_refr_status_label": {
+        "en": "Check if refraction setting is",
+        "fr": "Vérifier que la réfraction est",
+        "nl": "Controleren of de refractie-instelling is"},
+    "tt_chk_refr_status": {
+        "en": "Whether the mount applies refraction correction at all (:GREF#).",
+        "fr": "Si la monture applique ou non la correction de réfraction (:GREF#).",
+        "nl": "Of de montering de refractiecorrectie toepast (:GREF#)."},
+    "chk_refr_status_ok": {"en": "Refraction correction: {v}", "fr": "Correction de réfraction : {v}",
+                           "nl": "Refractiecorrectie: {v}"},
+    "chk_refr_status_ko": {"en": "Refraction correction is {a}, expected {e}",
+                           "fr": "La correction de réfraction est {a}, attendu {e}",
+                           "nl": "Refractiecorrectie is {a}, verwacht {e}"},
     "check_refraction_label": {
-        "en": "Check refraction correction",
-        "fr": "Vérifier correction réfraction",
+        "en": "Check if refraction update is",
+        "fr": "Vérifier que la mise à jour de la réfraction est",
     "nl": "Refractiecorrectie controleren",
 },
     "check_tracking_label": {
-        "en": "Check tracking rate",
+        "en": "Check if tracking rate is",
         "fr": "Vérifier vitesse de suivi",
     "nl": "Volgsnelheid controleren",
 },
     "check_gps_label": {
-        "en": "Check GPS sync",
+        "en": "Check if GPS clock sync is",
         "fr": "Vérifier synchro GPS",
     "nl": "GPS-synchronisatie controleren",
 },
     "check_dual_label": {
-        "en": "Check dual tracking",
+        "en": "Check if dual tracking is",
         "fr": "Vérifier suivi dual",
     "nl": "Dubbele tracking controleren",
 },

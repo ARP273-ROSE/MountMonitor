@@ -277,11 +277,16 @@ class PreferencesDialog(QDialog):
         tol_form.addRow(T("pref_reference"), self._reference_mode)
 
         self._tol_ra = QDoubleSpinBox()
-        self._tol_ra.setRange(0.05, 60.0)
-        self._tol_ra.setValue(self._settings.get("tolerance_ra_arcsec"))
-        self._tol_ra.setSuffix("\"")
-        self._tol_ra.setDecimals(2)
         self._tol_ra.setToolTip(T("tt_tol_ra"))
+        # RA unit first: it decides how the RA tolerance below is entered.
+        self._ra_degres = QCheckBox(T("pref_ra_degrees"))
+        self._ra_degres.setChecked(bool(self._settings.get("ra_in_degrees")))
+        self._ra_degres.setToolTip(T("tt_ra_degrees"))
+        tol_form.addRow(self._ra_degres)
+        self._unite_tol_ra(bool(self._settings.get("ra_in_degrees")),
+                           float(self._settings.get("tolerance_ra_arcsec") or 1.5))
+        self._ra_degres.toggled.connect(
+            lambda on: self._unite_tol_ra(on, self._tol_ra_arcsec()))
         tol_form.addRow(T("pref_tolerance_ra"), self._tol_ra)
 
         self._tol_dec = QDoubleSpinBox()
@@ -292,14 +297,6 @@ class PreferencesDialog(QDialog):
         self._tol_dec.setToolTip(T("tt_tol_dec"))
         tol_form.addRow(T("pref_tolerance_dec"), self._tol_dec)
 
-        self._ra_degres = QCheckBox(T("pref_ra_degrees"))
-        self._ra_degres.setChecked(bool(self._settings.get("ra_in_degrees")))
-        tol_form.addRow(self._ra_degres)
-
-        self._tol_ha = QCheckBox(T("pref_show_ra_ha"))
-        self._tol_ha.setChecked(self._settings.get("tolerance_as_ha_seconds"))
-        self._tol_ha.setToolTip(T("tt_tol_ha"))
-        tol_form.addRow("", self._tol_ha)
 
         self._tol_seismic = QDoubleSpinBox()
         self._tol_seismic.setRange(0.1, 50.0)
@@ -436,6 +433,12 @@ class PreferencesDialog(QDialog):
         self._sei_port.setToolTip(T("tt_sei_port"))
         sei_form.addRow(T("pref_serial_port"), self._sei_port)
 
+        self._sei_baud = QComboBox()
+        for b in (1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200):
+            self._sei_baud.addItem(str(b), b)
+        self._sei_baud.setCurrentText(str(self._settings.get("seismometer_baud") or 9600))
+        sei_form.addRow(T("bauds"), self._sei_baud)
+
         self._sei_freq = QDoubleSpinBox()
         self._sei_freq.setRange(1, 100)
         self._sei_freq.setValue(self._settings.get("seismometer_frequency_hz"))
@@ -471,11 +474,27 @@ class PreferencesDialog(QDialog):
         expected_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         checks_grid.addWidget(expected_label, 0, 1)
 
+        # Same order as MountMonitor 3: refraction setting, refraction update
+        # mode, GPS, dual tracking, tracking rate. The refraction check was a
+        # single row: whether the correction is ON (:GREF#) and how its data
+        # are updated (:WSG#) are two different settings of the mount.
+        self._check_refr_status = QCheckBox(T("check_refr_status_label"))
+        self._check_refr_status.setChecked(bool(self._settings.get("check_refraction_status")))
+        self._check_refr_status.setToolTip(T("tt_chk_refr_status"))
+        checks_grid.addWidget(self._check_refr_status, 1, 0)
+
+        self._refr_status_value = QComboBox()
+        for valeur in ("enabled", "disabled"):
+            self._refr_status_value.addItem(T(f"val_{valeur}"), valeur)
+        self._refr_status_value.setCurrentIndex(
+            0 if self._settings.get("check_refraction_status_value") != "disabled" else 1)
+        checks_grid.addWidget(self._refr_status_value, 1, 1)
+
         # Row 1: Refraction
         self._check_refraction = QCheckBox(T("check_refraction_label"))
         self._check_refraction.setChecked(self._settings.get("check_refraction_enabled"))
         self._check_refraction.setToolTip(T("tt_chk_refr"))
-        checks_grid.addWidget(self._check_refraction, 1, 0)
+        checks_grid.addWidget(self._check_refraction, 2, 0)
 
         self._refraction_value = QComboBox()
         self._refraction_value.addItems([
@@ -492,24 +511,7 @@ class PreferencesDialog(QDialog):
             ref_val_map.get(self._settings.get("check_refraction_value"), 2)
         )
         self._refraction_value.setToolTip(T("tt_chk_refr_mode"))
-        checks_grid.addWidget(self._refraction_value, 1, 1)
-
-        # Row 2: Tracking rate
-        self._check_tracking = QCheckBox(T("check_tracking_label"))
-        self._check_tracking.setChecked(self._settings.get("check_tracking_rate"))
-        self._check_tracking.setToolTip(T("tt_chk_rate"))
-        checks_grid.addWidget(self._check_tracking, 2, 0)
-
-        self._tracking_rate_value = QComboBox()
-        # libelle traduit, valeur LX200 en donnee (c'est elle qu'on enregistre)
-        for valeur in ("sidereal", "lunar", "solar", "king"):
-            self._tracking_rate_value.addItem(T(f"val_{valeur}"), valeur)
-        rate_val_map = {"sidereal": 0, "lunar": 1, "solar": 2, "king": 3}
-        self._tracking_rate_value.setCurrentIndex(
-            rate_val_map.get(self._settings.get("check_tracking_rate_value"), 0)
-        )
-        self._tracking_rate_value.setToolTip(T("tt_chk_rate_val"))
-        checks_grid.addWidget(self._tracking_rate_value, 2, 1)
+        checks_grid.addWidget(self._refraction_value, 2, 1)
 
         # Row 3: GPS sync
         self._check_gps = QCheckBox(T("check_gps_label"))
@@ -543,9 +545,45 @@ class PreferencesDialog(QDialog):
         self._dual_tracking_value.setToolTip(T("tt_chk_dual_val"))
         checks_grid.addWidget(self._dual_tracking_value, 4, 1)
 
+        # Row 2: Tracking rate
+        self._check_tracking = QCheckBox(T("check_tracking_label"))
+        self._check_tracking.setChecked(self._settings.get("check_tracking_rate"))
+        self._check_tracking.setToolTip(T("tt_chk_rate"))
+        checks_grid.addWidget(self._check_tracking, 5, 0)
+
+        self._tracking_rate_value = QComboBox()
+        # libelle traduit, valeur LX200 en donnee (c'est elle qu'on enregistre)
+        for valeur in ("sidereal", "lunar", "solar", "king"):
+            self._tracking_rate_value.addItem(T(f"val_{valeur}"), valeur)
+        rate_val_map = {"sidereal": 0, "lunar": 1, "solar": 2, "king": 3}
+        self._tracking_rate_value.setCurrentIndex(
+            rate_val_map.get(self._settings.get("check_tracking_rate_value"), 0)
+        )
+        self._tracking_rate_value.setToolTip(T("tt_chk_rate_val"))
+        checks_grid.addWidget(self._tracking_rate_value, 5, 1)
+
         layout.addWidget(checks_group)
         layout.addStretch()
         return widget
+
+    def _unite_tol_ra(self, en_degres: bool, arcsec: float):
+        """RA tolerance in arcseconds of RA (degrees mode) or seconds of
+        time (hours mode, 15 times smaller), like MountMonitor 3."""
+        self._tol_ra_en_s = not en_degres
+        if en_degres:
+            self._tol_ra.setDecimals(2)
+            self._tol_ra.setRange(0.05, 60.0)
+            self._tol_ra.setSuffix("\"")
+            self._tol_ra.setValue(arcsec)
+        else:
+            self._tol_ra.setDecimals(3)
+            self._tol_ra.setRange(0.003, 4.0)
+            self._tol_ra.setSuffix(" s")
+            self._tol_ra.setValue(arcsec / 15.0)
+
+    def _tol_ra_arcsec(self) -> float:
+        v = float(self._tol_ra.value())
+        return v * 15.0 if getattr(self, '_tol_ra_en_s', False) else v
 
     def _on_protocol_changed(self, index: int):
         """Enable/disable fields based on protocol."""
@@ -609,9 +647,8 @@ class PreferencesDialog(QDialog):
         s.set("running_range_seconds", range_map.get(self._running_range.currentIndex(), 60))
         s.set("correct_graphs_for_range", self._correct_graphs.isChecked())
         s.set("reference_mode", "median" if self._reference_mode.currentIndex() == 0 else "target")
-        s.set("tolerance_ra_arcsec", self._tol_ra.value())
+        s.set("tolerance_ra_arcsec", self._tol_ra_arcsec())
         s.set("tolerance_dec_arcsec", self._tol_dec.value())
-        s.set("tolerance_as_ha_seconds", self._tol_ha.isChecked())
         s.set("tolerance_seismic_percent", self._tol_seismic.value())
         s.set("log_mode", "all" if self._log_mode.currentIndex() == 0 else "tracking_only")
         s.set("delay_after_slew_seconds", self._delay_slew.value())
@@ -631,11 +668,14 @@ class PreferencesDialog(QDialog):
         s.set("ntp_interval_seconds", self._ntp_interval.value())
         s.set("seismometer_enabled", self._sei_enabled.isChecked())
         s.set("seismometer_port", self._sei_port.currentText())
+        s.set("seismometer_baud", int(self._sei_baud.currentData() or 9600))
         s.set("seismometer_frequency_hz", self._sei_freq.value())
         s.set("seismometer_offset", self._sei_offset.value())
         s.set("seismometer_range", self._sei_range.value())
 
         # Misc
+        s.set("check_refraction_status", self._check_refr_status.isChecked())
+        s.set("check_refraction_status_value", self._refr_status_value.currentData())
         s.set("check_refraction_enabled", self._check_refraction.isChecked())
         refraction_map = {0: "not_updating", 1: "not_updating_tracking", 2: "continuously_updating"}
         s.set("check_refraction_value", refraction_map.get(self._refraction_value.currentIndex(), "continuously_updating"))

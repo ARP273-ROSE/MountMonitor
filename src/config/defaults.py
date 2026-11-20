@@ -73,12 +73,15 @@ DEFAULTS = {
     # Auxiliary - Seismometer
     "seismometer_enabled": False,
     "seismometer_port": "",
+    "seismometer_baud": 9600,
     "seismometer_frequency_hz": 20,
     "seismometer_offset": 300,
     "seismometer_range": 2000,
 
     # Mount checks
-    "check_refraction_enabled": True,
+    "check_refraction_status": True,       # :GREF# correction on/off
+    "check_refraction_status_value": "enabled",
+    "check_refraction_enabled": True,      # :WSG# update mode
     "check_refraction_value": "continuously_updating",
     "check_tracking_rate": True,
     "check_tracking_rate_value": "sidereal",

@@ -318,11 +318,16 @@ class LX200Connection(MountConnection):
         return None
 
     def get_refraction_mode(self) -> Optional[str]:
-        """Get refraction correction mode via :GREF# (10Micron).
+        """How the mount updates its refraction data: :WSG# (10Micron).
 
         Returns: 0 = not_updating, 1 = not_updating_tracking, 2 = continuously_updating.
+
+        :GREF# only says whether refraction correction is ON (0/1); it used to
+        be read here as the update mode, so an enabled correction reported
+        "not updating while tracking". :WSG# is the update type, the one
+        MountWizzard4 reads and sets with :WSS<n># (mountcontrol/setting.py).
         """
-        result = self._send_command(':GREF#')
+        result = self._send_command(':WSG#')
         if result is None:
             return None
         val = result.strip()

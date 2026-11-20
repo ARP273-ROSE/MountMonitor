@@ -473,8 +473,11 @@ class ASCOMConnection(MountConnection):
         return None
 
     def get_refraction_mode(self) -> Optional[str]:
-        """Get refraction correction mode via raw command (10Micron specific)."""
-        result = self.send_raw_command(":GREF#")
+        """Refraction update type via raw command :WSG# (10Micron specific).
+
+        Not :GREF#, which only tells whether the correction is on (see
+        lx200_protocol.get_refraction_mode)."""
+        result = self.send_raw_command(":WSG#")
         if result is None:
             return None
         val = result.strip().rstrip("#")

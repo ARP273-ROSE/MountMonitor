@@ -142,6 +142,11 @@ class StatusPanel(QWidget):
         # Message buffer for efficient batch insertion
         self._message_lines: list[str] = []
 
+    def set_ra_en_degres(self, en_degres: bool):
+        """Applied at once from the preferences (it used to be read only when
+        the window was built, so ticking it seemed to do nothing)."""
+        self._ra_en_degres = bool(en_degres)
+
     def set_tolerances(self, ra_arcsec: float, dec_arcsec: float,
                        as_ha_seconds: bool = False, declination_deg: float = 0.0):
         """Configure tolerance thresholds and display mode."""
@@ -159,18 +164,16 @@ class StatusPanel(QWidget):
         self._dec_value.setText(sample.dec_raw_str or format_dec(sample.dec_degrees))
         self._declination_deg = sample.dec_degrees
 
-        # RA deviation display
-        ra_dev = sample.ra_deviation_arcsec
-        if self._tolerance_as_ha_seconds:
-            import math
-            cos_dec = math.cos(math.radians(abs(self._declination_deg)))
-            if cos_dec > 0.001:
-                ra_time_s = ra_dev / 15.0 / cos_dec
-                self._ra_dev.setText(f"\u0394 {ra_time_s:+.3f}s")
-            else:
-                self._ra_dev.setText(f"\u0394 {ra_dev:+.2f}\"")
-        else:
+        # RA deviation in the unit of the RA graph: arcseconds of RA
+        # (degrees mode) or seconds of time (hours mode). The processor gives
+        # it on sky, hence the cos(dec).
+        import math
+        cos_d = max(abs(math.cos(math.radians(self._declination_deg))), 1e-3)
+        ra_dev = sample.ra_deviation_arcsec / cos_d          # arcsec of RA
+        if self._ra_en_degres:
             self._ra_dev.setText(f"\u0394 {ra_dev:+.2f}\"")
+        else:
+            self._ra_dev.setText(f"\u0394 {ra_dev / 15.0:+.3f}s")
         self._dec_dev.setText(f"\u0394 {sample.dec_deviation_arcsec:+.2f}\"")
 
         # Color deviation text based on tolerance — only update if changed
@@ -204,7 +207,13 @@ class StatusPanel(QWidget):
 
     def update_stdev(self, ra_stdev: float, dec_stdev: float):
         """Update STDEV display values."""
-        self._ra_stdev.setText(f"σ {ra_stdev:.2f}\"")
+        import math
+        cos_d = max(abs(math.cos(math.radians(self._declination_deg))), 1e-3)
+        sd = ra_stdev / cos_d                                   # arcsec of RA
+        if self._ra_en_degres:
+            self._ra_stdev.setText(f"σ {sd:.2f}\"")
+        else:
+            self._ra_stdev.setText(f"σ {sd / 15.0:.3f}s")
         self._dec_stdev.setText(f"σ {dec_stdev:.2f}\"")
 
     def add_message(self, message: str, color: QColor = None):
