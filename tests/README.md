@@ -5,30 +5,28 @@ pip install pytest
 python -m pytest tests/ -q
 ```
 
-`test_analyse_suivi.py` rejoue une session synthétique dont **la vérité terrain est
-connue** — deux cibles séparées de 14,7°, un jitter de 0,26″ RMS, une dérive de
-−5,65″/h, une erreur périodique de 1,5″ à 8 minutes — et vérifie que le rapport
-les retrouve.
+`test_tracking_analysis.py` replays a synthetic session whose **ground truth is
+known** — two targets 14.7° apart, a jitter of 0.26″ RMS, a drift of −5.65″/h, a
+periodic error of 1.5″ at 8 minutes — and checks that the report recovers them.
 
-Un dernier test rejoue la **session réelle** qui a déclenché tout ceci. Le fichier
-`Logs/MountMonitor_20260921-220015.dat` n'est pas versionné (`Logs/` est dans
-`.gitignore`, et il pèse 9,5 Mo) : le test est *skippé* s'il est absent. Pour le
-jouer, poser le fichier à cet endroit.
+A last test replays the **real session** that triggered all this. The file
+`Logs/MountMonitor_20260921-220015.dat` is not versioned (`Logs/` is in
+`.gitignore`, and it weighs 9.5 MB): the test is *skipped* when it is absent. To
+run it, put the file at that location.
 
-Ces tests existent parce qu'une session réelle de 8 h 30 était notée **MAUVAIS**
-avec un RMS combiné de 86″, alors que le jitter valait **0,179″**. Cinq causes :
+These tests exist because a real 8 h 30 session was rated **BAD** with a
+combined RMS of 86″, while the jitter was **0.179″**. Five causes:
 
-1. la segmentation cherchait un **saut** entre échantillons consécutifs ; un slew
-   étant un mouvement continu, aucun saut n'était jamais assez grand, et deux
-   cibles tombaient dans un seul segment dont la médiane se plaçait entre elles ;
-2. les échantillons pris **pendant** un slew entraient dans les statistiques ;
-3. le RMS mélangeait la **dérive lente** et le **jitter**, alors qu'une dérive de
-   5″/h ne déplace une étoile que de 0,28″ pendant une pose de 180 s et que chaque
-   dither l'annule ;
-4. la **FFT** travaillait sur les déviations brutes : la dérive y produisait un
-   faux « pic dominant » qui masquait la véritable erreur périodique ;
-5. 🔴 **le jitter était mesuré en retirant une droite, alors que le signal est un
-   escalier.** Entre deux poses le séquenceur dithère et la monture *reste* sur sa
-   nouvelle marche. Retirer une droite ne retire pas un escalier : il restait 9,1″
-   de « jitter » sur la session réelle, alors que la monture tenait chaque marche à
-   **0,12″**. Le jitter se mesure désormais **entre les repositionnements**.
+1. segmentation looked for a **jump** between consecutive samples; a slew being a
+   continuous movement, no jump was ever large enough, and two targets fell into
+   a single segment whose median sat between them;
+2. samples taken **during** a slew entered the statistics;
+3. the RMS mixed the **slow drift** with the **jitter**, whereas a 5″/h drift
+   moves a star by only 0.28″ during a 180 s exposure and every dither cancels it;
+4. the **FFT** worked on the raw deviations: the drift produced a false
+   "dominant peak" there that hid the real periodic error;
+5. 🔴 **the jitter was measured by removing a straight line, whereas the signal
+   is a staircase.** Between two exposures the sequencer dithers and the mount
+   *stays* on its new step. Removing a line does not remove a staircase: 9.1″ of
+   "jitter" remained on the real session, while the mount held each step to
+   **0.12″**. Jitter is now measured **between repositionings**.

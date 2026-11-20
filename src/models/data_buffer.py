@@ -141,11 +141,11 @@ class DataBuffer:
         with self._lock:
             t, v = self._live()
             if len(t) == 0:
-                vide = np.array([], dtype=np.float64)
-                return vide, vide, vide, vide
-            fin = float(t[-1]) if t_end is None else float(t_end)
-            i = max(0, int(np.searchsorted(t, fin - seconds, side='left')) - 1)
-            j = max(0, int(np.searchsorted(self._sd_t, fin - seconds, side='left')) - 1)
+                empty = np.array([], dtype=np.float64)
+                return empty, empty, empty, empty
+            end = float(t[-1]) if t_end is None else float(t_end)
+            i = max(0, int(np.searchsorted(t, end - seconds, side='left')) - 1)
+            j = max(0, int(np.searchsorted(self._sd_t, end - seconds, side='left')) - 1)
             return t[i:].copy(), v[i:].copy(), self._sd_t[j:].copy(), self._sd[j:].copy()
 
     def get_downsampled_arrays(self, max_points: int = 5000) -> tuple[np.ndarray, np.ndarray]:

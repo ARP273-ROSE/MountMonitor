@@ -17,7 +17,7 @@ from datetime import datetime
 
 import numpy as np
 
-from ..utils.ajustement import pente
+from ..utils.fitting import fit_slope
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QTextEdit, QPushButton,
     QLabel, QProgressBar, QFileDialog, QApplication, QTabWidget
@@ -26,8 +26,8 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont, QTextCursor
 
 from ..logging_module.log_parser import ParsedSession, TargetSegment
-from ..utils.i18n import T, get_language, LANGUES
-from .rapport_textes import R
+from ..utils.i18n import T, get_language, LANGUAGES
+from .report_texts import R
 from ..utils.coordinates import format_ra, format_dec, format_ra_degrees
 
 logger = logging.getLogger(__name__)
@@ -35,10 +35,10 @@ logger = logging.getLogger(__name__)
 
 def _rating_emoji(rating: str, lg: str = 'en') -> str:
     """The quality rating, in one language."""
-    cles = {'excellent': 'note_excellent', 'good': 'note_bon',
+    keys = {'excellent': 'note_excellent', 'good': 'note_bon',
             'fair': 'note_moyen', 'poor': 'note_mauvais'}
-    cle = cles.get(rating)
-    return f"[{R(cle, lg)}]" if cle else rating
+    key = keys.get(rating)
+    return f"[{R(key, lg)}]" if key else rating
 
 
 def _rating_color(rating: str) -> str:
@@ -85,66 +85,66 @@ def _is_precision_unguided_mount(session) -> bool:
     return False
 
 
-def construire_rapport(session, lang: str = 'fr') -> str:
-    """Le texte du rapport de nuit, sans ouvrir de fenetre.
+def build_report(session, lang: str = 'fr') -> str:
+    """The night report text, without opening a window.
 
-    Sert a la sauvegarde automatique en fin de session : le rapport le plus
-    utile est celui qu'on n'a pas eu besoin de demander.
+    Used by the automatic save at the end of a session: the most useful
+    report is the one nobody had to ask for.
     """
     dlg = AnalysisDialog.__new__(AnalysisDialog)
     dlg._session = session
     dlg._lang = lang
 
-    class _Tampon:
+    class _Buffer:
         def __init__(self):
-            self.texte = ""
+            self.text = ""
 
         def setPlainText(self, t):
-            self.texte = t
+            self.text = t
 
         def __getattr__(self, _):
             return lambda *a, **k: None
 
-    dlg._report = _Tampon()
-    dlg._vues = {}
-    dlg._rapports = {}
+    dlg._report = _Buffer()
+    dlg._views = {}
+    dlg._reports = {}
     return dlg._run_analysis(lang)
 
 
-def sauver_rapport(chemin_dat, lang: str = 'fr', toutes_langues: bool = True,
+def save_report(dat_path, lang: str = 'fr', all_languages: bool = True,
                    session=None):
-    """Ecrit le rapport de nuit a cote du .dat, dans les trois langues.
+    """Write the night report next to the .dat, in all three languages.
 
         MountMonitor_20260921-220015-rapport-fr.txt
         MountMonitor_20260921-220015-rapport-en.txt
         MountMonitor_20260921-220015-rapport-nl.txt
 
-    Renvoie le chemin de celui de `lang`, ou None. Ne leve jamais : perdre le
-    rapport ne doit pas empecher la fermeture propre des fichiers de session.
+    Returns the path of the `lang` one, or None. Never raises: losing the
+    report must not prevent the session files from closing cleanly.
     """
     from pathlib import Path as _P
     from ..logging_module.log_parser import parse_dat_file
     try:
-        chemin_dat = _P(chemin_dat)
-        if not chemin_dat.exists():
+        dat_path = _P(dat_path)
+        if not dat_path.exists():
             return None
         if session is None:
-            session = parse_dat_file(chemin_dat)
+            session = parse_dat_file(dat_path)
         if session.sample_count == 0:
             return None
-        codes = list(LANGUES) if toutes_langues else [lang]
-        principal = None
+        codes = list(LANGUAGES) if all_languages else [lang]
+        main = None
         for code in codes:
-            sortie = chemin_dat.with_name(f"{chemin_dat.stem}-rapport-{code}.txt")
-            sortie.write_text(construire_rapport(session, code), encoding="utf-8")
+            output = dat_path.with_name(f"{dat_path.stem}-rapport-{code}.txt")
+            output.write_text(build_report(session, code), encoding="utf-8")
             if code == lang:
-                principal = sortie
-        logger.info("Rapport de nuit ecrit en %s : %s",
-                    ", ".join(codes), chemin_dat.stem)
-        return principal or chemin_dat.with_name(
-            f"{chemin_dat.stem}-rapport-{codes[0]}.txt")
+                main = output
+        logger.info("Night report written in %s: %s",
+                    ", ".join(codes), dat_path.stem)
+        return main or dat_path.with_name(
+            f"{dat_path.stem}-rapport-{codes[0]}.txt")
     except Exception:
-        logger.exception("Le rapport de nuit n'a pas pu etre ecrit")
+        logger.exception("The night report could not be written")
         return None
 
 
@@ -155,33 +155,33 @@ class AnalysisDialog(QDialog):
         super().__init__(parent)
         self._session = session
         self._lang = get_language()
-        # L'ascension droite se compte en heures par convention, mais une
-        # monture rend des positions d'encodeur en degres : le reglage permet
-        # de lire les deux dans la meme unite. Lu sans jamais lever : ce
-        # dialogue est aussi construit par __new__ pour sauver un rapport
-        # hors interface.
+        # Right ascension is counted in hours by convention, but a mount
+        # returns encoder positions in degrees: the setting lets both be
+        # read in the same unit. Read without ever raising: this dialog
+        # is also built through __new__ to save a report outside the
+        # interface.
         try:
             from ..config.settings import Settings
-            self._ra_en_degres = bool(Settings().get("ra_in_degrees"))
+            self._ra_in_degrees = bool(Settings().get("ra_in_degrees"))
         except Exception:
-            self._ra_en_degres = False
-        self._rapports = {}
+            self._ra_in_degrees = False
+        self._reports = {}
         self._setup_ui()
-        self._remplir_les_langues()
+        self._fill_languages()
 
-    def _remplir_les_langues(self):
-        """Un rapport par langue, chacun dans son onglet.
+    def _fill_languages(self):
+        """One report per language, each in its own tab.
 
-        Les trois sont construits d'emblee : l'analyse d'une nuit entiere prend
-        une fraction de seconde, et changer d'onglet doit etre instantane.
+        All three are built up front: analysing a whole night takes a
+        fraction of a second, and switching tabs must be instantaneous.
         """
-        for code, vue in getattr(self, '_vues', {}).items():
-            texte = self._run_analysis(code)
-            self._rapports[code] = texte
-            vue.setPlainText(texte)
-            vue.moveCursor(QTextCursor.MoveOperation.Start)
-        self._report_text = self._rapports.get(self._lang, '')
-        if not self._rapports:          # pas d'interface : usage en bibliotheque
+        for code, view in getattr(self, '_views', {}).items():
+            text = self._run_analysis(code)
+            self._reports[code] = text
+            view.setPlainText(text)
+            view.moveCursor(QTextCursor.MoveOperation.Start)
+        self._report_text = self._reports.get(self._lang, '')
+        if not self._reports:          # no interface: library use
             self._report_text = self._run_analysis()
 
     def _setup_ui(self):
@@ -203,24 +203,24 @@ class AnalysisDialog(QDialog):
         # One tab per language. The report is written in ONE language at a
         # time — reading it in two, as before, made it twice as long for no
         # gain. The tab of the interface language is the one shown on opening.
-        self._onglets = QTabWidget()
-        self._onglets.setToolTip(T("tt_an_tabs"))
-        self._vues = {}
-        for code, nom in LANGUES.items():
-            vue = QTextEdit()
-            vue.setReadOnly(True)
-            vue.setFont(QFont('Source Code Pro', 10))
-            vue.setStyleSheet(
+        self._tab_widget = QTabWidget()
+        self._tab_widget.setToolTip(T("tt_an_tabs"))
+        self._views = {}
+        for code, name in LANGUAGES.items():
+            view = QTextEdit()
+            view.setReadOnly(True)
+            view.setFont(QFont('Source Code Pro', 10))
+            view.setStyleSheet(
                 "QTextEdit { background: #1a1a2e; color: #e0e0e0; "
                 "border: 1px solid #333; padding: 8px; }"
             )
-            self._vues[code] = vue
-            self._onglets.addTab(vue, nom)
-        # `_report` reste l'onglet de la langue de l'application : tout le code
-        # existant (remplissage, export, recherche) continue de fonctionner.
-        self._report = self._vues.get(self._lang) or next(iter(self._vues.values()))
-        self._onglets.setCurrentWidget(self._report)
-        layout.addWidget(self._onglets)
+            self._views[code] = view
+            self._tab_widget.addTab(view, name)
+        # `_report` stays the tab of the application language: all the
+        # existing code (filling, export, search) keeps working.
+        self._report = self._views.get(self._lang) or next(iter(self._views.values()))
+        self._tab_widget.setCurrentWidget(self._report)
+        layout.addWidget(self._tab_widget)
 
         # Buttons
         btn_layout = QHBoxLayout()
@@ -243,14 +243,14 @@ class AnalysisDialog(QDialog):
 
         layout.addLayout(btn_layout)
 
-    def _run_analysis(self, langue=None):
+    def _run_analysis(self, language=None):
         """Build the report. Returns the text; also fills the widget if there is one."""
         s = self._session
-        lg = langue or self._lang
-        # `_` traduit dans la langue demandee : le rapport est ecrit dans UNE
-        # langue, plus en double comme avant.
-        def _(cle, **kw):
-            return R(cle, lg, **kw)
+        lg = language or self._lang
+        # `_` translates into the requested language: the report is written
+        # in ONE language, no longer twice as before.
+        def _(key, **kw):
+            return R(key, lg, **kw)
         fr = lg == 'fr'
         lines = []
 
@@ -277,20 +277,20 @@ class AnalysisDialog(QDialog):
         lines.append(f"  {_('fichier'):<22} : {s.file_path}")
         lines.append("")
 
-        # Ces deux sorties anticipees ecrivaient dans self._report sans
-        # verifier `langue`, alors que la fin de la methode le fait. Les
-        # onglets appellent _run_analysis une fois par langue : le dernier
-        # appel — le neerlandais — ecrasait donc l'onglet de la langue
-        # courante. Visible seulement sur une session vide, c'est-a-dire
-        # precisement le cas ou ces sorties servent.
+        # These two early exits wrote into self._report without checking
+        # `language`, whereas the end of the method does. The tabs call
+        # _run_analysis once per language: the last call — Dutch —
+        # therefore overwrote the tab of the current language. Visible
+        # only on an empty session, that is precisely the case these exits
+        # are for.
         if s.sample_count == 0:
             lines.append("  [!] " + _("rien_a_analyser"))
-            return self._rendre(lines, langue)
+            return self._render(lines, language)
 
         if s.tracking_sample_count == 0:
             lines.append("  [!] " + _("pas_de_suivi"))
             lines.append("      " + _("pas_de_suivi_detail"))
-            return self._rendre(lines, langue)
+            return self._render(lines, language)
 
         # ═══════════════════════════════════════════════════════════
         # 2. OVERALL QUALITY RATING (combined from all segments)
@@ -369,23 +369,23 @@ class AnalysisDialog(QDialog):
         lines.append(f"  {T('dec_short', lg) + ' RMS':<22} : {dec_jit:.3f}\"")
         lines.append("")
         lines.append("  --- " + _("s_repositionnement") + " ---")
-        _mv = getattr(s, 'mouvements', None) or []
-        if _mv or s.repositionnements:
+        _mv = getattr(s, 'moves', None) or []
+        if _mv or s.recentrings:
             # Count MOVES, not threshold crossings. One re-centering trips the
             # threshold at every sample it takes to complete, so crossings
             # both inflate the count and deflate the median amplitude -- the
             # 2026-09-22 session read 47 moves of 0.79" where there were 55
             # moves of 6.47".
             if _mv:
-                _am = float(np.median([m.amplitude for m in _mv]))
+                _amp_med = float(np.median([m.amplitude for m in _mv]))
                 _n = len(_mv)
             else:
-                _amp = [g.amplitude_repositionnement for g in s.target_segments
-                        if g.amplitude_repositionnement > 0]
-                _am = float(np.median(_amp)) if _amp else 0.0
-                _n = s.repositionnements
+                _amp = [g.recentring_amplitude for g in s.target_segments
+                        if g.recentring_amplitude > 0]
+                _amp_med = float(np.median(_amp)) if _amp else 0.0
+                _n = s.recentrings
             lines.append(f"  {_('mouvements_detectes'):<22} : {_n}")
-            lines.append(f"  {_('amplitude_mediane'):<22} : {_am:.2f}\"")
+            lines.append(f"  {_('amplitude_mediane'):<22} : {_amp_med:.2f}\"")
             lines.append("      " + _("repositionnement_explique"))
         else:
             lines.append("  " + _("aucun_detecte"))
@@ -393,9 +393,9 @@ class AnalysisDialog(QDialog):
         lines.append("  --- " + _("s_derive") + " ---")
         lines.append(f"  {_('derive_ad'):<22} : {ra_drift_mean:+.2f}\"/h")
         lines.append(f"  {_('derive_dec'):<22} : {dec_drift_mean:+.2f}\"/h")
-        _expo = 180.0
-        _mv = np.hypot(ra_drift_mean, dec_drift_mean) * _expo / 3600.0
-        lines.append(f"  {_('deplacement_pose', n=_expo)} : {_mv:.2f}\"")
+        _exposure = 180.0
+        _mv = np.hypot(ra_drift_mean, dec_drift_mean) * _exposure / 3600.0
+        lines.append(f"  {_('deplacement_pose', n=_exposure)} : {_mv:.2f}\"")
         lines.append("      " + _("annule_par_dither"))
         lines.append("")
         lines.append("  --- " + _("s_memoire") + " ---")
@@ -448,12 +448,12 @@ class AnalysisDialog(QDialog):
         # ═══════════════════════════════════════════════════════════
         for seg_idx, seg in enumerate(s.target_segments):
             lines.append("=" * 70)
-            # __dict__ et non getattr : sur un QDialog construit par __new__
-            # — ce que fait sauver_rapport — Qt intercepte l'acces et leve
-            # RuntimeError au lieu d'AttributeError, si bien que la valeur
-            # par defaut de getattr ne sert a rien.
-            en_degres = self.__dict__.get('_ra_en_degres', False)
-            ra_str = (format_ra_degrees(seg.ra_median_hours) if en_degres
+            # __dict__ and not getattr: on a QDialog built through __new__
+            # — which save_report does — Qt intercepts the access and raises
+            # RuntimeError instead of AttributeError, so getattr's default
+            # value is of no use.
+            in_degrees = self.__dict__.get('_ra_in_degrees', False)
+            ra_str = (format_ra_degrees(seg.ra_median_hours) if in_degrees
                       else format_ra(seg.ra_median_hours))
             dec_str = format_dec(seg.dec_median_degrees)
             lines.append(f"  {_('t_cible')} #{seg_idx + 1}  —  {T('ra_short', lg)} {ra_str}  "
@@ -474,7 +474,7 @@ class AnalysisDialog(QDialog):
             # that dominates the spectrum and hides the worm period we are
             # actually looking for.
             # The spectrum works on the real timestamps (gaps skipped) and
-            # removes the drift and the dither steps (src/core/spectre.py).
+            # removes the drift and the dither steps (src/core/spectrum.py).
             if len(seg.ra_deviations) > 64:
                 self._write_fft(lines, "RA", seg.timestamps, seg.ra_deviations, fr, top_n=5, lg=lg)
             if len(seg.dec_deviations) > 64:
@@ -543,7 +543,7 @@ class AnalysisDialog(QDialog):
             lines.append(f"  PC-Mount diff std  : {np.std(td):.1f} ms")
 
             if len(td) > 100:
-                a = pente(s.time_timestamps - s.time_timestamps[0], td)
+                a = fit_slope(s.time_timestamps - s.time_timestamps[0], td)
                 if a is None:
                     lines.append("  " + _("derive_non_calculable"))
                 else:
@@ -607,12 +607,12 @@ class AnalysisDialog(QDialog):
         # ═══════════════════════════════════════════════════════════
         # 6a. COMMANDED MOVES
         # ═══════════════════════════════════════════════════════════
-        lines.extend(self._section_mouvements(s, lg))
+        lines.extend(self._moves_section(s, lg))
 
         # ═══════════════════════════════════════════════════════════
         # 6b. NIGHT EPHEMERIS
         # ═══════════════════════════════════════════════════════════
-        lines.extend(self._section_nuit(s, lg))
+        lines.extend(self._night_section(s, lg))
 
         # ═══════════════════════════════════════════════════════════
         # 7. TOLERANCE ANALYSIS (TRACKING data only)
@@ -824,24 +824,24 @@ class AnalysisDialog(QDialog):
         # Drift, per target. The threshold is what a drift actually costs over
         # one exposure, not its hourly figure: every dither cancels the rest.
         for seg_idx, seg in enumerate(s.target_segments):
-            for axe, devs in (("RA", seg.ra_deviations), ("DEC", seg.dec_deviations)):
+            for axis_item, devs in (("RA", seg.ra_deviations), ("DEC", seg.dec_deviations)):
                 if len(devs) <= 100:
                     continue
-                a = pente(seg.timestamps - seg.timestamps[0], devs)
+                a = fit_slope(seg.timestamps - seg.timestamps[0], devs)
                 if a is None:
                     continue
-                par_heure = a * 3600.0
-                if abs(par_heure) <= 15.0:
+                per_hour = a * 3600.0
+                if abs(per_hour) <= 15.0:
                     continue
                 if precision_unguided:
                     recommendations.append(_("r_derive_modele", n=seg_idx + 1,
-                                             axe=axe, v=par_heure))
-                elif axe == "RA":
+                                             axe=axis_item, v=per_hour))
+                elif axis_item == "RA":
                     recommendations.append(_("r_derive_ad_polaire", n=seg_idx + 1,
-                                             v=par_heure))
+                                             v=per_hour))
                 else:
                     recommendations.append(_("r_derive_dec_polaire", n=seg_idx + 1,
-                                             v=par_heure))
+                                             v=per_hour))
 
         # Environment-based recommendations
         if has_env:
@@ -867,21 +867,21 @@ class AnalysisDialog(QDialog):
                      f"{_('a_heure')} {datetime.now().strftime('%H:%M:%S')}")
         lines.append("=" * 70)
 
-        return self._rendre(lines, langue)
+        return self._render(lines, language)
 
-    def _rendre(self, lines, langue):
-        """Assemble le texte, et ne remplit la fenetre que si c'est l'appel
-        normal. Un appel avec une langue explicite — les onglets, la
-        sauvegarde des trois rapports — doit seulement rendre le texte."""
-        texte = "\n".join(lines)
-        if langue is None:
-            self._report_text = texte
+    def _render(self, lines, language):
+        """Assemble the text, and fill the window only on the normal
+        call. A call with an explicit language — the tabs, saving the
+        three reports — must only return the text."""
+        text = "\n".join(lines)
+        if language is None:
+            self._report_text = text
             if getattr(self, '_report', None) is not None:
-                self._report.setPlainText(texte)
+                self._report.setPlainText(text)
                 self._report.moveCursor(QTextCursor.MoveOperation.Start)
-        return texte
+        return text
 
-    def _section_mouvements(self, s, lg) -> list:
+    def _moves_section(self, s, lg) -> list:
         """Dither, re-centering, and moves the mount did not recover from.
 
         Kept strictly apart from the tracking figures. A sequencer that
@@ -889,10 +889,10 @@ class AnalysisDialog(QDialog):
         does, so none of this touches the jitter -- that is measured between
         moves, with a margin after each.
         """
-        def _(cle, **kw):
-            return R(cle, lg, **kw)
+        def _(key, **kw):
+            return R(key, lg, **kw)
 
-        mv = getattr(s, 'mouvements', None) or []
+        mv = getattr(s, 'moves', None) or []
         lines = ["=" * 70, "  " + _("t_mouvements"), "=" * 70, "",
                  "  " + _("mv_intro"), ""]
         if not mv:
@@ -901,8 +901,8 @@ class AnalysisDialog(QDialog):
 
         import numpy as _np
         amp = _np.array([m.amplitude for m in mv])
-        dur = _np.array([m.duree for m in mv])
-        classes = [m.classe for m in mv]
+        dur = _np.array([m.duration for m in mv])
+        classes = [m.kind for m in mv]
         n_d = classes.count("dither")
         n_r = classes.count("recentrage")
         n_a = classes.count("anomalie")
@@ -919,10 +919,10 @@ class AnalysisDialog(QDialog):
         lines.append(f"  {_('mv_max'):<34} : {amp.max():.2f}\"")
         lines.append(f"  {_('mv_duree'):<34} : {_np.median(dur):.1f} s")
         if len(mv) > 1:
-            ecarts = _np.diff(sorted(m.instant for m in mv))
-            ecarts = ecarts[ecarts > 0]
-            if len(ecarts):
-                lines.append(f"  {_('mv_cadence'):<34} : {_np.median(ecarts):.0f} s")
+            deviations = _np.diff(sorted(m.instant for m in mv))
+            deviations = deviations[deviations > 0]
+            if len(deviations):
+                lines.append(f"  {_('mv_cadence'):<34} : {_np.median(deviations):.0f} s")
         lines.append("")
         lines.append("  " + _("mv_hors_jitter"))
         if n_a:
@@ -930,15 +930,15 @@ class AnalysisDialog(QDialog):
         lines.append("")
         return lines
 
-    def _section_nuit(self, s, lg) -> list:
+    def _night_section(self, s, lg) -> list:
         """Sunset, twilights and how much of the night the session covers.
 
         Computed from the site the mount reported, stored in the .dat header
         so that it still works on replay. Without a site there is nothing to
         say, and saying where to set one is more use than an empty section.
         """
-        def _(cle, **kw):
-            return T(cle, lg) if not kw else T(cle, lg).format(**kw)
+        def _(key, **kw):
+            return T(key, lg) if not kw else T(key, lg).format(**kw)
 
         lines = ["=" * 70, "  " + _("t_nuit"), "=" * 70, ""]
         lat = getattr(s, 'site_lat', None)
@@ -947,18 +947,18 @@ class AnalysisDialog(QDialog):
             lines += ["  " + _("nuit_pas_de_site"), ""]
             return lines
 
-        from ..core.ephemerides import nuit_autour
+        from ..core.ephemerides import night_around
         from datetime import datetime, timezone, timedelta
-        debut = getattr(s, 'start_iso', None)
-        if debut is None:
+        start = getattr(s, 'start_iso', None)
+        if start is None:
             lines += ["  " + _("nuit_pas_de_site"), ""]
             return lines
         try:
-            n = nuit_autour(debut, lat, lon)
+            n = night_around(start, lat, lon)
         except Exception:
             return lines[:0]
 
-        tz = debut.tzinfo or timezone.utc
+        tz = start.tzinfo or timezone.utc
 
         def hl(t):
             return t.astimezone(tz).strftime('%H:%M') if t else '--:--'
@@ -967,40 +967,40 @@ class AnalysisDialog(QDialog):
         elev_s = f"  {elev:.0f} m" if elev else ""
         lines.append(f"  {_('nuit_site'):<34} : {lat:+.4f}  {lon:+.4f}{elev_s}")
         lines.append("")
-        lines.append(f"  {_('nuit_coucher'):<34} : {hl(n.coucher)}")
-        lines.append(f"  {_('nuit_nautique'):<34} : {hl(n.nautique)}")
-        if n.nuit_noire:
-            d = n.duree_noire
-            lines.append(f"  {_('nuit_noire'):<34} : {hl(n.astro_debut)} "
-                         f"-> {hl(n.astro_fin)}")
+        lines.append(f"  {_('nuit_coucher'):<34} : {hl(n.sunset)}")
+        lines.append(f"  {_('nuit_nautique'):<34} : {hl(n.nautical)}")
+        if n.astro_dark:
+            d = n.dark_duration
+            lines.append(f"  {_('nuit_noire'):<34} : {hl(n.astro_start)} "
+                         f"-> {hl(n.astro_end)}")
             lines.append(f"  {_('nuit_duree_noire'):<34} : "
                          f"{int(d.total_seconds() // 3600)} h "
                          f"{int((d.total_seconds() % 3600) // 60):02d}")
         else:
             lines.append("  " + _("nuit_pas_de_nuit_noire"))
-        lines.append(f"  {_('nuit_lever'):<34} : {hl(n.lever)}")
+        lines.append(f"  {_('nuit_lever'):<34} : {hl(n.sunrise)}")
         lines.append("")
 
         # How much of the dark night the session actually holds. A session
         # that starts an hour late loses an hour that cannot be recovered,
         # and that is worth seeing next to the tracking figures.
-        if n.nuit_noire and len(s.timestamps) > 1:
-            fin = debut + timedelta(seconds=float(s.timestamps[-1] - s.timestamps[0]))
-            recouvre = (min(fin, n.astro_fin) - max(debut, n.astro_debut))
-            secs = max(0.0, recouvre.total_seconds())
-            total = n.duree_noire.total_seconds()
+        if n.astro_dark and len(s.timestamps) > 1:
+            end = start + timedelta(seconds=float(s.timestamps[-1] - s.timestamps[0]))
+            overlap = (min(end, n.astro_end) - max(start, n.astro_start))
+            secs = max(0.0, overlap.total_seconds())
+            total = n.dark_duration.total_seconds()
             lines.append(f"  {_('nuit_couverture'):<34} : "
                          f"{int(secs // 3600)} h {int((secs % 3600) // 60):02d} "
                          f"/ {int(total // 3600)} h {int((total % 3600) // 60):02d}"
                          f"  ({100 * secs / total:.0f} %)")
-            avant = (min(fin, n.astro_debut) - debut).total_seconds()
-            if avant > 300:
-                lines.append(f"      {int(avant // 3600)} h "
-                             f"{int((avant % 3600) // 60):02d} {_('nuit_avant')}")
-            apres = (fin - max(debut, n.astro_fin)).total_seconds()
-            if apres > 300:
-                lines.append(f"      {int(apres // 3600)} h "
-                             f"{int((apres % 3600) // 60):02d} {_('nuit_apres')}")
+            before = (min(end, n.astro_start) - start).total_seconds()
+            if before > 300:
+                lines.append(f"      {int(before // 3600)} h "
+                             f"{int((before % 3600) // 60):02d} {_('nuit_avant')}")
+            after = (end - max(start, n.astro_end)).total_seconds()
+            if after > 300:
+                lines.append(f"      {int(after // 3600)} h "
+                             f"{int((after % 3600) // 60):02d} {_('nuit_apres')}")
             lines.append("")
         return lines
 
@@ -1008,8 +1008,8 @@ class AnalysisDialog(QDialog):
                           deviations: np.ndarray, timestamps: np.ndarray,
                           stdevs: np.ndarray, fr: bool,
                           precision_unguided: bool = False, lg: str = 'en'):
-        def _(cle, **kw):
-            return R(cle, lg, **kw)
+        def _(key, **kw):
+            return R(key, lg, **kw)
         """Write statistics for one axis (RA or DEC)."""
         if len(deviations) == 0:
             return
@@ -1056,16 +1056,16 @@ class AnalysisDialog(QDialog):
 
         # Drift analysis
         #
-        # La regression n'a de sens que si le temps avance. Sur un fichier
-        # tronque, ou sur une session tenant dans la meme seconde, tous les
-        # instants sont egaux : l'ajustement devient degenere et numpy leve
-        # « SVD did not converge » — au milieu de la construction du rapport,
-        # dont l'ouverture d'un fichier .dat n'est pas protegee. Un rapport
-        # qui ne peut pas calculer une pente le dit ; il ne fait pas tomber
-        # l'application.
+        # The regression only makes sense if time moves forward. On a
+        # truncated file, or on a session held within one second, all
+        # instants are equal: the fit becomes degenerate and numpy raises
+        # "SVD did not converge" — in the middle of building the report,
+        # whose opening of a .dat file is not protected. A report that
+        # cannot compute a slope says so; it does not bring down the
+        # application.
         if len(deviations) > 100 and len(timestamps) == len(deviations):
             t_rel = timestamps - timestamps[0]
-            a = pente(t_rel, deviations)
+            a = fit_slope(t_rel, deviations)
             if a is None:
                 lines.append("  " + _("derive_non_calculable"))
                 lines.append("")
@@ -1100,18 +1100,18 @@ class AnalysisDialog(QDialog):
                    timestamps: np.ndarray, deviations: np.ndarray,
                    fr: bool, top_n: int = 5, lg: str = 'en'):
         """Write FFT analysis for one axis (amplitudes in arcsec PEAK)."""
-        def _(cle, **kw):
-            return R(cle, lg, **kw)
-        from ..core.spectre import spectre, pics
+        def _(key, **kw):
+            return R(key, lg, **kw)
+        from ..core.spectrum import spectrum, find_peaks
         t = np.asarray(timestamps, dtype=np.float64)
         dev = np.asarray(deviations, dtype=np.float64)
         if len(dev) < 64 or len(t) != len(dev):
             return
-        freqs, mags = spectre(t, dev)
+        freqs, mags = spectrum(t, dev)
         if len(mags) == 0:
             return
 
-        peak_indices = pics(freqs, mags, n=top_n)
+        peak_indices = find_peaks(freqs, mags, n=top_n)
         if not peak_indices:
             return
 
@@ -1159,14 +1159,14 @@ class AnalysisDialog(QDialog):
         """Export the report shown in the current tab."""
         title = R("exporter_rapport", self._lang)
 
-        # La langue exportee est celle de l'onglet affiche, pas celle de
-        # l'interface : on exporte ce qu'on a sous les yeux.
+        # The exported language is that of the displayed tab, not that of
+        # the interface: we export what is in front of us.
         code = self._lang
-        for c, vue in getattr(self, '_vues', {}).items():
-            if vue is self._onglets.currentWidget():
+        for c, view in getattr(self, '_views', {}).items():
+            if view is self._tab_widget.currentWidget():
                 code = c
                 break
-        texte = self._rapports.get(code, getattr(self, '_report_text', ''))
+        text = self._reports.get(code, getattr(self, '_report_text', ''))
 
         default_name = "MountMonitor_Analysis"
         if self._session.start_time:
@@ -1180,7 +1180,7 @@ class AnalysisDialog(QDialog):
         if path:
             try:
                 with open(path, 'w', encoding='utf-8') as f:
-                    f.write(texte)
+                    f.write(text)
                 logger.info(f"Analysis report exported to {path}")
             except OSError as e:
                 logger.error(f"Failed to export report: {e}")

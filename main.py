@@ -25,8 +25,8 @@ sys.path.insert(0, str(project_root))
 
 def setup_logging(log_level: str = "INFO"):
     """Configure application logging."""
-    from src.config.paths import dossier_journaux
-    log_dir = dossier_journaux()
+    from src.config.paths import logs_folder
+    log_dir = logs_folder()
     log_dir.mkdir(exist_ok=True)
 
     logging.basicConfig(
@@ -74,79 +74,79 @@ def parse_args():
     return parser.parse_args()
 
 
-_FICHIER_CRASH_NATIF = "_crash_natif.log"
-_vigie = None
+_NATIVE_CRASH_FILE = "_crash_natif.log"
+_watchdog = None
 
 
-def _initialiser_les_rapports(app):
-    """Prepare la remontee des incidents, et ramasse ceux du dernier depart.
+def _init_reporting(app):
+    """Set up incident reporting, and collect those from the previous run.
 
-    Trois choses se jouent ici :
+    Three things happen here:
 
-      - `relever_crash_natif` lit la trace laissee par un plantage qui n'a pas
-        produit d'exception Python — une faute de segmentation dans Qt, par
-        exemple. Sans elle, ce genre de mort ne laisse rien du tout ;
-      - la file d'attente est reprise : un rapport ecrit alors que la maison
-        n'avait pas de reseau part au prochain lancement ;
-      - le gestionnaire d'exceptions envoie ce qui n'a pas ete rattrape.
+      - `relever_crash_natif` reads the trace left by a crash that raised no
+        Python exception — a segmentation fault in Qt, for example. Without
+        it, that kind of death leaves nothing at all;
+      - the queue is resumed: a report written while the house had no
+        network goes out on the next launch;
+      - the exception handler sends whatever was not caught.
 
-    Tout est suspendu au consentement, demande une fois, apres l'ouverture de
-    la fenetre : tant qu'il n'a pas ete donne, rien ne sort de la machine.
+    Everything depends on consent, asked once, after the window opens: until
+    it has been given, nothing leaves the machine.
     """
-    global _vigie
+    global _watchdog
     try:
         import reporting
-        from src.config.paths import dossier_donnees
+        from src.config.paths import data_folder
     except Exception:
-        logging.getLogger(__name__).debug("Rapports indisponibles", exc_info=True)
+        logging.getLogger(__name__).debug("Reporting unavailable", exc_info=True)
         return
 
-    donnees = dossier_donnees()
-    reporting.init(donnees)
+    data = data_folder()
+    reporting.init(data)
 
-    # Trace des plantages sans exception : elle s'ecrit au fil de l'eau dans
-    # un fichier, releve au demarrage suivant.
-    chemin_natif = donnees / _FICHIER_CRASH_NATIF
-    # Relever la trace de la session precedente AVANT de rouvrir le fichier :
-    # l'ouverture en ecriture le vide, et la trace d'un crash natif etait
-    # perdue avant d'avoir ete lue.
+    # Trace of crashes without an exception: written continuously to a file,
+    # collected at the next start.
+    native_path = data / _NATIVE_CRASH_FILE
+    # Collect the previous session's trace BEFORE reopening the file:
+    # opening it for writing empties it, and the trace of a native crash was
+    # lost before being read.
     try:
-        reporting.relever_crash_natif(chemin_natif)
+        reporting.relever_crash_natif(native_path)
         reporting.reprendre_file_en_fond()
     except Exception:
-        logging.getLogger(__name__).debug("File des rapports non reprise", exc_info=True)
+        logging.getLogger(__name__).debug("Report queue not resumed", exc_info=True)
 
     try:
         import faulthandler
-        _initialiser_les_rapports._fichier = open(chemin_natif, 'w', encoding='utf-8')
-        faulthandler.enable(file=_initialiser_les_rapports._fichier, all_threads=True)
+        _init_reporting._file = open(native_path, 'w', encoding='utf-8')
+        faulthandler.enable(file=_init_reporting._file, all_threads=True)
     except Exception:
-        logging.getLogger(__name__).debug("faulthandler indisponible", exc_info=True)
+        logging.getLogger(__name__).debug("faulthandler unavailable", exc_info=True)
 
-    # Vigie anti-gel : un minuteur bat sur le fil graphique, un fil de fond
-    # regarde l'heure. Si le battement s'arrete, la fenetre est figee, et la
-    # pile du fil graphique dit alors quelle operation n'a pas ete deportee.
-    # Sans cela un gel ne laisse aucune trace : on tue l'application et on ne
-    # peut rien en dire.
-    # Le battement est indispensable : sans lui, la vigie ne voit jamais
-    # passer le fil graphique et conclut au gel au bout de dix secondes, a
-    # chaque lancement. C'est ce qui s'est produit de la 1.8.1 a la 1.13.0 :
-    # six fausses alertes remontees d'un poste ou tout allait bien, avec pour
-    # seule trace une pile montrant le fil graphique au repos dans app.exec().
+    # Freeze watchdog: a timer beats on the GUI thread, a background thread
+    # watches the clock. If the beat stops, the window is frozen, and the GUI
+    # thread's stack then shows which operation was not moved off it.
+    # Without this a freeze leaves no trace: the app gets killed and nothing
+    # can be said about it.
+    # The heartbeat is essential: without it, the watchdog never sees the GUI
+    # thread go by and concludes it froze after ten seconds, on every launch.
+    # That is what happened from 1.8.1 to 1.13.0: six false alerts reported
+    # from a machine where everything was fine, with as the only trace a
+    # stack showing the GUI thread idle in app.exec().
     try:
         from PyQt6.QtCore import QTimer
-        _vigie = reporting.Vigie(seuil=10.0, periode=2.0)
-        _vigie.demarrer()
-        _battement = QTimer(app)
-        _battement.timeout.connect(_vigie.battre)
-        _battement.start(2000)
-        app._battement_vigie = _battement   # sinon le minuteur est ramasse
+        _watchdog = reporting.Vigie(seuil=10.0, periode=2.0)
+        _watchdog.demarrer()
+        _heartbeat = QTimer(app)
+        _heartbeat.timeout.connect(_watchdog.battre)
+        _heartbeat.start(2000)
+        app._watchdog_heartbeat = _heartbeat   # otherwise the timer is garbage-collected
     except Exception:
-        logging.getLogger(__name__).debug("Vigie non demarree", exc_info=True)
+        logging.getLogger(__name__).debug("Watchdog not started", exc_info=True)
 
 
-def _demander_accord_rapports(fenetre):
-    """Pose la question une seule fois, puis signale le demarrage."""
+def _ask_report_consent(window):
+    """Ask the question once only, then report the start."""
     try:
         import reporting
     except Exception:
@@ -154,28 +154,28 @@ def _demander_accord_rapports(fenetre):
     try:
         if reporting.consentement() is None:
             from PyQt6.QtWidgets import QMessageBox
-            boite = QMessageBox(fenetre)
-            boite.setWindowTitle("MountMonitor")
-            boite.setIcon(QMessageBox.Icon.Question)
+            box = QMessageBox(window)
+            box.setWindowTitle("MountMonitor")
+            box.setIcon(QMessageBox.Icon.Question)
             # Asked in ONE language -- the one the user reads. It used to be
             # French and English stacked in the same box, which meant the
             # Dutch user got neither and everyone else read it twice. The
             # window language is already set by the time this is shown.
             from src.utils.i18n import T
-            boite.setText(T("consent_question"))
-            boite.setInformativeText(T("consent_detail"))
-            oui = boite.addButton(T("consent_oui"),
+            box.setText(T("consent_question"))
+            box.setInformativeText(T("consent_detail"))
+            yes_btn = box.addButton(T("consent_oui"),
                                   QMessageBox.ButtonRole.AcceptRole)
-            boite.addButton(T("consent_non"),
+            box.addButton(T("consent_non"),
                             QMessageBox.ButtonRole.RejectRole)
-            boite.exec()
-            reporting.definir_consentement(boite.clickedButton() is oui)
+            box.exec()
+            reporting.definir_consentement(box.clickedButton() is yes_btn)
         reporting.signaler_demarrage()
     except Exception:
-        logging.getLogger(__name__).debug("Accord non demande", exc_info=True)
+        logging.getLogger(__name__).debug("Consent not requested", exc_info=True)
 
 
-def updater_est_installe() -> bool:
+def updater_is_installed() -> bool:
     try:
         import updater
         return bool(updater.is_packaged())
@@ -183,7 +183,7 @@ def updater_est_installe() -> bool:
         return False
 
 
-def _langue_tot():
+def _early_language():
     """Apply the user's language before any dialog can appear.
 
     The crash dialog is shown at line ~246, the main window is built at
@@ -198,7 +198,7 @@ def _langue_tot():
         pass
 
 
-def _verifier() -> int:
+def _self_check() -> int:
     """--check : the application and its dependencies load.
 
     Run by the package builds (Windows, macOS, Linux) with the embedded
@@ -229,7 +229,7 @@ def _verifier() -> int:
 def main():
     """Application entry point."""
     if "--check" in sys.argv[1:]:
-        return _verifier()
+        return _self_check()
 
     # Need to import logging.handlers before setup
     import logging.handlers
@@ -240,7 +240,7 @@ def main():
     logger = logging.getLogger(__name__)
     logger.info("MountMonitor starting...")
 
-    _langue_tot()
+    _early_language()
 
     # Determine simulation mode
     if args.sim_all:
@@ -263,51 +263,50 @@ def main():
     app.setApplicationName("MountMonitor")
     app.setOrganizationName("ARP273")
 
-    # Une seule instance a la fois. Deux copies qui interrogent la meme monture
-    # sur le meme port LX200, c'est deux flots de commandes entrelaces : la
-    # monture repond a l'une ce que l'autre attendait.
+    # One instance at a time. Two copies querying the same mount on the same
+    # LX200 port means two interleaved command streams: the mount answers
+    # one with what the other was waiting for.
     from PyQt6.QtCore import QLockFile, QDir
-    _verrou = QLockFile(str(Path(QDir.tempPath()) / 'mountmonitor.lock'))
-    _verrou.setStaleLockTime(30000)
-    if not _verrou.tryLock(200):
+    _lock_file = QLockFile(str(Path(QDir.tempPath()) / 'mountmonitor.lock'))
+    _lock_file.setStaleLockTime(30000)
+    if not _lock_file.tryLock(200):
         from PyQt6.QtWidgets import QMessageBox
         from src.utils.i18n import T
         QMessageBox.information(None, "MountMonitor", T("deja_ouvert"))
         return 0
-    app._verrou_instance = _verrou
+    app._instance_lock = _lock_file
 
-    # Verrou nomme, lisible par l'installeur (AppMutex dans installer.iss).
-    # QLockFile ne se voit que depuis Qt : sans celui-ci, installer une
-    # nouvelle version par-dessus l'application ouverte ne remplace pas les
-    # fichiers en cours d'utilisation, et se termine pourtant en annoncant
-    # « termine ».
+    # Named mutex, visible to the installer (AppMutex in installer.iss).
+    # QLockFile is only visible from Qt: without this one, installing a new
+    # version over the running application does not replace the files in
+    # use, yet still ends by announcing "finished".
     if sys.platform == 'win32':
         try:
             import ctypes
-            app._mutex_installeur = ctypes.windll.kernel32.CreateMutexW(
+            app._installer_mutex = ctypes.windll.kernel32.CreateMutexW(
                 None, False, 'MountMonitorEnCours')
         except Exception:
-            logger.debug("Verrou nomme non pose", exc_info=True)
+            logger.debug("Named mutex not created", exc_info=True)
 
-    # Remontee des incidents. Initialisee avant tout le reste : ce qui nous
-    # interesse le plus, ce sont justement les demarrages qui n'aboutissent pas.
-    _initialiser_les_rapports(app)
+    # Incident reporting. Initialised before everything else: what interests
+    # us most is precisely the starts that never complete.
+    _init_reporting(app)
 
     # Apply dark theme
     from src.gui.theme import apply_dark_theme
     apply_dark_theme(app)
-    # Vraie boite de fichiers complete sous Linux (barre laterale, arborescence),
-    # la boite « native » du portail y etant souvent reduite (kit commun).
+    # Real, complete file dialog on Linux (sidebar, tree), the portal's
+    # "native" dialog often being stripped down there (shared kit).
     try:
         import interface_kit
         interface_kit.installer_dialogues_fichiers()
     except Exception:
-        logger.debug("Boites de fichiers du kit non installees", exc_info=True)
+        logger.debug("Kit file dialogs not installed", exc_info=True)
 
     # Install crash reporter
     from src.logging_module.crash_reporter import CrashReporter
-    from src.config.paths import dossier_donnees
-    crash_reporter = CrashReporter(dossier_donnees())
+    from src.config.paths import data_folder
+    crash_reporter = CrashReporter(data_folder())
     crash_reporter.install()
 
     # Check for previous crash — offer to report on GitHub.
@@ -361,28 +360,27 @@ def main():
 
         crash_reporter.clear_crash_report()
 
-    # Inventaire de la machine : en fil de fond, apres l'affichage.
+    # Machine inventory: in a background thread, after the window is shown.
     #
-    # Sous Windows il repose sur quatre appels a `wmic`, chacun avec cinq
-    # secondes d'attente maximum. Lances ici, avant la creation de la
-    # fenetre, ils retardaient l'ouverture d'autant — ecran noir, sans un
-    # mot. Et `wmic` a ete retire des versions recentes de Windows : sur ces
-    # machines les quatre appels echouent, apres avoir coute le lancement de
-    # quatre processus.
+    # On Windows it relies on four `wmic` calls, each with up to five seconds
+    # of waiting. Run here, before the window was created, they delayed the
+    # opening by as much — black screen, not a word. And `wmic` has been
+    # removed from recent Windows versions: on those machines the four calls
+    # fail, after costing the launch of four processes.
     #
-    # Le resultat ne sert qu'a une ligne de journal. Il n'a aucune raison de
-    # retenir l'affichage.
-    def _inventorier():
+    # The result only feeds one log line. It has no reason to hold up the
+    # display.
+    def _take_inventory():
         try:
             from src.utils.hardware_detect import detect_hardware
             hw = detect_hardware()
             logger.info(f"Hardware: {hw.cpu_name}, {hw.cpu_cores_physical} cores, "
                         f"{hw.ram_total_mb}MB RAM, GPU: {hw.gpu_name}")
         except Exception:
-            logger.debug("Inventaire de la machine indisponible", exc_info=True)
+            logger.debug("Machine inventory unavailable", exc_info=True)
 
     import threading
-    threading.Thread(target=_inventorier, daemon=True,
+    threading.Thread(target=_take_inventory, daemon=True,
                      name='inventaire-machine').start()
 
     # Create and show main window
@@ -392,7 +390,7 @@ def main():
 
     # Offer desktop shortcut on first launch -- from source only: the
     # installed application already has the installer's shortcuts.
-    if not updater_est_installe():
+    if not updater_is_installed():
         from src.config.settings import Settings
         _settings = Settings()
         from shortcut_helper import offer_shortcut
@@ -400,23 +398,22 @@ def main():
                        get_config=lambda k: _settings.get(k),
                        set_config=lambda k, v: (_settings.set(k, v), _settings.save()))
 
-    _demander_accord_rapports(window)
+    _ask_report_consent(window)
 
     logger.info("MountMonitor ready")
     code = app.exec()
 
-    # Sortie immediate, sans demontage de l'interpreteur.
+    # Immediate exit, without tearing down the interpreter.
     #
-    # Une fois la boucle terminee, Python detruit ses objets dans un ordre que
-    # Qt ne supporte pas : la bibliotheque graphique est liberee pendant que
-    # des objets s'y referent encore, et le processus meurt d'une faute de
-    # segmentation. Sous Windows cela donne « le logiciel a cesse de
-    # fonctionner » au moment ou l'on ferme la fenetre — signale comme un
-    # plantage, alors que tout le travail est fait. Les fichiers de session
-    # sont fermes par la fenetre elle-meme avant d'en arriver la.
+    # Once the loop ends, Python destroys its objects in an order Qt cannot
+    # handle: the GUI library is freed while objects still refer to it, and
+    # the process dies of a segmentation fault. On Windows this shows up as
+    # "the program has stopped working" when the window is closed — reported
+    # as a crash, although all the work is done. Session files are closed by
+    # the window itself before getting there.
     try:
-        if _vigie is not None:
-            _vigie.arreter()
+        if _watchdog is not None:
+            _watchdog.arreter()
     except Exception:
         pass
     try:

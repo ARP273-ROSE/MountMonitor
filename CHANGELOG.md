@@ -6,9 +6,23 @@ behaviour changes, the patch number when only a defect is fixed.
 
 Figures quoted below were measured on real sessions, not estimated.
 
-## 4.3.1 — 2026-11-20
+## 4.4.0 — 2026-11-20
 
-Nicolàs de Hilster's test of 4.3.0 on his 10Micron.
+Nicolàs de Hilster's test of 4.3.0 on his 10Micron, and the code in English.
+
+### Code in English
+- **Identifiers, comments, docstrings and developer messages are now in
+  English** throughout the program, its tests and its tools (608 names, about
+  1,600 comment lines), so that the project can be worked on together. File
+  renames: `src/core/spectre.py` → `spectrum.py`, `src/utils/ajustement.py` →
+  `fitting.py`, `src/gui/aide_textes.py` → `help_texts.py`,
+  `src/gui/rapport_textes.py` → `report_texts.py`, the `verifier_*.py` checks
+  → `check_*.py`, and the French test file names. Behaviour is unchanged; the
+  interface stays trilingual (EN/FR/NL). The files shared with the other
+  applications of the kit (updater, reporting, packaging) keep their names.
+- The 10Micron log analysis showed a "State (FR)" column whatever the
+  language, and no Dutch state names: one state column now, in the interface
+  language. The "Open log file" dialog had no Dutch either.
 
 ### Fixed
 - **A mount left in solar mode raised no alarm**: the tracking-rate check

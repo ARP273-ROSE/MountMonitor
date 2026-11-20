@@ -37,10 +37,10 @@ class HardwareInfo:
         return 10000
 
 
-# Sous pythonw, chaque sous-processus ouvre brievement une console noire :
-# quatre fenetres qui clignotent au demarrage, sans explication. CREATE_NO_WINDOW
-# n'existe que sous Windows.
-_SANS_CONSOLE = getattr(__import__('subprocess'), 'CREATE_NO_WINDOW', 0)
+# Under pythonw, each subprocess briefly opens a black console: four windows
+# flashing at startup, with no explanation. CREATE_NO_WINDOW only exists on
+# Windows.
+_NO_CONSOLE = getattr(__import__('subprocess'), 'CREATE_NO_WINDOW', 0)
 
 
 def detect_hardware() -> HardwareInfo:
@@ -59,7 +59,7 @@ def detect_hardware() -> HardwareInfo:
             result = subprocess.run(
                 ["wmic", "cpu", "get", "NumberOfCores", "/value"],
                 capture_output=True, text=True, timeout=5,
-                creationflags=_SANS_CONSOLE
+                creationflags=_NO_CONSOLE
             )
             for line in result.stdout.strip().split('\n'):
                 if 'NumberOfCores' in line:
@@ -72,7 +72,7 @@ def detect_hardware() -> HardwareInfo:
             result = subprocess.run(
                 ["wmic", "cpu", "get", "Name", "/value"],
                 capture_output=True, text=True, timeout=5,
-                creationflags=_SANS_CONSOLE
+                creationflags=_NO_CONSOLE
             )
             for line in result.stdout.strip().split('\n'):
                 if 'Name' in line:
@@ -88,7 +88,7 @@ def detect_hardware() -> HardwareInfo:
             result = subprocess.run(
                 ["wmic", "OS", "get", "TotalVisibleMemorySize", "/value"],
                 capture_output=True, text=True, timeout=5,
-                creationflags=_SANS_CONSOLE
+                creationflags=_NO_CONSOLE
             )
             for line in result.stdout.strip().split('\n'):
                 if 'TotalVisibleMemorySize' in line:
@@ -104,7 +104,7 @@ def detect_hardware() -> HardwareInfo:
             result = subprocess.run(
                 ["sysctl", "-n", "hw.memsize"],
                 capture_output=True, text=True, timeout=5,
-                creationflags=_SANS_CONSOLE
+                creationflags=_NO_CONSOLE
             )
             ram_total_mb = int(result.stdout.strip()) // (1024 * 1024)
     except Exception:
@@ -119,7 +119,7 @@ def detect_hardware() -> HardwareInfo:
             result = subprocess.run(
                 ["wmic", "path", "win32_VideoController", "get", "Name", "/value"],
                 capture_output=True, text=True, timeout=5,
-                creationflags=_SANS_CONSOLE
+                creationflags=_NO_CONSOLE
             )
             for line in result.stdout.strip().split('\n'):
                 if 'Name' in line:

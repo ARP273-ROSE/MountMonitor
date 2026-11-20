@@ -150,7 +150,7 @@ class SimulatedMount(MountConnection):
         return "Sidereal"
 
     def get_latitude(self) -> Optional[str]:
-        return "+43:55:54.1"   # site d'exemple : Observatoire de Haute-Provence
+        return "+43:55:54.1"   # example site: Observatoire de Haute-Provence
 
     def get_longitude(self) -> Optional[str]:
         return "+05:42:43.9"

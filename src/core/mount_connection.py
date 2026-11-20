@@ -7,29 +7,29 @@ from ..models.mount_data import MountStatus, PierSide, ConnectionProtocol, Envir
 
 # :GT# answers on a 10Micron (MountWizzard4, mountcontrol/setting.py):
 # 60.2 sidereal, 60.3 solar, 62.4 lunar, within 0.05.
-_VITESSES_10MICRON = (("sidereal", 60.2), ("solar", 60.3), ("lunar", 62.4))
+_RATES_10MICRON = (("sidereal", 60.2), ("solar", 60.3), ("lunar", 62.4))
 
 
-def classer_vitesse(reponse):
+def classify_tracking_rate(reply):
     """'sidereal' | 'solar' | 'lunar' | 'king' | None from a mount answer.
 
     Numbers are the 10Micron :GT# values; words come from ASCOM. The old
     test accepted anything starting with "60" -- solar (60.3) passed for
     sidereal (60.2), so a mount left in solar mode raised no alarm.
     """
-    if reponse is None:
+    if reply is None:
         return None
-    texte = str(reponse).strip().rstrip('#').lower()
+    text = str(reply).strip().rstrip('#').lower()
     try:
-        v = float(texte)
+        v = float(text)
     except ValueError:
-        for nom in ("sidereal", "solar", "lunar", "king"):
-            if nom in texte:
-                return nom
+        for name in ("sidereal", "solar", "lunar", "king"):
+            if name in text:
+                return name
         return None
-    for nom, ref in _VITESSES_10MICRON:
+    for name, ref in _RATES_10MICRON:
         if abs(v - ref) < 0.05:
-            return nom
+            return name
     return None
 
 

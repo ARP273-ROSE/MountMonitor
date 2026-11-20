@@ -24,11 +24,11 @@ from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSlot, pyqtSignal
 from PyQt6.QtGui import QAction, QActionGroup, QFont, QIcon, QKeySequence
 
 from .graph_widgets import (TrackingGraph, TimeGraph, SeismicGraph, AxialGraph,
-                            couper_au_present, largeur_fenetre,
-                            largeur_affichee, nom_largeur, derive_horloge,
-                            LARGEURS_S)
+                            cut_to_present, window_width,
+                            shown_span, span_name, clock_drift,
+                            SPANS_S)
 from .fft_window import FFTWindow
-from .analysis_dialog import AnalysisDialog, sauver_rapport
+from .analysis_dialog import AnalysisDialog, save_report
 from .log10m_dialog import Log10mAnalysisDialog
 from .status_panel import StatusPanel
 from .preferences_dialog import PreferencesDialog
@@ -38,7 +38,7 @@ from ..core.mount_connection import MountConnection
 from ..core.lx200_protocol import LX200Connection
 from ..core.lx200_serial import LX200SerialConnection
 from ..core.ascom_connection import ASCOMConnection
-from ..core.data_processor import DataProcessor, ecarts_a_la_mediane
+from ..core.data_processor import DataProcessor, deviations_from_median
 from ..core.poller import MountPoller
 from ..core.ntp_client import NTPClient
 from ..core.seismometer import Seismometer
@@ -48,13 +48,13 @@ from ..logging_module.file_logger import FileLogger
 from ..logging_module.log_parser import parse_session, list_log_sessions
 from ..logging_module.crash_reporter import CrashReporter, anonymize_path, GITHUB_REPO
 from ..models.mount_data import MountSample, MountStatus, SessionInfo, ConnectionProtocol
-from ..utils.i18n import T, set_language, get_language, LANGUES
+from ..utils.i18n import T, set_language, get_language, LANGUAGES
 from ..utils.coordinates import format_ra, format_dec
-# La mise a jour passe par le module commun du kit, a la racine : il va
-# chercher l'archive applicative publiee dans le depot public de
-# distribution. L'ancien mecanisme telechargeait la zipball du depot de
-# code, reste prive : l'API repondait 404 et la mise a jour ne s'est
-# jamais declenchee chez personne.
+# Updating goes through the kit's shared module, at the root: it fetches
+# the application archive published in the public distribution
+# repository. The old mechanism downloaded the zipball of the code
+# repository, which stayed private: the API answered 404 and the update
+# never triggered for anyone.
 import updater
 
 logger = logging.getLogger(__name__)
@@ -69,7 +69,7 @@ def _read_version() -> str:
 
 
 
-class TravailFinDeNuit(QThread):
+class EndOfNightJob(QThread):
     """Reads a finished session ONCE and writes its three reports, off the GUI.
 
     At dawn and at every park the window used to parse the .dat twice and
@@ -78,41 +78,41 @@ class TravailFinDeNuit(QThread):
     night), with the freeze watchdog firing. One thread is enough on two
     cores; the session comes back by a signal and the window is built then.
     """
-    fini = pyqtSignal(str, object, object)     # dat path, session or None, main report path
+    completed = pyqtSignal(str, object, object)     # dat path, session or None, main report path
 
-    def __init__(self, chemin_dat, langue: str, ecrire: bool, parent=None):
+    def __init__(self, dat_path, language: str, write: bool, parent=None):
         super().__init__(parent)
-        self._chemin = str(chemin_dat)
-        self._langue = langue
-        self._ecrire = ecrire
+        self._path = str(dat_path)
+        self._ui_language = language
+        self._write = write
 
     def run(self):
-        session, sortie = None, None
+        session, output = None, None
         try:
-            session = parse_session(Path(self._chemin))
-            if self._ecrire:
-                sortie = sauver_rapport(self._chemin, self._langue, session=session)
+            session = parse_session(Path(self._path))
+            if self._write:
+                output = save_report(self._path, self._ui_language, session=session)
         except Exception as e:
             logger.error(f"End-of-night processing failed: {e}")
-        self.fini.emit(self._chemin, session, sortie)
+        self.completed.emit(self._path, session, output)
 
 class MainWindow(QMainWindow):
     """Main application window."""
 
-    # Retour du fil qui interroge GitHub vers le fil graphique.
+    # Return path from the thread that queries GitHub to the GUI thread.
     #
-    # `object` et non `dict` : declare en `dict`, PyQt recopierait la charge
-    # champ par champ. Surtout, le retour passe par un signal et jamais par
-    # QTimer.singleShot — un minuteur cree dans un fil sans boucle
-    # d'evenements ne se declenche jamais, et la reponse serait perdue sans le
-    # moindre message.
-    maj_trouvee = pyqtSignal(object)
+    # `object` and not `dict`: declared as `dict`, PyQt would copy the
+    # payload field by field. Above all, the result goes through a signal
+    # and never through QTimer.singleShot — a timer created in a thread
+    # without an event loop never fires, and the answer would be lost
+    # without the slightest message.
+    update_found = pyqtSignal(object)
     # The seismometer reads in its own thread; its data crosses over by this
     # queued signal. It used to call _on_seismic_data directly from that
     # thread, writing the .sei/.dat files the GUI thread was writing too.
-    sismique_recue = pyqtSignal(float, object)
-    maj_progression = pyqtSignal(int)
-    maj_posee = pyqtSignal(bool, str)
+    seismic_received = pyqtSignal(float, object)
+    update_progress = pyqtSignal(int)
+    update_installed = pyqtSignal(bool, str)
 
     def __init__(self, sim_mode: str = "none", auto_connect: bool = False):
         """Initialize main window.
@@ -129,10 +129,10 @@ class MainWindow(QMainWindow):
         self._processor = DataProcessor()
         self._connection: Optional[MountConnection] = None
         self._poller: Optional[MountPoller] = None
-        self._connexion_en_cours = False
+        self._connecting = False
         # Pollers whose thread has not ended yet (stuck in a driver): kept
         # referenced, a QThread destroyed while running aborts the process.
-        self._pollers_finissants: list = []
+        self._finishing_pollers: list = []
         self._ntp_client: Optional[NTPClient] = None
         self._seismometer = None
         self._file_logger = FileLogger()
@@ -149,21 +149,21 @@ class MainWindow(QMainWindow):
         # would otherwise lay down 20,000 samples of nothing, and closing the
         # session instead would split one night across two files and two
         # reports. The night is defined by the Sun, not by a park.
-        self._logging_suspendu = False
-        self._nuit_vue = False          # the Sun went below the horizon while recording
-        # Chemin du .dat que CE lancement a ferme. Tant qu'il est None, il n'y
-        # a rien a analyser automatiquement.
-        self._derniere_session = None
-        self._fen_analyse = None
-        self._session_analysee = None
-        self._aube_timer = None
-        self._timer_armement = None
-        self._travaux_nuit: dict = {}
-        self._analyse_demandee: set = set()
-        self._session_lue = None
+        self._logging_paused = False
+        self._night_seen = False          # the Sun went below the horizon while recording
+        # Path of the .dat that THIS run closed. While it is None, there is
+        # nothing to analyse automatically.
+        self._last_session = None
+        self._analysis_window = None
+        self._analysed_session = None
+        self._dawn_timer = None
+        self._arm_timer = None
+        self._night_jobs: dict = {}
+        self._analysis_requested: set = set()
+        self._read_session = None
         # Site as the mount reports it, when it does. Plenty of setups never
         # push their site to the mount -- hence the preference fallback.
-        self._site_monture = None
+        self._mount_site = None
         self._mount_info = {}
         self._prev_mount_status = MountStatus.UNKNOWN
 
@@ -183,37 +183,37 @@ class MainWindow(QMainWindow):
         self._refresh_timer.timeout.connect(self._refresh_graphs)
         # 4 fps, 2 fps from the start on a small PC; adapted while running.
         self._cadence_min = 1 if (os.cpu_count() or 2) <= 4 else 0
-        self._refresh_timer.setInterval(self.CADENCES_MS[self._cadence_min])
+        self._refresh_timer.setInterval(self.RATES_MS[self._cadence_min])
 
         # FFT timer (slower)
         self._fft_timer = QTimer()
         self._fft_timer.timeout.connect(self._update_fft)
         self._fft_timer.setInterval(2000)  # Every 2 seconds
 
-        # Verification des mises a jour, en fond, au demarrage.
-        self.maj_trouvee.connect(self._maj_reperee)
-        self.sismique_recue.connect(self._on_seismic_data)
-        self.maj_progression.connect(self._maj_progression)
-        self.maj_posee.connect(self._maj_terminee)
+        # Update check, in the background, at startup.
+        self.update_found.connect(self._on_update_found)
+        self.seismic_received.connect(self._on_seismic_data)
+        self.update_progress.connect(self._on_update_progress)
+        self.update_installed.connect(self._on_update_installed)
         QTimer.singleShot(3000, self._check_updates_silent)
 
         # Auto-connect in simulation mode
-        self._essais_connexion = 0
-        self._connexion_auto_active = False
+        self._connect_attempts = 0
+        self._auto_connect_active = False
         if sim_mode != "none":
             QTimer.singleShot(500, self._connect)
         elif auto_connect or self._settings.get("connect_on_launch"):
             # Unattended start of the observatory PC: the window comes up
             # before the control box has finished booting, so the first
             # attempt often fails. Keep trying until it answers.
-            self._connexion_auto_active = True
-            QTimer.singleShot(1500, self._connexion_automatique)
+            self._auto_connect_active = True
+            QTimer.singleShot(1500, self._auto_connect)
 
-        self._appliquer_zoom_horizontal(1)
+        self._apply_horizontal_zoom(1)
         self._set_vertical_zoom(self._settings.get("vertical_zoom_mode") or "data",
-                                enregistrer=False)
-        self._brancher_menus_graphes()
-        self._armer_controle_periodique()
+                                save=False)
+        self._wire_graph_menus()
+        self._arm_periodic_check()
 
         self._update_title()
 
@@ -283,8 +283,8 @@ class MainWindow(QMainWindow):
 
         # Time span and vertical scale: same submenus as the right click on
         # a graph (_menu_graphe), checked on the current choice.
-        self._remplir_menu_largeur(view_menu.addMenu(T("time_span")))
-        self._remplir_menu_vertical(view_menu.addMenu(T("vertical_zoom")))
+        self._fill_span_menu(view_menu.addMenu(T("time_span")))
+        self._fill_vertical_menu(view_menu.addMenu(T("vertical_zoom")))
 
         view_menu.addSeparator()
 
@@ -326,13 +326,13 @@ class MainWindow(QMainWindow):
         lang_menu = menubar.addMenu(T("menu_language"))
         self._lang_group = QActionGroup(self)
         self._lang_group.setExclusive(True)
-        courant = self._settings.get("language") or "auto"
-        for code, libelle in [("auto", T("lang_auto"))] + list(LANGUES.items()):
-            act = QAction(libelle, self)
+        current_lang = self._settings.get("language") or "auto"
+        for code, caption in [("auto", T("lang_auto"))] + list(LANGUAGES.items()):
+            act = QAction(caption, self)
             act.setCheckable(True)
-            act.setChecked(code == courant)
+            act.setChecked(code == current_lang)
             act.setData(code)
-            act.triggered.connect(lambda _checked, c=code: self._choisir_langue(c))
+            act.triggered.connect(lambda _checked, c=code: self._choose_language(c))
             self._lang_group.addAction(act)
             lang_menu.addAction(act)
             if code == "auto":
@@ -348,7 +348,7 @@ class MainWindow(QMainWindow):
 
         manual_action = QAction(T("menu_manual"), self)
         manual_action.setToolTip(T("tt_manual"))
-        manual_action.triggered.connect(self._ouvrir_manuel)
+        manual_action.triggered.connect(self._open_manual)
         help_menu.addAction(manual_action)
 
         online_help_action = QAction(T("menu_online_help"), self)
@@ -367,20 +367,20 @@ class MainWindow(QMainWindow):
         bug_action.triggered.connect(self._report_bug)
         help_menu.addAction(bug_action)
 
-        # Kit commun : signalement vers le point de collecte et case
-        # d'accord des rapports automatiques (le manuel et les mises a jour
-        # ont deja leurs entrees ci-dessus et ci-dessous ; l'accord est
-        # demande par main.py au premier lancement).
+        # Shared kit: reporting to the collection point and the consent
+        # box for automatic reports (the manual and the updates already
+        # have their entries above and below; consent is asked by main.py
+        # on first launch).
         try:
             from kit_aide import AideKit
-            from src.config.paths import dossier_journaux
-            self._aide_kit = AideKit(
+            from src.config.paths import logs_folder
+            self._kit_help = AideKit(
                 self, self._version, get_language, [], nom_fil="mountmonitor",
                 etat=lambda: {"langue": get_language(), "simulation": self._sim_mode},
-                journal=dossier_journaux() / "mountmonitor_app.log")
-            self._aide_kit.remplir_menu(help_menu, avec_manuel=False, avec_maj=False)
+                journal=logs_folder() / "mountmonitor_app.log")
+            self._kit_help.remplir_menu(help_menu, avec_manuel=False, avec_maj=False)
         except Exception:
-            logger.debug("Menu du kit indisponible", exc_info=True)
+            logger.debug("Kit menu unavailable", exc_info=True)
 
         update_action = QAction(T("menu_check_updates"), self)
         update_action.setToolTip(T("tt_check_upd"))
@@ -413,7 +413,7 @@ class MainWindow(QMainWindow):
         # Preferences alone they went unnoticed (a user observing the Sun by
         # day did not know recording could be allowed in daylight).
         self._btn_logging.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self._btn_logging.customContextMenuRequested.connect(self._menu_enregistrement)
+        self._btn_logging.customContextMenuRequested.connect(self._logging_menu)
         toolbar.addWidget(self._btn_logging)
 
         toolbar.addSeparator()
@@ -479,7 +479,7 @@ class MainWindow(QMainWindow):
         # Panel sizes survive a restart. The read-me has long promised
         # "persistent layout"; the splitters were in fact rebuilt at their
         # default proportions every time, so every resize was lost on close.
-        self._restaurer_panneaux()
+        self._restore_panels()
 
     def _create_statusbar(self):
         """Create status bar."""
@@ -516,44 +516,44 @@ class MainWindow(QMainWindow):
 
     def _toggle_connection(self):
         # A click by the user ends the automatic attempts, whatever its effect.
-        self._connexion_auto_active = False
+        self._auto_connect_active = False
         if self._connected:
             self._disconnect()
         else:
             self._connect()
 
-    def _connexion_automatique(self):
+    def _auto_connect(self):
         """Connect at launch; on failure, try again every connect_retry_s s.
 
         Stops at the first success, or as soon as the user takes over (click on
         Connect/Disconnect). Never opens a dialog: on an unattended start nobody
         is there to answer it."""
-        if not self._connexion_auto_active or self._connected:
-            self._connexion_auto_active = False
+        if not self._auto_connect_active or self._connected:
+            self._auto_connect_active = False
             return
         protocol = self._settings.get("mount_protocol")
         if protocol == "ascom" and not self._settings.get("ascom_driver"):
             # _connect would open the ASCOM Chooser and wait for a click.
             self._status_panel.add_message(T("no_ascom_driver"), Colors.STATUS_ERROR)
-            self._connexion_auto_active = False
+            self._auto_connect_active = False
             return
         if protocol == "lx200_serial" and not self._settings.get("serial_port"):
             self._status_panel.add_message(T("no_serial_port"), Colors.STATUS_ERROR)
-            self._connexion_auto_active = False
+            self._auto_connect_active = False
             return
-        self._essais_connexion += 1
+        self._connect_attempts += 1
         self._connect()      # the answer comes back in _on_connect_result
 
-    def _replanifier_connexion_auto(self):
-        if not self._connexion_auto_active or self._connected:
-            self._connexion_auto_active = False
+    def _reschedule_auto_connect(self):
+        if not self._auto_connect_active or self._connected:
+            self._auto_connect_active = False
             return
-        brut = self._settings.get("connect_retry_s")
-        delai = max(5, int(30 if brut is None else brut))
+        raw_text = self._settings.get("connect_retry_s")
+        delay = max(5, int(30 if raw_text is None else raw_text))
         self._status_panel.add_message(
-            T("auto_connect_retry").format(n=self._essais_connexion, s=delai),
+            T("auto_connect_retry").format(n=self._connect_attempts, s=delay),
             Colors.STATUS_WARNING)
-        QTimer.singleShot(delai * 1000, self._connexion_automatique)
+        QTimer.singleShot(delay * 1000, self._auto_connect)
 
     def _connect(self):
         """Connect to the mount.
@@ -562,7 +562,7 @@ class MainWindow(QMainWindow):
         (5 s timeout) or a slow ASCOM driver used to freeze the window, every
         30 s while --connect waited for the mount. The rest of the start-up
         happens in _on_connect_result."""
-        if self._connected or self._connexion_en_cours:
+        if self._connected or self._connecting:
             return
 
         protocol = self._settings.get("mount_protocol")
@@ -627,7 +627,7 @@ class MainWindow(QMainWindow):
         self._poller.mount_info_ready.connect(self._on_mount_info)
         self._poller.environment_ready.connect(self._on_environment)
         self._poller.connect_in_thread()
-        self._connexion_en_cours = True
+        self._connecting = True
         self._poller.start()
 
     @pyqtSlot(object, object)
@@ -637,32 +637,32 @@ class MainWindow(QMainWindow):
         except Exception as e:
             logger.warning(f"Mount request callback failed: {e}")
 
-    def _demande_monture(self, fn, callback=None):
+    def _mount_request(self, fn, callback=None):
         """Ask the poller thread to run fn(connection); never blocks the GUI."""
         if self._poller is not None and self._connected:
             self._poller.submit(fn, callback)
 
-    def _liberer_poller(self, poller):
+    def _release_poller(self, poller):
         if poller is None:
             return
         if not poller.stop():
             logger.warning("Poller thread still busy in the driver; kept until it ends")
-            self._pollers_finissants.append(poller)
-            poller.finished.connect(lambda p=poller: self._pollers_finissants.remove(p)
-                                    if p in self._pollers_finissants else None)
+            self._finishing_pollers.append(poller)
+            poller.finished.connect(lambda p=poller: self._finishing_pollers.remove(p)
+                                    if p in self._finishing_pollers else None)
 
     @pyqtSlot(bool)
     def _on_connect_result(self, ok: bool):
-        self._connexion_en_cours = False
+        self._connecting = False
         if not ok:
             self._status_panel.add_message(T("connection_failed"), Colors.STATUS_ERROR)
             poller, self._poller = self._poller, None
-            self._liberer_poller(poller)
+            self._release_poller(poller)
             self._connection = None
-            if self._connexion_auto_active:
-                self._replanifier_connexion_auto()
+            if self._auto_connect_active:
+                self._reschedule_auto_connect()
             return
-        self._connexion_auto_active = False
+        self._auto_connect_active = False
 
         self._connected = True
         self._status_panel.set_connected(True)
@@ -700,12 +700,12 @@ class MainWindow(QMainWindow):
         # Start seismometer
         if self._sim_mode in ("seismometer", "all"):
             sim_sei = SimulatedSeismometer()
-            sim_sei.set_callback(self.sismique_recue.emit)
+            sim_sei.set_callback(self.seismic_received.emit)
             sim_sei.start()
             self._seismometer = sim_sei
             self._status_panel.add_message(T("sim_seismometer"), Colors.STATUS_WARNING)
         else:
-            self._appliquer_sismometre()
+            self._apply_seismometer()
 
         # Logging starts on connection -- but ARMED if that is what the user
         # asked for. This call used to go straight to _start_logging, which
@@ -714,7 +714,7 @@ class MainWindow(QMainWindow):
         # avoid.
         if (self._settings.get("autostart_on_tracking")
                 and self._prev_mount_status != MountStatus.TRACKING):
-            self._armer()
+            self._arm()
         else:
             self._start_logging()
 
@@ -732,7 +732,7 @@ class MainWindow(QMainWindow):
 
         # The poller thread closes the connection itself on its way out.
         poller, self._poller = self._poller, None
-        self._liberer_poller(poller)
+        self._release_poller(poller)
 
         if self._ntp_client:
             self._ntp_client.stop()
@@ -742,7 +742,7 @@ class MainWindow(QMainWindow):
             if hasattr(self._seismometer, 'stop'):
                 self._seismometer.stop()
             self._seismometer = None
-            self._config_sei_actuelle = None
+            self._current_sei_config = None
 
         self._connection = None
         self._connected = False
@@ -763,7 +763,7 @@ class MainWindow(QMainWindow):
         self._status_panel.update_mount_sample(sample)
 
         # Log to file
-        if self._ecrit_echantillons():
+        if self._writes_samples():
             self._file_logger.log_mount_sample(sample)
 
         # Update frequency display
@@ -778,7 +778,7 @@ class MainWindow(QMainWindow):
         if self._ntp_client:
             sample.pc_ntp_diff_ms = self._ntp_client.offset_ms
         self._processor.process_time_sample(sample)
-        if self._ecrit_echantillons():
+        if self._writes_samples():
             self._file_logger.log_time_sample(sample)
 
     @pyqtSlot(object)
@@ -798,23 +798,23 @@ class MainWindow(QMainWindow):
 
         # ── Armed logger: start on tracking, suspend when tracking stops ──
         if status == MountStatus.TRACKING:
-            self._annuler_arret_park()
+            self._cancel_park_stop()
             if self._logging_armed:
-                self._demarrer_sur_suivi()
+                self._start_on_tracking()
             else:
-                self._reprendre()
+                self._resume()
         elif self._logging_armed:
-            self._maj_bouton_armement()
+            self._update_arm_button()
         elif self._logging_active and self._settings.get("pause_when_not_tracking"):
             # Any status other than TRACKING -- parked, idle, slewing --
             # starts the grace delay. Slews and autofocus finish well inside
             # it; only a real stop outlasts it.
-            if self._park_timer is None and not self._logging_suspendu:
-                delai = int(self._settings.get("pause_delay_s") or 120)
+            if self._park_timer is None and not self._logging_paused:
+                delay = int(self._settings.get("pause_delay_s") or 120)
                 self._park_timer = QTimer(self)
                 self._park_timer.setSingleShot(True)
-                self._park_timer.timeout.connect(self._suspendre)
-                self._park_timer.start(delai * 1000)
+                self._park_timer.timeout.connect(self._pause)
+                self._park_timer.start(delay * 1000)
 
         # Detect transition from slewing to tracking
         was_slewing = prev_status == MountStatus.SLEWING
@@ -843,7 +843,7 @@ class MainWindow(QMainWindow):
             # It used to fire on any PARKED status and analyse the newest
             # .dat lying on disk, so connecting to an already-parked mount
             # opened a report on a night that had nothing to do with it.
-            if getattr(self, '_derniere_session', None) is not None:
+            if getattr(self, '_last_session', None) is not None:
                 self._auto_analyze_on_park()
 
         # After slew ends and tracking resumes → run checks + get target coords
@@ -851,12 +851,12 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(1000, self._run_mount_checks)
             # Retrieve target coordinates for reference mode
             if self._settings.get("reference_mode") == "target":
-                self._demande_monture(
+                self._mount_request(
                     lambda c: (c.get_target_ra(), c.get_target_dec()),
-                    self._recevoir_cible)
+                    self._receive_target)
 
-    def _recevoir_cible(self, cible):
-        target_ra, target_dec = cible or (None, None)
+    def _receive_target(self, target):
+        target_ra, target_dec = target or (None, None)
         if target_ra and target_dec:
             from ..utils.coordinates import parse_ra, parse_dec
             ra_h = parse_ra(target_ra)
@@ -915,8 +915,8 @@ class MainWindow(QMainWindow):
             self._status_panel.add_message(
                 f"{T('pan_site')} : {latitude} {longitude}{elev_str}"
             )
-            self._site_monture = (latitude, longitude, elevation)
-            self._annoncer_nuit()
+            self._mount_site = (latitude, longitude, elevation)
+            self._announce_night()
 
         # Log to file
         if self._logging_active:
@@ -930,7 +930,7 @@ class MainWindow(QMainWindow):
     def _on_environment(self, sample):
         """Handle environment/diagnostics data from the poller."""
         # Log to file
-        if self._ecrit_echantillons():
+        if self._writes_samples():
             self._file_logger.log_environment(sample)
 
         # Log significant changes to status panel
@@ -955,11 +955,11 @@ class MainWindow(QMainWindow):
             )
 
         # Log to event file
-        if self._ecrit_echantillons():
+        if self._writes_samples():
             if sample.temperature_ext is not None:
-                # Chaque champ peut être None indépendamment (la monture ne
-                # renvoie pas toujours pression/température interne) — et un
-                # format spec conditionnel dans une f-string est un ValueError.
+                # Each field can be None independently (the mount does not
+                # always return pressure/internal temperature) — and a
+                # conditional format spec in an f-string is a ValueError.
                 press = (
                     f"{sample.pressure:.1f}" if sample.pressure is not None else "?"
                 )
@@ -976,15 +976,15 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot(float, object)
     def _on_seismic_data(self, timestamp: float, values: list[float]):
-        """Handle seismometer data (GUI thread, via sismique_recue)."""
+        """Handle seismometer data (GUI thread, via seismic_received)."""
         self._processor.process_seismic_data(timestamp, values)
-        # Parité avec le MountMonitor Java : chaque échantillon est journalisé
-        # dans le .sei (temps, brut, valeur recentrée par l'offset, stdev
-        # glissant courant). Sans cet appel le fichier restait vide.
+        # Parity with the Java MountMonitor: every sample is logged in the
+        # .sei (time, raw, value re-centred by the offset, current running
+        # stdev). Without this call the file stayed empty.
         if self._logging_active and values:
-            # Le module sismomètre livre des valeurs déjà recentrées
-            # (brut + offset, comme MM3) : on reconstruit le brut pour la
-            # 1re colonne.
+            # The seismometer module delivers already re-centred values
+            # (raw + offset, as in MM3): the raw value is rebuilt for the
+            # 1st column.
             offset = float(self._settings.get("seismometer_offset") or 0.0)
             stdev_arr = self._processor.seismic_buffer.get_stdev_array()
             stdev = float(stdev_arr[-1]) if len(stdev_arr) else 0.0
@@ -996,7 +996,7 @@ class MainWindow(QMainWindow):
     # Graph cadence: 4 per second where the machine allows it. On a small PC
     # (2-4 cores) it starts at 2 per second, and on any machine it slows down
     # (to 1 per second) when drawing takes too long, then speeds up again.
-    CADENCES_MS = (250, 500, 1000)
+    RATES_MS = (250, 500, 1000)
 
     def _refresh_graphs(self):
         """Timer slot: skip when nobody can see the window, adapt the cadence."""
@@ -1008,30 +1008,30 @@ class MainWindow(QMainWindow):
         finally:
             # Drawing happens after this slot, in the event loop; it costs
             # about as much as the update itself: count it twice.
-            cout = 2.0 * (time.perf_counter() - t0) * 1000.0
-            self._adapter_cadence(cout)
+            cost = 2.0 * (time.perf_counter() - t0) * 1000.0
+            self._adapt_rate(cost)
 
-    def _adapter_cadence(self, cout_ms: float):
-        actuel = self._refresh_timer.interval()
-        cadences = self.CADENCES_MS
-        i = cadences.index(actuel) if actuel in cadences else 0
-        moyenne = 0.8 * getattr(self, "_cout_rafraichissement", cout_ms) + 0.2 * cout_ms
-        self._cout_rafraichissement = moyenne
-        if moyenne > 0.4 * actuel and i + 1 < len(cadences):
-            self._refresh_timer.setInterval(cadences[i + 1])
-        elif i > self._cadence_min and moyenne < 0.1 * cadences[i - 1]:
-            self._refresh_timer.setInterval(cadences[i - 1])
+    def _adapt_rate(self, cost_ms: float):
+        current_cfg = self._refresh_timer.interval()
+        rates_ms = self.RATES_MS
+        i = rates_ms.index(current_cfg) if current_cfg in rates_ms else 0
+        average = 0.8 * getattr(self, "_refresh_cost", cost_ms) + 0.2 * cost_ms
+        self._refresh_cost = average
+        if average > 0.4 * current_cfg and i + 1 < len(rates_ms):
+            self._refresh_timer.setInterval(rates_ms[i + 1])
+        elif i > self._cadence_min and average < 0.1 * rates_ms[i - 1]:
+            self._refresh_timer.setInterval(rates_ms[i - 1])
 
     def _refresh_graphs_now(self):
         """Refresh all graphs with current buffer data.
 
-        Les graphes defilent au present : chacun ne recoit que les
-        `largeur_fenetre(zoom)` dernieres secondes, a pleine resolution
-        (deux minutes, c'est quelques centaines d'echantillons). Les
-        statistiques de la nuit (min/max/ecart-type maximal) restent
-        calculees sur tout le tampon, par DataBuffer.
+        The graphs scroll at the present: each one receives only the last
+        `window_width(zoom)` seconds, at full resolution (two minutes is
+        a few hundred samples). The night statistics (min/max/maximum
+        standard deviation) are still computed over the whole buffer, by
+        DataBuffer.
         """
-        largeur = self._largeur()
+        span = self._span()
 
         # Graph correction: shift STDEV timestamps back by half running range
         correct = self._settings.get("correct_graphs_for_range")
@@ -1042,52 +1042,52 @@ class MainWindow(QMainWindow):
         # second to keep about a thousand points of each.
         # RA / DEC
         # Positions are drawn from the RAW coordinates, around the median of
-        # what is visible (ecarts_a_la_mediane), in the RA unit chosen in the
+        # what is visible (deviations_from_median), in the RA unit chosen in the
         # preferences: seconds of time (hours mode) or arcseconds of RA
         # (degrees mode, 15 times more), like MountMonitor 3. The running
         # sigma is computed on sky (x cos dec) and converted the same way.
         p = self._processor
-        en_degres = bool(self._settings.get("ra_in_degrees"))
+        in_degrees = bool(self._settings.get("ra_in_degrees"))
         cos_d = max(abs(np.cos(np.radians(p.declination_deg))), 1e-3)
-        k_ra = (1.0 if en_degres else 1.0 / 15.0) / cos_d     # sky " -> unit
-        self._ra_graph.set_unite('"' if en_degres else 's')
-        for raw, buf, graphe, facteur, tour, k_sd, tol in (
+        k_ra = (1.0 if in_degrees else 1.0 / 15.0) / cos_d     # sky " -> unit
+        self._ra_graph.set_unit('"' if in_degrees else 's')
+        for raw, buf, graph, factor, wrap, k_sd, tol in (
                 (p.ra_raw_buffer, p.ra_buffer, self._ra_graph,
-                 54000.0 if en_degres else 3600.0, 24.0, k_ra,
-                 self._tolerance_ra_affichee()),
+                 54000.0 if in_degrees else 3600.0, 24.0, k_ra,
+                 self._displayed_ra_tolerance()),
                 (p.dec_raw_buffer, p.dec_buffer, self._dec_graph,
                  3600.0, None, 1.0, self._settings.get("tolerance_dec_arcsec"))):
-            t, brut, _, _ = raw.get_tail(largeur)
+            t, raw_text, _, _ = raw.get_tail(span)
             if len(t) == 0:
                 continue
-            v = ecarts_a_la_mediane(brut, facteur, tour)
-            _, _, sd_t, sd = buf.get_tail(largeur, float(t[-1]))
-            graphe.update_data(
+            v = deviations_from_median(raw_text, factor, wrap)
+            _, _, sd_t, sd = buf.get_tail(span, float(t[-1]))
+            graph.update_data(
                 t, v,
                 stdev_values=sd * k_sd if len(sd) else None,
                 stdev_timestamps=(sd_t - half_range) if len(sd) else None,
                 min_val=float(np.min(v)),
                 max_val=float(np.max(v)),
                 max_stdev=(buf.max_stdev or 0.0) * k_sd,
-                largeur_s=largeur,
+                span_s=span,
             )
-            graphe.set_tolerance(tol)
+            graph.set_tolerance(tol)
 
         # Time graph
-        diff_t, diff_v, _, _ = self._processor.time_diff_buffer.get_tail(largeur)
+        diff_t, diff_v, _, _ = self._processor.time_diff_buffer.get_tail(span)
         if len(diff_t) > 0:
-            fin = float(diff_t[-1])
-            pc_t, pc_v, _, _ = self._processor.pc_loop_buffer.get_tail(largeur, fin)
-            mt_t, mt_v, _, _ = self._processor.mount_loop_buffer.get_tail(largeur, fin)
-            ntp_t, ntp_v, _, _ = self._processor.ntp_buffer.get_tail(largeur, fin)
+            end = float(diff_t[-1])
+            pc_t, pc_v, _, _ = self._processor.pc_loop_buffer.get_tail(span, end)
+            mt_t, mt_v, _, _ = self._processor.mount_loop_buffer.get_tail(span, end)
+            ntp_t, ntp_v, _, _ = self._processor.ntp_buffer.get_tail(span, end)
             self._time_graph.update_data(
                 diff_t, diff_v,
                 pc_loop_t=pc_t, pc_loop_v=pc_v,
                 mount_loop_t=mt_t, mount_loop_v=mt_v,
                 ntp_t=ntp_t if len(ntp_t) > 0 else None,
                 ntp_v=ntp_v if len(ntp_v) > 0 else None,
-                largeur_s=largeur,
-                derive_ms_h=self._derive_horloge(),
+                span_s=span,
+                drift_ms_h=self._clock_drift(),
             )
 
         # Axial graph
@@ -1096,18 +1096,18 @@ class MainWindow(QMainWindow):
                     self._processor.dec_speed_raw_buffer,
                     self._processor.ra_speed_avg_buffer,
                     self._processor.dec_speed_avg_buffer)
-            fins = [t[-1] for t in (b.get_last_n(1)[0] for b in bufs) if len(t)]
-            if fins:
-                fin = float(max(fins))
+            ends = [t[-1] for t in (b.get_last_n(1)[0] for b in bufs) if len(t)]
+            if ends:
+                end = float(max(ends))
                 args = {}
-                for nom, b in zip(("ra_raw", "dec_raw", "ra_avg", "dec_avg"), bufs):
-                    t, v, _, _ = b.get_tail(largeur, fin)
-                    args[nom + "_t"] = t if len(t) > 0 else None
-                    args[nom + "_v"] = v if len(t) > 0 else None
-                self._axial_graph.update_data(largeur_s=largeur, **args)
+                for name, b in zip(("ra_raw", "dec_raw", "ra_avg", "dec_avg"), bufs):
+                    t, v, _, _ = b.get_tail(span, end)
+                    args[name + "_t"] = t if len(t) > 0 else None
+                    args[name + "_v"] = v if len(t) > 0 else None
+                self._axial_graph.update_data(span_s=span, **args)
 
         # Seismic graph
-        sei_t, sei_v, sei_sd_t, sei_sd = self._processor.seismic_buffer.get_tail(largeur)
+        sei_t, sei_v, sei_sd_t, sei_sd = self._processor.seismic_buffer.get_tail(span)
         if len(sei_t) > 0:
             # The tolerance lines were never set and stayed at +/-100
             # whatever the preferences said.
@@ -1118,7 +1118,7 @@ class MainWindow(QMainWindow):
                 sei_t, sei_v,
                 stdev_values=sei_sd if len(sei_sd) else None,
                 stdev_timestamps=sei_sd_t if len(sei_sd) else None,
-                largeur_s=largeur,
+                span_s=span,
             )
 
         # Update STDEV in status panel (last value of the night computation)
@@ -1128,17 +1128,17 @@ class MainWindow(QMainWindow):
             self._status_panel.update_stdev(full_ra_stdev[-1], full_dec_stdev[-1])
 
         # A write error (disk full, network share gone) is said once.
-        erreur = getattr(self._file_logger, "erreur_ecriture", None)
-        if erreur and not getattr(self, "_erreur_ecriture_dite", False):
-            self._erreur_ecriture_dite = True
-            self._status_panel.add_message(f"\u26a0 {T('write_error')} : {erreur}",
+        error = getattr(self._file_logger, "write_error", None)
+        if error and not getattr(self, "_write_error_reported", False):
+            self._write_error_reported = True
+            self._status_panel.add_message(f"\u26a0 {T('write_error')} : {error}",
                                            Colors.STATUS_ERROR)
 
         # Update title with current frequency
         self._update_title()
 
-        # Carnet photographique de la nuit, quand il est demande.
-        self._verifier_graphe_plein()
+        # Photographic log of the night, when requested.
+        self._check_graph_full()
 
     # ── FFT ──────────────────────────────────────────────────────
 
@@ -1161,10 +1161,10 @@ class MainWindow(QMainWindow):
 
         # On the real timestamps: the sampling rate is measured on the data
         # (max(1, actual_frequency) forced 1 Hz on a 0.5 Hz poll), gaps are
-        # skipped, drift and dither steps removed (src/core/spectre.py).
-        from ..core.spectre import spectre, spectre_regulier
+        # skipped, drift and dither steps removed (src/core/spectrum.py).
+        from ..core.spectrum import spectrum, regular_spectrum
 
-        def frequence(t):
+        def frequency(t):
             if len(t) < 2:
                 return 0.0
             d = np.diff(t)
@@ -1172,14 +1172,14 @@ class MainWindow(QMainWindow):
             return 1.0 / float(np.median(d)) if len(d) else 0.0
 
         ra_t, ra_data = self._processor.ra_buffer.get_arrays()
-        ra_freqs, ra_mags = spectre(ra_t, ra_data) if len(ra_data) > 64 else (None, None)
+        ra_freqs, ra_mags = spectrum(ra_t, ra_data) if len(ra_data) > 64 else (None, None)
         dec_t, dec_data = self._processor.dec_buffer.get_arrays()
-        dec_freqs, dec_mags = spectre(dec_t, dec_data) if len(dec_data) > 64 else (None, None)
-        freq = frequence(ra_t)
+        dec_freqs, dec_mags = spectrum(dec_t, dec_data) if len(dec_data) > 64 else (None, None)
+        freq = frequency(ra_t)
 
         _, sei_data = self._processor.seismic_buffer.get_arrays()
         sei_rate = self._settings.get("seismometer_frequency_hz")
-        sei_freqs, sei_mags = (spectre_regulier(sei_data, sei_rate)
+        sei_freqs, sei_mags = (regular_spectrum(sei_data, sei_rate)
                                if len(sei_data) > 64 else (None, None))
 
         if fft_visible:
@@ -1192,7 +1192,7 @@ class MainWindow(QMainWindow):
             )
 
         # Log FFT data to .fft file
-        if self._ecrit_echantillons():
+        if self._writes_samples():
             if ra_freqs is not None and len(ra_freqs) > 0:
                 self._file_logger.log_fft_snapshot("RA", freq, ra_freqs, ra_mags)
             if dec_freqs is not None and len(dec_freqs) > 0:
@@ -1206,67 +1206,67 @@ class MainWindow(QMainWindow):
         if self._logging_active:
             self._stop_logging()
         elif self._logging_armed:
-            self._desarmer()
+            self._disarm()
         elif self._settings.get("autostart_on_tracking"):
-            self._armer()
+            self._arm()
         else:
             self._start_logging()
 
-    def _armer(self):
+    def _arm(self):
         """Wait for the mount to track before writing anything."""
         self._logging_armed = True
-        self._jour_signale = False
-        self._maj_bouton_armement()
+        self._daylight_reported = False
+        self._update_arm_button()
         self._status_panel.add_message(T("logging_armed"), Colors.STATUS_OK)
         # Already tracking when armed: start at once rather than wait for a
         # transition that has already happened -- unless it is broad daylight.
         if getattr(self, '_prev_mount_status', None) == MountStatus.TRACKING:
-            self._demarrer_sur_suivi()
+            self._start_on_tracking()
         # Armed in daylight while the mount already tracks: no status change
         # will come at sunset, so nothing started. Look again every minute.
-        if self._timer_armement is None:
-            self._timer_armement = QTimer(self)
-            self._timer_armement.timeout.connect(self._verifier_armement)
-        self._timer_armement.start(60_000)
+        if self._arm_timer is None:
+            self._arm_timer = QTimer(self)
+            self._arm_timer.timeout.connect(self._check_arming)
+        self._arm_timer.start(60_000)
 
-    OPTIONS_AUTO = (("connect_on_launch", "pref_connect_launch", "tt_connect_launch"),
+    AUTO_OPTIONS = (("connect_on_launch", "pref_connect_launch", "tt_connect_launch"),
                     ("autostart_on_tracking", "pref_autostart", "tt_arm"),
                     ("pause_when_not_tracking", "pref_pause", "tt_pause"),
                     ("close_at_sunrise", "pref_close_sunrise", "tt_sunrise"))
 
-    def _menu_enregistrement(self, pos):
+    def _logging_menu(self, pos):
         menu = QMenu(self)
-        for cle, libelle, aide in self.OPTIONS_AUTO:
-            a = QAction(T(libelle), menu)
+        for key, caption, tooltip in self.AUTO_OPTIONS:
+            a = QAction(T(caption), menu)
             a.setCheckable(True)
-            a.setChecked(bool(self._settings.get(cle)))
-            a.setToolTip(T(aide))
-            a.toggled.connect(lambda on, c=cle: self._option_auto(c, on))
+            a.setChecked(bool(self._settings.get(key)))
+            a.setToolTip(T(tooltip))
+            a.toggled.connect(lambda on, c=key: self._auto_option(c, on))
             menu.addAction(a)
         menu.setToolTipsVisible(True)
         menu.addSeparator()
         menu.addAction(T("menu_preferences"), self._show_preferences)
         menu.exec(self._btn_logging.mapToGlobal(pos))
 
-    def _option_auto(self, cle: str, active: bool):
-        self._settings.set(cle, bool(active))
+    def _auto_option(self, key: str, active: bool):
+        self._settings.set(key, bool(active))
         self._settings.save()
         if self._logging_armed:
             # « Night only » just switched off while the mount tracks in
             # daylight: start now rather than at the next minute's check.
             if getattr(self, '_prev_mount_status', None) == MountStatus.TRACKING:
-                self._demarrer_sur_suivi()
-            self._maj_bouton_armement()
+                self._start_on_tracking()
+            self._update_arm_button()
 
-    def _verifier_armement(self):
+    def _check_arming(self):
         if not self._logging_armed or self._logging_active:
-            self._timer_armement.stop()
+            self._arm_timer.stop()
             return
         if getattr(self, '_prev_mount_status', None) == MountStatus.TRACKING:
-            self._demarrer_sur_suivi()
-        self._maj_bouton_armement()
+            self._start_on_tracking()
+        self._update_arm_button()
 
-    def _maj_bouton_armement(self):
+    def _update_arm_button(self):
         """Armed: the button says what it is waiting for.
 
         It used to read « ARMED — waiting for tracking » while the status
@@ -1276,88 +1276,88 @@ class MainWindow(QMainWindow):
         if not self._logging_armed or self._logging_active:
             self._btn_logging.setToolTip(T("tt_start_logging"))
             return
-        suit = getattr(self, '_prev_mount_status', None) == MountStatus.TRACKING
-        if suit and self._fait_jour():
+        tracking_now = getattr(self, '_prev_mount_status', None) == MountStatus.TRACKING
+        if tracking_now and self._is_daytime():
             self._btn_logging.setText(T("btn_armed_night"))
         else:
             self._btn_logging.setText(T("btn_armed_log"))
         self._btn_logging.setToolTip(T("tt_armed"))
 
-    def _fait_jour(self) -> bool:
-        """Le Soleil est-il leve ? False si on ne peut pas savoir.
+    def _is_daytime(self) -> bool:
+        """Is the Sun up? False if it cannot be known.
 
-        Sert de garde-fou a l'armement : au lever, la monture suit souvent
-        encore, si bien qu'un rearmement redemarrait une session dans la
-        seconde — le programme cloturait la nuit puis rouvrait aussitot un
-        fichier en plein jour, en boucle.
+        Serves as a safeguard for arming: at sunrise the mount is often
+        still tracking, so re-arming restarted a session within the
+        second — the program closed the night then immediately reopened a
+        file in broad daylight, in a loop.
         """
         if not self._settings.get("close_at_sunrise"):
             return False
         site = self._site()
         if not site:
             return False
-        from ..core.ephemerides import hauteur_soleil, HORIZON
+        from ..core.ephemerides import sun_altitude, HORIZON
         from datetime import datetime, timezone
         try:
-            return hauteur_soleil(datetime.now(timezone.utc), site[0], site[1]) > HORIZON
+            return sun_altitude(datetime.now(timezone.utc), site[0], site[1]) > HORIZON
         except Exception:
             return False
 
-    def _desarmer(self):
+    def _disarm(self):
         self._logging_armed = False
         self._btn_logging.setText(T("btn_start_log"))
         self._btn_logging.setToolTip(T("tt_start_logging"))
         self._status_panel.add_message(T("logging_disarmed"))
 
-    def _demarrer_sur_suivi(self):
+    def _start_on_tracking(self):
         """The mount started tracking while armed."""
         if not self._logging_armed or self._logging_active:
             return
-        if self._fait_jour():
-            # On reste arme : la nuit viendra. Dit une fois, et le bouton
-            # l'affiche, sans quoi « en attente du suivi » contredisait
-            # l'etat « la monture suit ».
-            self._maj_bouton_armement()
-            if not getattr(self, '_jour_signale', False):
-                self._jour_signale = True
+        if self._is_daytime():
+            # Stay armed: the night will come. Said once, and the button
+            # shows it; otherwise "waiting for tracking" contradicted the
+            # state "the mount is tracking".
+            self._update_arm_button()
+            if not getattr(self, '_daylight_reported', False):
+                self._daylight_reported = True
                 self._status_panel.add_message(T("logging_armed_day"))
             return
         self._logging_armed = False
         self._start_logging()
         self._status_panel.add_message(T("logging_autostart"), Colors.STATUS_OK)
 
-    def _ecrit_echantillons(self) -> bool:
+    def _writes_samples(self) -> bool:
         """Whether samples should go to the file right now."""
-        return self._logging_active and not self._logging_suspendu
+        return self._logging_active and not self._logging_paused
 
-    def _annuler_arret_park(self):
+    def _cancel_park_stop(self):
         if self._park_timer is not None:
             self._park_timer.stop()
             self._park_timer = None
 
-    def _suspendre(self):
+    def _pause(self):
         """Mount stopped tracking long enough: stop writing, keep the session.
 
         A grace delay is used because a stop can be transient -- a meridian
         flip, a slew between two targets, an autofocus run. Suspending on the
         first non-tracking sample would punch a hole in every dither.
         """
-        self._annuler_arret_park()
-        if not self._logging_active or self._logging_suspendu:
+        self._cancel_park_stop()
+        if not self._logging_active or self._logging_paused:
             return
-        self._logging_suspendu = True
+        self._logging_paused = True
         self._file_logger.log_event("Logging suspended: mount not tracking")
         self._status_panel.add_message(T("logging_suspendu"))
 
-    def _reprendre(self):
+    def _resume(self):
         """Tracking resumed: same file, same night."""
-        if not self._logging_active or not self._logging_suspendu:
+        if not self._logging_active or not self._logging_paused:
             return
-        self._logging_suspendu = False
+        self._logging_paused = False
         self._file_logger.log_event("Logging resumed: mount tracking again")
         self._status_panel.add_message(T("logging_repris"), Colors.STATUS_OK)
 
-    def _surveiller_aube(self):
+    def _watch_dawn(self):
         """Close the session once the Sun is up, and only then.
 
         The night is one unit: a mount that parks at 02:00 and resumes at
@@ -1371,34 +1371,34 @@ class MainWindow(QMainWindow):
         site = self._site()
         if not site:
             return
-        from ..core.ephemerides import hauteur_soleil, HORIZON
+        from ..core.ephemerides import sun_altitude, HORIZON
         from datetime import datetime, timezone
         lat, lon, _ = site
         try:
-            h = hauteur_soleil(datetime.now(timezone.utc), lat, lon)
+            h = sun_altitude(datetime.now(timezone.utc), lat, lon)
         except Exception as exc:
             logger.error(f"Sun altitude failed: {exc}")
             return
         if h <= HORIZON:
-            self._nuit_vue = True
+            self._night_seen = True
             return
-        if self._nuit_vue:
+        if self._night_seen:
             self._status_panel.add_message(T("logging_autostop"), Colors.STATUS_OK)
             self._stop_logging()
 
-            # Et on montre le rapport. L'analyse automatique ne se declenchait
-            # que sur une TRANSITION vers PARKED : une monture parquee depuis
-            # une demi-heure quand le Soleil se leve n'en produit aucune, si
-            # bien que la nuit se cloturait, le rapport s'ecrivait, et rien ne
-            # s'affichait. C'est pourtant le seul moment ou l'on veut le voir.
+            # And show the report. The automatic analysis only triggered on
+            # a TRANSITION to PARKED: a mount parked for half an hour when
+            # the Sun rises produces none, so the night was closed, the
+            # report written, and nothing displayed. Yet that is the only
+            # moment one wants to see it.
             self._auto_analyze_on_park()
 
-            # Et on se remet en attente pour le soir. Sans cela le programme
-            # restait connecte mais inerte jusqu'a un clic : il fallait etre
-            # la chaque soir. Arme, il enchaine les nuits tout seul.
+            # And wait again for the evening. Without this the program
+            # stayed connected but inert until a click: someone had to be
+            # there every evening. Armed, it chains the nights on its own.
             if (self._connected
                     and self._settings.get("autostart_on_tracking")):
-                self._armer()
+                self._arm()
 
     def _start_logging(self):
         """Start data logging to files."""
@@ -1430,13 +1430,13 @@ class MainWindow(QMainWindow):
             session.elevation = f"{_site[2]:.0f}"
         self._file_logger.start_session(session)
         self._logging_active = True
-        self._logging_suspendu = False
-        self._nuit_vue = False
+        self._logging_paused = False
+        self._night_seen = False
         if self._settings.get("close_at_sunrise"):
-            self._aube_timer = QTimer(self)
-            self._aube_timer.timeout.connect(self._surveiller_aube)
-            self._aube_timer.start(60_000)
-            self._surveiller_aube()
+            self._dawn_timer = QTimer(self)
+            self._dawn_timer.timeout.connect(self._watch_dawn)
+            self._dawn_timer.start(60_000)
+            self._watch_dawn()
         self._btn_logging.setText(T("btn_stop_log"))
         # Start FFT timer for logging even if FFT window is not open
         if not self._fft_timer.isActive():
@@ -1445,19 +1445,19 @@ class MainWindow(QMainWindow):
         # Also announce the night when the site comes from the preferences:
         # _on_mount_info only fires when the mount answers, which is exactly
         # the case the preferences exist to cover.
-        self._annoncer_nuit()
+        self._announce_night()
 
     def _stop_logging(self):
         """Stop data logging."""
-        self._annuler_arret_park()
-        if self._aube_timer is not None:
-            self._aube_timer.stop()
-            self._aube_timer = None
-        self._logging_suspendu = False
+        self._cancel_park_stop()
+        if self._dawn_timer is not None:
+            self._dawn_timer.stop()
+            self._dawn_timer = None
+        self._logging_paused = False
         if not self._logging_active:
             return
-        chemin_dat = getattr(self._file_logger, 'dat_path', None)
-        self._derniere_session = chemin_dat
+        dat_path = getattr(self._file_logger, 'dat_path', None)
+        self._last_session = dat_path
         self._file_logger.close()
         self._logging_active = False
         self._btn_logging.setText(T("btn_start_log"))
@@ -1465,35 +1465,35 @@ class MainWindow(QMainWindow):
 
         # The night report is written on its own, next to the .dat. Asking the
         # user to remember to export it is how a night ends up without one.
-        if chemin_dat:
-            self._lancer_fin_de_nuit(chemin_dat, ecrire=True)
+        if dat_path:
+            self._start_end_of_night(dat_path, write=True)
 
-    def _lancer_fin_de_nuit(self, chemin_dat, ecrire: bool):
-        cle = str(chemin_dat)
-        if cle in self._travaux_nuit:
+    def _start_end_of_night(self, dat_path, write: bool):
+        key = str(dat_path)
+        if key in self._night_jobs:
             return
-        travail = TravailFinDeNuit(cle, get_language(), ecrire, self)
-        travail.fini.connect(self._fin_de_nuit_prete)
-        travail.finished.connect(travail.deleteLater)
-        self._travaux_nuit[cle] = travail
-        travail.start()
+        job = EndOfNightJob(key, get_language(), write, self)
+        job.completed.connect(self._end_of_night_ready)
+        job.finished.connect(job.deleteLater)
+        self._night_jobs[key] = job
+        job.start()
 
     @pyqtSlot(str, object, object)
-    def _fin_de_nuit_prete(self, chemin: str, session, sortie):
-        self._travaux_nuit.pop(chemin, None)
-        if sortie:
+    def _end_of_night_ready(self, path: str, session, output):
+        self._night_jobs.pop(path, None)
+        if output:
             self._status_panel.add_message(
-                f"{T('report_saved')} : {Path(sortie).stem[:-3]}*.txt "
-                f"({', '.join(LANGUES)})", Colors.STATUS_OK
+                f"{T('report_saved')} : {Path(output).stem[:-3]}*.txt "
+                f"({', '.join(LANGUAGES)})", Colors.STATUS_OK
             )
         if session is None:
             return
-        if chemin in self._analyse_demandee:
-            self._analyse_demandee.discard(chemin)
-            self._montrer_analyse(session)
+        if path in self._analysis_requested:
+            self._analysis_requested.discard(path)
+            self._show_analysis(session)
         else:
             # Kept for the park that usually follows the dawn close.
-            self._session_lue = (chemin, session)
+            self._read_session = (path, session)
 
     def _new_log_files(self):
         """Close current files and open new ones."""
@@ -1527,13 +1527,8 @@ class MainWindow(QMainWindow):
         """Open a previous log file for replay and analysis."""
         log_dir = str(self._file_logger.log_dir)
 
-        lang = get_language()
-        if lang == 'fr':
-            title = "Ouvrir un fichier log"
-            filter_str = "Fichiers données (*.dat);;Tous les fichiers (*)"
-        else:
-            title = "Open Log File"
-            filter_str = "Data files (*.dat);;All files (*)"
+        title = T("open_log_title")
+        filter_str = T("open_log_filter")
 
         file_path, _ = QFileDialog.getOpenFileName(
             self, title, log_dir, filter_str
@@ -1546,15 +1541,15 @@ class MainWindow(QMainWindow):
         )
         # Parsed in the background: a long night took seconds (a minute on
         # a small PC) with the window frozen, live polling included.
-        travail = TravailFinDeNuit(file_path, get_language(), False, self)
-        travail.fini.connect(self._relecture_prete)
-        travail.finished.connect(travail.deleteLater)
-        self._travail_relecture = travail
-        travail.start()
+        job = EndOfNightJob(file_path, get_language(), False, self)
+        job.completed.connect(self._replay_ready)
+        job.finished.connect(job.deleteLater)
+        self._replay_job = job
+        job.start()
 
     @pyqtSlot(str, object, object)
-    def _relecture_prete(self, file_path: str, session, _sortie):
-        self._travail_relecture = None
+    def _replay_ready(self, file_path: str, session, _output):
+        self._replay_job = None
         if session is None or session.sample_count == 0:
             self._status_panel.add_message(
                 T("replay_no_data"), Colors.STATUS_ERROR
@@ -1666,15 +1661,15 @@ class MainWindow(QMainWindow):
             # 1e-6 drew huge spikes.
             t = session.timestamps[:len(session.ra_axis)]
             dt = np.diff(t)
-            bon = dt > 0
+            good = dt > 0
 
-            def vitesse(pos):
+            def rate(pos):
                 d = (np.diff(pos) + 180.0) % 360.0 - 180.0
-                return (d[bon] * 3600.0) / dt[bon]
-            ra_speed = vitesse(session.ra_axis)
-            dec_speed = (vitesse(session.dec_axis)
+                return (d[good] * 3600.0) / dt[good]
+            ra_speed = rate(session.ra_axis)
+            dec_speed = (rate(session.dec_axis)
                          if len(session.dec_axis) == len(session.ra_axis) else None)
-            t = np.concatenate((t[:1], t[1:][bon]))
+            t = np.concatenate((t[:1], t[1:][good]))
 
             if len(ra_speed) > 0:
                 self._axial_graph.update_data(
@@ -1693,18 +1688,18 @@ class MainWindow(QMainWindow):
         ra_freqs, ra_mags = None, None
         dec_freqs, dec_mags = None, None
 
-        from ..core.spectre import spectre, spectre_regulier
+        from ..core.spectrum import spectrum, regular_spectrum
 
-        def calcul(dev):
+        def compute(dev):
             t = getattr(session, "deviation_timestamps", None)
             if t is not None and len(t) == len(dev):
-                return spectre(t, dev)
-            return spectre_regulier(dev, freq, enlever_sauts=True)
+                return spectrum(t, dev)
+            return regular_spectrum(dev, freq, remove_steps=True)
 
         if len(session.ra_deviations) > 64:
-            ra_freqs, ra_mags = calcul(np.asarray(session.ra_deviations))
+            ra_freqs, ra_mags = compute(np.asarray(session.ra_deviations))
         if len(session.dec_deviations) > 64:
-            dec_freqs, dec_mags = calcul(np.asarray(session.dec_deviations))
+            dec_freqs, dec_mags = compute(np.asarray(session.dec_deviations))
 
         # Show FFT window with replayed data
         if ra_freqs is not None or dec_freqs is not None:
@@ -1719,73 +1714,73 @@ class MainWindow(QMainWindow):
             self._fft_window.raise_()
 
     def _auto_analyze_on_park(self):
-        """Montre le rapport de la nuit qui vient de se terminer.
+        """Show the report of the night that has just ended.
 
-        Appelee a la cloture du matin et sur un park. Une meme session n'est
-        montree qu'une fois : sans cela, une monture qui se parque apres le
-        lever ouvrait une seconde fenetre sur le meme rapport.
+        Called at the morning close and on a park. A given session is shown
+        only once: otherwise a mount parking after sunrise opened a second
+        window on the same report.
         """
         try:
-            dat_path = self._derniere_session
+            dat_path = self._last_session
             if dat_path is None or not Path(dat_path).exists():
                 return
-            if str(dat_path) == getattr(self, '_session_analysee', None):
+            if str(dat_path) == getattr(self, '_analysed_session', None):
                 return
-            self._session_analysee = str(dat_path)
-            # Une session d'une poignee d'octets n'a rien a dire.
+            self._analysed_session = str(dat_path)
+            # A session of a handful of bytes has nothing to say.
             if Path(dat_path).stat().st_size < 1024:
                 return
 
             self._status_panel.add_message(
                 T("parked_auto_analysis"), Colors.STATUS_OK,
             )
-            cle = str(dat_path)
-            lue = self._session_lue
-            if lue is not None and lue[0] == cle:
-                self._session_lue = None
-                self._montrer_analyse(lue[1])
+            key = str(dat_path)
+            read_back = self._read_session
+            if read_back is not None and read_back[0] == key:
+                self._read_session = None
+                self._show_analysis(read_back[1])
                 return
             # Read in the background; the window opens when it is ready.
-            self._analyse_demandee.add(cle)
-            self._lancer_fin_de_nuit(cle, ecrire=False)
+            self._analysis_requested.add(key)
+            self._start_end_of_night(key, write=False)
         except Exception as e:
             logger.error(f"Auto-analysis failed: {e}")
 
-    def _montrer_analyse(self, session):
+    def _show_analysis(self, session):
         try:
             if session.sample_count < 10:
                 return
-            # Non modale, et une seule a la fois. exec() bloquait la boucle
-            # d'evenements : au premier matin sans personne devant l'ecran,
-            # le programme se figeait. La precedente est DETRUITE, pas
-            # seulement cachee : close() la gardait en memoire avec toute sa
-            # session (+100 Mo par nuit, jusqu'au swap sur un PC de 4 Go).
-            precedente = getattr(self, '_fen_analyse', None)
-            if precedente is not None:
+            # Non-modal, and only one at a time. exec() blocked the event
+            # loop: on the first morning with nobody in front of the screen,
+            # the program froze. The previous one is DESTROYED, not merely
+            # hidden: close() kept it in memory with its whole session
+            # (+100 MB per night, down to swap on a 4 GB PC).
+            previous = getattr(self, '_analysis_window', None)
+            if previous is not None:
                 try:
-                    precedente.close()
-                    precedente.deleteLater()
+                    previous.close()
+                    previous.deleteLater()
                 except RuntimeError:
-                    pass          # deja detruite par Qt
+                    pass          # already destroyed by Qt
             dialog = AnalysisDialog(session, self)
             dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
             dialog.setModal(False)
             dialog.show()
             dialog.raise_()
-            self._fen_analyse = dialog
+            self._analysis_window = dialog
             self._status_panel.add_message(T("analysis_complete"), Colors.STATUS_OK)
         except Exception as e:
             logger.error(f"Auto-analysis failed: {e}")
 
     # ── Zoom and reset ───────────────────────────────────────────
 
-    def _config_sismometre(self):
+    def _seismometer_config(self):
         g = self._settings.get
         return (g("seismometer_port"), float(g("seismometer_frequency_hz") or 20),
                 int(g("seismometer_offset") or 0), int(g("seismometer_range") or 2000),
                 int(g("seismometer_baud") or 9600))
 
-    def _appliquer_sismometre(self):
+    def _apply_seismometer(self):
         """Start, restart or stop the seismometer to match the preferences,
         at once, and show or hide its graph.
 
@@ -1796,156 +1791,156 @@ class MainWindow(QMainWindow):
         """
         if self._sim_mode in ("seismometer", "all"):
             return
-        voulu = bool(self._settings.get("seismometer_enabled"))
-        cfg = self._config_sismometre()
-        actuel = getattr(self, '_config_sei_actuelle', None)
-        if self._seismometer is not None and (not voulu or cfg != actuel):
+        wanted = bool(self._settings.get("seismometer_enabled"))
+        cfg = self._seismometer_config()
+        current_cfg = getattr(self, '_current_sei_config', None)
+        if self._seismometer is not None and (not wanted or cfg != current_cfg):
             try:
                 self._seismometer.stop()
             except Exception as e:
                 logger.warning(f"Seismometer stop: {e}")
             self._seismometer = None
-            self._config_sei_actuelle = None
-        if voulu and self._graph_splitter.indexOf(self._seismic_graph) < 0:
+            self._current_sei_config = None
+        if wanted and self._graph_splitter.indexOf(self._seismic_graph) < 0:
             self._graph_splitter.addWidget(self._seismic_graph)
-        self._seismic_graph.setVisible(voulu)
-        self._deplier_graphes()
-        if not voulu or self._seismometer is not None:
+        self._seismic_graph.setVisible(wanted)
+        self._expand_graphs()
+        if not wanted or self._seismometer is not None:
             return
-        port, freq, offset, plage, baud = cfg
+        port, freq, offset, span_range, baud = cfg
         if not port:
             self._status_panel.add_message(T("sei_pas_de_port"), Colors.STATUS_WARNING)
             return
         sei = Seismometer(port=port, frequency_hz=freq, offset=offset,
-                          data_range=plage, baudrate=baud)
-        sei.set_callback(self.sismique_recue.emit)
+                          data_range=span_range, baudrate=baud)
+        sei.set_callback(self.seismic_received.emit)
         if not sei.start():
             self._status_panel.add_message(
-                T("sei_echec").format(port=port, e=sei.erreur), Colors.STATUS_ERROR)
+                T("sei_echec").format(port=port, e=sei.error), Colors.STATUS_ERROR)
             return
         self._seismometer = sei
-        self._config_sei_actuelle = cfg
+        self._current_sei_config = cfg
         self._status_panel.add_message(
             T("sei_demarre").format(port=port, baud=baud), Colors.STATUS_OK)
-        n0 = self._dernier_sismique()
-        QTimer.singleShot(15_000, lambda s=sei, n=n0: self._verifier_sismometre(s, n))
+        n0 = self._last_seismic()
+        QTimer.singleShot(15_000, lambda s=sei, n=n0: self._check_seismometer(s, n))
 
-    def _dernier_sismique(self) -> float:
+    def _last_seismic(self) -> float:
         try:
             t, _ = self._processor.seismic_buffer.get_last_n(1)
             return float(t[-1]) if len(t) else 0.0
         except Exception:
             return 0.0
 
-    def _verifier_sismometre(self, sei, n0):
+    def _check_seismometer(self, sei, n0):
         if sei is not self._seismometer or not self._processor:
             return
-        if self._dernier_sismique() <= n0:
+        if self._last_seismic() <= n0:
             self._status_panel.add_message(
                 T("sei_muet").format(port=self._settings.get("seismometer_port")),
                 Colors.STATUS_WARNING)
 
-    def _tolerance_ra_affichee(self) -> float:
+    def _displayed_ra_tolerance(self) -> float:
         """RA tolerance in the displayed unit: the setting is in arcseconds
         of RA; in hours mode it is shown, and compared, in seconds of time."""
         tol = float(self._settings.get("tolerance_ra_arcsec") or 0.0)
         return tol if self._settings.get("ra_in_degrees") else tol / 15.0
 
-    def _largeur(self) -> float:
+    def _span(self) -> float:
         """Seconds shown by the scrolling graphs (View > Time span)."""
-        return largeur_affichee(self._settings.get("time_span_s"))
+        return shown_span(self._settings.get("time_span_s"))
 
-    def _derive_horloge(self):
+    def _clock_drift(self):
         """Clock drift in ms/h, fitted on the last half hour, recomputed
         at most every 5 s (it is a slope, it does not move faster)."""
-        maintenant = time.monotonic()
-        cache = getattr(self, '_derive_cache', None)
-        if cache is not None and maintenant - cache[0] < 5.0:
+        now = time.monotonic()
+        cache = getattr(self, '_drift_cache', None)
+        if cache is not None and now - cache[0] < 5.0:
             return cache[1]
         try:
             t, v, _, _ = self._processor.time_diff_buffer.get_tail(1800.0)
-            d = derive_horloge(t, v)
+            d = clock_drift(t, v)
         except Exception as e:
             logger.debug(f"Clock drift: {e}")
             d = None
-        self._derive_cache = (maintenant, d)
+        self._drift_cache = (now, d)
         return d
 
-    def _set_largeur(self, secondes: float):
-        self._settings.set("time_span_s", float(secondes))
+    def _set_span(self, seconds: float):
+        self._settings.set("time_span_s", float(seconds))
         self._settings.save()
         self._refresh_graphs_now()
 
-    def _remplir_menu_largeur(self, menu):
-        groupe = QActionGroup(menu)
-        actuelle = self._largeur()
-        for s in LARGEURS_S:
-            a = QAction(nom_largeur(s), menu)
+    def _fill_span_menu(self, menu):
+        group = QActionGroup(menu)
+        current_value = self._span()
+        for s in SPANS_S:
+            a = QAction(span_name(s), menu)
             a.setCheckable(True)
-            a.setChecked(abs(s - actuelle) < 0.5)
-            a.triggered.connect(lambda checked, s=s: self._set_largeur(s))
-            groupe.addAction(a)
+            a.setChecked(abs(s - current_value) < 0.5)
+            a.triggered.connect(lambda checked, s=s: self._set_span(s))
+            group.addAction(a)
             menu.addAction(a)
         # Rebuilt on opening, so the tick follows a change made elsewhere.
         menu.aboutToShow.connect(lambda m=menu: [
-            a.setChecked(abs(s - self._largeur()) < 0.5)
-            for a, s in zip(m.actions(), LARGEURS_S)])
+            a.setChecked(abs(s - self._span()) < 0.5)
+            for a, s in zip(m.actions(), SPANS_S)])
 
-    def _remplir_menu_vertical(self, menu):
-        groupe = QActionGroup(menu)
+    def _fill_vertical_menu(self, menu):
+        group = QActionGroup(menu)
         modes = [("data", T("zoom_data")), ("tolerance", T("zoom_tolerance")),
                  ("maximum", T("zoom_maximum")), ("minmax", T("zoom_minmax"))]
         for mode, label in modes:
             a = QAction(label, menu)
             a.setCheckable(True)
             a.triggered.connect(lambda checked, m=mode: self._set_vertical_zoom(m))
-            groupe.addAction(a)
+            group.addAction(a)
             menu.addAction(a)
         menu.aboutToShow.connect(lambda m=menu: [
             a.setChecked(mode == (self._settings.get("vertical_zoom_mode") or "data"))
             for a, (mode, _) in zip(m.actions(), modes)])
 
-    def _brancher_menus_graphes(self):
+    def _wire_graph_menus(self):
         """Right click on a graph: our menu, not pyqtgraph's.
 
         pyqtgraph's own menu offered « X axis / Y axis » ranges that the
         next refresh, a quarter of a second later, overwrote: the span
         looked settable and never stayed.
         """
-        for graphe in (self._ra_graph, self._dec_graph, self._time_graph,
+        for graph in (self._ra_graph, self._dec_graph, self._time_graph,
                        self._seismic_graph, self._axial_graph):
-            plot = graphe._plot
+            plot = graph._plot
             plot.setMenuEnabled(False)
             plot.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
             plot.customContextMenuRequested.connect(
-                lambda pos, g=graphe: self._menu_graphe(g, pos))
+                lambda pos, g=graph: self._graph_menu(g, pos))
 
-    def _menu_graphe(self, graphe, pos):
+    def _graph_menu(self, graph, pos):
         menu = QMenu(self)
-        self._remplir_menu_largeur(menu.addMenu(T("time_span")))
-        if graphe in (self._ra_graph, self._dec_graph):
-            self._remplir_menu_vertical(menu.addMenu(T("vertical_zoom")))
-        menu.exec(graphe._plot.mapToGlobal(pos))
+        self._fill_span_menu(menu.addMenu(T("time_span")))
+        if graph in (self._ra_graph, self._dec_graph):
+            self._fill_vertical_menu(menu.addMenu(T("vertical_zoom")))
+        menu.exec(graph._plot.mapToGlobal(pos))
 
     def _set_horizontal_zoom(self, zoom: int):
-        """Applique le zoom horizontal aux graphes, et le retient.
+        """Apply the horizontal zoom to the graphs, and remember it.
 
-        Il n'etait jusqu'ici qu'enregistre : le menu existait, le reglage
-        etait sauvegarde, et l'affichage n'en tenait aucun compte.
+        Until now it was only saved: the menu existed, the setting was
+        stored, and the display took no account of it.
         """
         self._settings.set("horizontal_zoom", zoom)
         self._settings.save()
-        self._appliquer_zoom_horizontal(zoom)
+        self._apply_horizontal_zoom(zoom)
 
-    def _appliquer_zoom_horizontal(self, zoom: int):
-        for graphe in (self._ra_graph, self._dec_graph,
+    def _apply_horizontal_zoom(self, zoom: int):
+        for graph in (self._ra_graph, self._dec_graph,
                        self._time_graph, self._seismic_graph):
-            graphe._zoom_horizontal = zoom
+            graph._horizontal_zoom = zoom
 
-    def _set_vertical_zoom(self, mode: str, enregistrer: bool = True):
+    def _set_vertical_zoom(self, mode: str, save: bool = True):
         self._ra_graph.set_vertical_zoom(mode)
         self._dec_graph.set_vertical_zoom(mode)
-        if enregistrer:
+        if save:
             self._settings.set("vertical_zoom_mode", mode)
             self._settings.save()
             self._refresh_graphs_now()
@@ -1979,8 +1974,8 @@ class MainWindow(QMainWindow):
         wrong moves the observatory and shifts every twilight.
         """
         from ..core.ephemerides import parse_latitude_lx200, parse_longitude_lx200
-        if self._site_monture:
-            lat_t, lon_t, elev = self._site_monture
+        if self._mount_site:
+            lat_t, lon_t, elev = self._mount_site
             lat = parse_latitude_lx200(lat_t)
             lon = parse_longitude_lx200(lon_t)
             if lat is not None and lon is not None:
@@ -1995,16 +1990,16 @@ class MainWindow(QMainWindow):
             return float(lat_p), float(lon_p), elev
         return None
 
-    def _annoncer_nuit(self):
+    def _announce_night(self):
         """Post tonight's twilights to the status panel."""
         site = self._site()
         if not site:
             return
-        from ..core.ephemerides import nuit_autour
+        from ..core.ephemerides import night_around
         from datetime import datetime, timezone
         lat, lon, _ = site
         try:
-            n = nuit_autour(datetime.now(timezone.utc), lat, lon)
+            n = night_around(datetime.now(timezone.utc), lat, lon)
         except Exception as exc:
             logger.error(f"Ephemeris failed: {exc}")
             return
@@ -2012,24 +2007,24 @@ class MainWindow(QMainWindow):
         def hl(t):
             return t.astimezone().strftime('%H:%M') if t else '--:--'
 
-        if n.soleil_toujours_haut:
+        if n.sun_always_up:
             self._status_panel.add_message(T("nuit_jour_permanent"))
             return
         self._status_panel.add_message(
-            f"{T('nuit_coucher')} {hl(n.coucher)}  |  "
-            f"{T('nuit_nautique')} {hl(n.nautique)}  |  "
-            f"{T('nuit_lever')} {hl(n.lever)}")
-        if n.nuit_noire:
-            d = n.duree_noire
-            heures = int(d.total_seconds() // 3600)
+            f"{T('nuit_coucher')} {hl(n.sunset)}  |  "
+            f"{T('nuit_nautique')} {hl(n.nautical)}  |  "
+            f"{T('nuit_lever')} {hl(n.sunrise)}")
+        if n.astro_dark:
+            d = n.dark_duration
+            hours = int(d.total_seconds() // 3600)
             mins = int((d.total_seconds() % 3600) // 60)
             self._status_panel.add_message(
-                f"{T('nuit_noire')} {hl(n.astro_debut)} \u2192 {hl(n.astro_fin)} "
-                f"({heures} h {mins:02d})", Colors.STATUS_OK)
+                f"{T('nuit_noire')} {hl(n.astro_start)} \u2192 {hl(n.astro_end)} "
+                f"({hours} h {mins:02d})", Colors.STATUS_OK)
         else:
             self._status_panel.add_message(T("nuit_pas_de_nuit_noire"))
 
-    def _choisir_langue(self, code: str):
+    def _choose_language(self, code: str):
         """Change the interface language.
 
         Nothing is retranslated in place: the menus, labels and tooltips are
@@ -2043,29 +2038,29 @@ class MainWindow(QMainWindow):
         self._settings.set("language", code)
         self._settings.save()
         set_language(code)
-        self._prevenir_redemarrage()
+        self._warn_restart()
 
-    def _prevenir_redemarrage(self):
+    def _warn_restart(self):
         """Tell the user the new language needs a restart, and offer it."""
-        boite = QMessageBox(self)
-        boite.setIcon(QMessageBox.Icon.Information)
-        boite.setWindowTitle(T("lang_restart_titre"))
-        boite.setText(T("lang_restart_texte"))
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Information)
+        box.setWindowTitle(T("lang_restart_titre"))
+        box.setText(T("lang_restart_texte"))
         if self._logging_active:
             # Restarting would end the session and write the night report in
             # the middle of the night. Not offered.
-            boite.setInformativeText(T("lang_restart_bloque"))
-            boite.setStandardButtons(QMessageBox.StandardButton.Ok)
-            boite.exec()
+            box.setInformativeText(T("lang_restart_bloque"))
+            box.setStandardButtons(QMessageBox.StandardButton.Ok)
+            box.exec()
             return
-        maintenant = boite.addButton(T("lang_restart_now"),
+        now = box.addButton(T("lang_restart_now"),
                                      QMessageBox.ButtonRole.AcceptRole)
-        boite.addButton(T("lang_restart_later"), QMessageBox.ButtonRole.RejectRole)
-        boite.exec()
-        if boite.clickedButton() is maintenant:
-            self._redemarrer()
+        box.addButton(T("lang_restart_later"), QMessageBox.ButtonRole.RejectRole)
+        box.exec()
+        if box.clickedButton() is now:
+            self._restart()
 
-    def _redemarrer(self):
+    def _restart(self):
         """Relaunch the application in place."""
         import os
         import subprocess
@@ -2083,15 +2078,15 @@ class MainWindow(QMainWindow):
 
     def _show_preferences(self):
         """Show preferences dialog."""
-        avant = self._settings.get("language")
+        before = self._settings.get("language")
         dialog = PreferencesDialog(self._settings, self)
         if dialog.exec():
             self._apply_settings()
             # The language combo also lives in Preferences. Changing it there
             # must say the same thing as the Language menu, otherwise it is
             # again an option that appears to do nothing.
-            if self._settings.get("language") != avant:
-                self._prevenir_redemarrage()
+            if self._settings.get("language") != before:
+                self._warn_restart()
 
     def _apply_settings(self):
         """Apply changed settings to running components."""
@@ -2118,9 +2113,9 @@ class MainWindow(QMainWindow):
         self._ra_graph.set_tolerance(self._settings.get("tolerance_ra_arcsec"))
         self._dec_graph.set_tolerance(self._settings.get("tolerance_dec_arcsec"))
 
-        self._status_panel.set_ra_en_degres(self._settings.get("ra_in_degrees"))
-        self._armer_controle_periodique()
-        self._appliquer_sismometre()
+        self._status_panel.set_ra_in_degrees(self._settings.get("ra_in_degrees"))
+        self._arm_periodic_check()
+        self._apply_seismometer()
         self._refresh_graphs_now()
 
         # Update status panel tolerance display
@@ -2132,22 +2127,22 @@ class MainWindow(QMainWindow):
 
     # ── Graph dump ─────────────────────────────────────────────
 
-    def _verifier_graphe_plein(self):
-        """Enregistre les graphes quand la largeur s'est remplie de neuf.
+    def _check_graph_full(self):
+        """Save the graphs when the width has filled with new data.
 
-        C'est le comportement du MountMonitor Java : « MountMonitor outputs
+        This is the Java MountMonitor behaviour: « MountMonitor outputs
         the graphs automatically each time the window width is filled with
-        new data ». Il laisse un carnet photographique continu de la nuit,
-        sans avoir a rejouer quoi que ce soit le lendemain.
+        new data ». It leaves a continuous photographic log of the night,
+        without having to replay anything the next day.
 
-        Le critere : la fenetre affichee s'est entierement renouvelee depuis
-        le dernier export, c'est-a-dire que le dernier echantillon a avance
-        d'une largeur de fenetre. Chaque image montre ainsi un morceau de
-        nuit different, sans trou ni recouvrement.
+        The criterion: the displayed window has been entirely renewed since
+        the last export, i.e. the last sample has moved forward by one
+        window width. Each image thus shows a different piece of the
+        night, with no gap or overlap.
 
-        🔴 Il comptait auparavant les echantillons du tampon. Or celui-ci est
-        circulaire et plafonne a 50 000 : une fois plein, sa taille ne bouge
-        plus, et le carnet s'arretait en pleine nuit sans rien dire.
+        🔴 It used to count the buffer samples. But the buffer is circular
+        and capped at 50,000: once full, its size no longer changes, and
+        the log stopped in the middle of the night without a word.
         """
         if self._settings.get("dump_mode") != "full":
             return
@@ -2157,14 +2152,14 @@ class MainWindow(QMainWindow):
             return
         if len(t) == 0:
             return
-        fin = float(t[-1])
-        largeur = self._largeur()
-        depart = getattr(self, '_instant_dernier_dump', None)
-        if depart is None or fin < depart:
-            self._instant_dernier_dump = fin
+        end = float(t[-1])
+        span = self._span()
+        started = getattr(self, '_last_dump_time', None)
+        if started is None or end < started:
+            self._last_dump_time = end
             return
-        if fin - depart >= largeur:
-            self._instant_dernier_dump = fin
+        if end - started >= span:
+            self._last_dump_time = end
             self._dump_graphs()
 
     def _dump_graphs(self):
@@ -2181,19 +2176,19 @@ class MainWindow(QMainWindow):
 
     # ── Mount checks ────────────────────────────────────────────
 
-    def _controle_periodique(self):
+    def _periodic_check(self):
         """Mount settings checked again every few minutes, not only at
         connection and after a slew: a setting changed on the keypad in the
         middle of a target went unnoticed until the next slew."""
         if self._connected and self._connection:
             self._run_mount_checks()
 
-    def _armer_controle_periodique(self):
+    def _arm_periodic_check(self):
         minutes = float(self._settings.get("mount_check_interval_min") or 0)
-        t = getattr(self, '_timer_controles', None)
+        t = getattr(self, '_checks_timer', None)
         if t is None:
-            t = self._timer_controles = QTimer(self)
-            t.timeout.connect(self._controle_periodique)
+            t = self._checks_timer = QTimer(self)
+            t.timeout.connect(self._periodic_check)
         if minutes > 0:
             t.start(int(minutes * 60_000))
         else:
@@ -2217,15 +2212,15 @@ class MainWindow(QMainWindow):
         # check passed and printed « Tracking rate: Sidereal OK » next to a
         # mount that was not tracking at all. Rate-dependent checks are
         # skipped unless the mount is actually tracking.
-        suit = getattr(self, '_prev_mount_status', None) == MountStatus.TRACKING
+        tracking_now = getattr(self, '_prev_mount_status', None) == MountStatus.TRACKING
 
-        def lire(c):
+        def read(c):
             r = {}
             if cfg["check_refraction_status"]:
                 r["refraction"] = c.is_refraction_enabled()
             if cfg["check_refraction_enabled"]:
                 r["mode"] = c.get_refraction_mode()
-            if suit and cfg["check_tracking_rate"]:
+            if tracking_now and cfg["check_tracking_rate"]:
                 r["rate"] = c.get_tracking_rate()
             if cfg["check_gps_sync"]:
                 r["gps"] = c.is_gps_synced()
@@ -2233,9 +2228,9 @@ class MainWindow(QMainWindow):
                 r["dual"] = c.is_dual_tracking_enabled()
             return r
 
-        self._demande_monture(lire, lambda r: self._juger_controles(r or {}, suit))
+        self._mount_request(read, lambda r: self._judge_checks(r or {}, tracking_now))
 
-    def _juger_controles(self, r: dict, suit: bool):
+    def _judge_checks(self, r: dict, tracking_now: bool):
         warnings = []
         ok_checks = []
 
@@ -2283,26 +2278,26 @@ class MainWindow(QMainWindow):
                 warnings.append(T("chk_dual_ko").format(a=actual, e=expected_val))
 
         # Check tracking rate
-        if not suit:
+        if not tracking_now:
             ok_checks.append(T("chk_parked"))
-        if suit and self._settings.get("check_tracking_rate"):
+        if tracking_now and self._settings.get("check_tracking_rate"):
             expected_val = self._settings.get("check_tracking_rate_value")
             rate = r.get("rate")
             if rate is not None:
-                from ..core.mount_connection import classer_vitesse
-                nom = classer_vitesse(rate)
-                lu = T(f"val_{nom}") if nom else f"{rate}"
-                if nom == (expected_val or "").lower():
-                    ok_checks.append(T("chk_rate_ok").format(v=lu) + " \u2713")
+                from ..core.mount_connection import classify_tracking_rate
+                name = classify_tracking_rate(rate)
+                read_value = T(f"val_{name}") if name else f"{rate}"
+                if name == (expected_val or "").lower():
+                    ok_checks.append(T("chk_rate_ok").format(v=read_value) + " \u2713")
                 else:
-                    warnings.append(T("chk_rate_ko").format(a=lu, e=T(f"val_{expected_val}")))
+                    warnings.append(T("chk_rate_ko").format(a=read_value, e=T(f"val_{expected_val}")))
 
         # Display results. The periodic check (every few minutes) writes to
         # the history only when the outcome changes, not every time.
-        bilan = (tuple(ok_checks), tuple(warnings))
-        nouveau = bilan != getattr(self, '_dernier_bilan_controles', None)
-        self._dernier_bilan_controles = bilan
-        if nouveau:
+        summary = (tuple(ok_checks), tuple(warnings))
+        changed = summary != getattr(self, '_last_checks_summary', None)
+        self._last_checks_summary = summary
+        if changed:
             for msg in ok_checks:
                 self._status_panel.add_message(msg, Colors.STATUS_OK)
                 if self._logging_active:
@@ -2312,43 +2307,43 @@ class MainWindow(QMainWindow):
                 if self._logging_active:
                     self._file_logger.log_event(f"Check WARNING: {msg}")
         if warnings:
-            self._alerte_monture(warnings)
+            self._mount_alert(warnings)
         else:
-            boite = getattr(self, "_boite_alerte", None)
-            if boite is not None and boite.isVisible():
-                boite.hide()          # put right: the alert goes by itself
+            box = getattr(self, "_alert_box", None)
+            if box is not None and box.isVisible():
+                box.hide()          # put right: the alert goes by itself
 
-    def _alerte_monture(self, warnings: list):
+    def _mount_alert(self, warnings: list):
         """ONE non-modal box, updated in place.
 
         A modal box per end of slew piled up all night in front of an empty
         chair, each one a nested event loop."""
         if not self._settings.get("mount_alert_popup"):
             return
-        texte = (T("mount_alert_text") + "\n\n" + "\n".join(f"\u26a0 {w}" for w in warnings)
+        text = (T("mount_alert_text") + "\n\n" + "\n".join(f"\u26a0 {w}" for w in warnings)
                  + "\n\n" + T("mount_alert_disable"))
-        boite = getattr(self, "_boite_alerte", None)
-        if boite is None:
-            boite = QMessageBox(self)
-            boite.setIcon(QMessageBox.Icon.Warning)
-            boite.setWindowTitle(T("mount_alert_title"))
-            boite.setStandardButtons(QMessageBox.StandardButton.Ok)
-            boite.setModal(False)
+        box = getattr(self, "_alert_box", None)
+        if box is None:
+            box = QMessageBox(self)
+            box.setIcon(QMessageBox.Icon.Warning)
+            box.setWindowTitle(T("mount_alert_title"))
+            box.setStandardButtons(QMessageBox.StandardButton.Ok)
+            box.setModal(False)
             # On top of the other windows, even when MountMonitor is behind
             # NINA: a wrong mount setting spoils the night, it must be seen.
-            boite.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
-            self._boite_alerte = boite
-        boite.setText(texte)
-        boite.show()
-        boite.raise_()
-        boite.activateWindow()
+            box.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
+            self._alert_box = box
+        box.setText(text)
+        box.show()
+        box.raise_()
+        box.activateWindow()
         # Taskbar / dock flashes until the window is looked at.
         QApplication.alert(self, 0)
-        QApplication.alert(boite, 0)
+        QApplication.alert(box, 0)
 
     # ── Help ─────────────────────────────────────────────────────
 
-    def _ouvrir_manuel(self):
+    def _open_manual(self):
         """Open the PDF manual for the current language.
 
         It ships in app/docs next to the program; without a menu entry
@@ -2358,46 +2353,46 @@ class MainWindow(QMainWindow):
         import webbrowser
         lang = get_language()
         base = Path(__file__).resolve().parent.parent.parent / "docs"
-        chemin = base / f"manual_{lang}.pdf"
-        if not chemin.exists():
-            chemin = base / "manual_en.pdf"
-        if not chemin.exists():
+        path = base / f"manual_{lang}.pdf"
+        if not path.exists():
+            path = base / "manual_en.pdf"
+        if not path.exists():
             QMessageBox.information(self, T("menu_manual"), T("manual_absent"))
             return
         try:
             if sys.platform == "win32":
-                os.startfile(str(chemin))
+                os.startfile(str(path))
             elif sys.platform == "darwin":
-                subprocess.Popen(["open", str(chemin)])
+                subprocess.Popen(["open", str(path)])
             else:
-                subprocess.Popen(["xdg-open", str(chemin)])
+                subprocess.Popen(["xdg-open", str(path)])
         except Exception:
             # xdg-open may simply be absent on a bare Linux install.
-            webbrowser.open(chemin.as_uri())
+            webbrowser.open(path.as_uri())
 
     def _show_help(self):
         """Show the help document, in the user's language.
 
         The text lived here as two hard-coded strings, English and French,
-        still describing version 1.6. It now sits in aide_textes, in three
+        still describing version 1.6. It now sits in help_texts, in three
         languages, and is scrollable: a QMessageBox silently truncates a
         document this long.
         """
-        from .aide_textes import aide_html, TITRE
+        from .help_texts import help_html, TITLE
         lang = get_language()
 
         dlg = QDialog(self)
-        dlg.setWindowTitle(f"{TITRE.get(lang, TITRE['en'])} — MountMonitor")
+        dlg.setWindowTitle(f"{TITLE.get(lang, TITLE['en'])} — MountMonitor")
         dlg.resize(760, 620)
         lay = QVBoxLayout(dlg)
-        vue = QTextBrowser(dlg)
-        vue.setOpenExternalLinks(False)
-        vue.setHtml(aide_html(lang, self._version))
-        lay.addWidget(vue)
-        boutons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, parent=dlg)
-        boutons.rejected.connect(dlg.reject)
-        boutons.accepted.connect(dlg.accept)
-        lay.addWidget(boutons)
+        view = QTextBrowser(dlg)
+        view.setOpenExternalLinks(False)
+        view.setHtml(help_html(lang, self._version))
+        lay.addWidget(view)
+        buttons_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, parent=dlg)
+        buttons_box.rejected.connect(dlg.reject)
+        buttons_box.accepted.connect(dlg.accept)
+        lay.addWidget(buttons_box)
         dlg.exec()
 
     def _show_about(self):
@@ -2478,54 +2473,54 @@ class MainWindow(QMainWindow):
     # ── Auto-update ──────────────────────────────────────────────
 
     def _check_updates_silent(self):
-        """Verification discrete au demarrage : rien ne s'affiche si tout va bien."""
-        self._lancer_verification(manuelle=False)
+        """Discreet check at startup: nothing is shown if all is well."""
+        self._start_update_check(manual=False)
 
     def _check_updates_manual(self):
-        """Verification demandee par le menu Aide : on repond dans tous les cas."""
+        """Check requested from the Help menu: always answered."""
         self.statusBar().showMessage(T("update_checking"), 5000)
-        self._lancer_verification(manuelle=True)
+        self._start_update_check(manual=True)
 
-    def _lancer_verification(self, manuelle: bool):
-        """Interroge GitHub dans un fil de fond."""
-        if getattr(self, '_verification_en_cours', False):
+    def _start_update_check(self, manual: bool):
+        """Query GitHub in a background thread."""
+        if getattr(self, '_check_in_progress', False):
             return
-        self._verification_en_cours = True
+        self._check_in_progress = True
 
-        def _interroger():
-            trouve = None
+        def _query():
+            found = None
             try:
                 if updater.is_packaged():
-                    trouve = updater.check(self._version)
-                elif manuelle:
-                    trouve = 'sources'
+                    found = updater.check(self._version)
+                elif manual:
+                    found = 'sources'
             except Exception:
-                logger.debug("Verification des mises a jour impossible",
+                logger.debug("Update check failed",
                              exc_info=True)
-            self.maj_trouvee.emit((trouve, manuelle))
+            self.update_found.emit((found, manual))
 
-        threading.Thread(target=_interroger, daemon=True,
+        threading.Thread(target=_query, daemon=True,
                          name='verif-maj').start()
 
-    def _maj_reperee(self, resultat):
-        """Retour de la verification, sur le fil graphique."""
-        trouve, manuelle = resultat
-        self._verification_en_cours = False
+    def _on_update_found(self, result):
+        """Result of the check, on the GUI thread."""
+        found, manual = result
+        self._check_in_progress = False
 
-        if trouve == 'sources':
+        if found == 'sources':
             QMessageBox.information(
                 self, T("menu_check_updates"),
                 T("tt_upd_source"))
             return
 
-        if not trouve:
-            if manuelle:
+        if not found:
+            if manual:
                 QMessageBox.information(
                     self, T("menu_check_updates"),
                     T("update_up_to_date").format(version=self._version))
             return
 
-        self._show_update_dialog(trouve)
+        self._show_update_dialog(found)
 
     def _show_update_dialog(self, release_info: dict):
         """Show update available dialog with changelog."""
@@ -2533,7 +2528,7 @@ class MainWindow(QMainWindow):
 
         tag = release_info.get("version", "?")
         body = release_info.get("notes", "") or ""
-        taille = release_info.get("size", 0)
+        size = release_info.get("size", 0)
 
         dlg = QDialog(self)
         dlg.setWindowTitle(T("update_available"))
@@ -2545,7 +2540,7 @@ class MainWindow(QMainWindow):
             f"<h3>{T('update_available')}</h3>"
             f"<p><b>{T('update_current')}:</b> {self._version}<br>"
             f"<b>{T('update_new')}:</b> {tag}"
-            + (f" ({taille / 1e6:.1f} Mo)" if taille else "")
+            + (f" ({size / 1e6:.1f} Mo)" if size else "")
             + "</p>"
         )
         info_label = QLabel(info_text)
@@ -2583,12 +2578,12 @@ class MainWindow(QMainWindow):
         dlg.exec()
 
     def _apply_update(self, info: dict):
-        """Telecharge l'archive applicative et la pose, puis redemarre.
+        """Download the application archive and install it, then restart.
 
-        Rien d'executable n'est telecharge : le module recupere une archive
-        ZIP et remplace les fichiers lui-meme, ce qui evite l'avertissement
-        SmartScreen — un .exe telecharge porte la « marque du web », pas un
-        fichier ecrit par un programme.
+        Nothing executable is downloaded: the module fetches a ZIP archive
+        and replaces the files itself, which avoids the SmartScreen
+        warning — a downloaded .exe carries the "mark of the web", a file
+        written by a program does not.
         """
         from PyQt6.QtWidgets import QProgressDialog
 
@@ -2600,46 +2595,46 @@ class MainWindow(QMainWindow):
         dlg.setWindowModality(Qt.WindowModality.ApplicationModal)
         dlg.setMinimumDuration(0)
         dlg.setValue(0)
-        self._dlg_maj = dlg
+        self._update_dlg = dlg
 
-        def progression(fait, total):
+        def progress(done, total):
             if total:
-                self.maj_progression.emit(int(fait * 100 / total))
+                self.update_progress.emit(int(done * 100 / total))
 
-        def telecharger():
+        def download():
             try:
-                self.maj_posee.emit(bool(updater.download_and_apply(info, progress=progression)), "")
+                self.update_installed.emit(bool(updater.download_and_apply(info, progress=progress)), "")
             except Exception as e:
-                self.maj_posee.emit(False, str(e) or e.__class__.__name__)
+                self.update_installed.emit(False, str(e) or e.__class__.__name__)
 
-        threading.Thread(target=telecharger, daemon=True, name="maj-telechargement").start()
+        threading.Thread(target=download, daemon=True, name="maj-telechargement").start()
 
     @pyqtSlot(int)
-    def _maj_progression(self, pct: int):
-        dlg = getattr(self, "_dlg_maj", None)
+    def _on_update_progress(self, pct: int):
+        dlg = getattr(self, "_update_dlg", None)
         if dlg is not None:
             dlg.setValue(pct)
 
     @pyqtSlot(bool, str)
-    def _maj_terminee(self, pose: bool, erreur: str):
-        dlg, self._dlg_maj = getattr(self, "_dlg_maj", None), None
+    def _on_update_installed(self, installed: bool, error: str):
+        dlg, self._update_dlg = getattr(self, "_update_dlg", None), None
         if dlg is not None:
             dlg.close()
-        if erreur:
+        if error:
             QMessageBox.warning(
                 self, T("update_available"),
-                T("tt_upd_failed").format(err=erreur))
+                T("tt_upd_failed").format(err=error))
             return
-        if not pose:
+        if not installed:
             QMessageBox.warning(self, T("update_available"), T("update_failed"))
             return
 
         QMessageBox.information(self, T("update_available"), T("update_success"))
 
-        # On ferme la fenetre plutot que de quitter l'application : c'est
-        # closeEvent qui arrete le poller, ecrit le resume de session et
-        # ferme les six fichiers de la nuit. Quitter sans passer par la
-        # laisserait un .dat tronque.
+        # The window is closed rather than the application quit: closeEvent
+        # stops the poller, writes the session summary and closes the six
+        # files of the night. Quitting without going through it would
+        # leave a truncated .dat.
         if updater.restart():
             self.close()
             QApplication.quit()
@@ -2656,20 +2651,20 @@ class MainWindow(QMainWindow):
 
     # ── Window lifecycle ─────────────────────────────────────────
 
-    def _restaurer_panneaux(self):
+    def _restore_panels(self):
         """Put the splitters back where the user last left them."""
         from PyQt6.QtCore import QByteArray
-        for cle, sp in (("splitter_graphs", getattr(self, '_graph_splitter', None)),
+        for key, sp in (("splitter_graphs", getattr(self, '_graph_splitter', None)),
                         ("splitter_main", getattr(self, '_h_splitter', None))):
-            etat = self._settings.get(cle)
-            if sp is not None and etat:
+            state = self._settings.get(key)
+            if sp is not None and state:
                 try:
-                    sp.restoreState(QByteArray.fromBase64(etat.encode('ascii')))
+                    sp.restoreState(QByteArray.fromBase64(state.encode('ascii')))
                 except Exception as exc:
-                    logger.debug(f"Splitter {cle} not restored: {exc}")
-        self._deplier_graphes()
+                    logger.debug(f"Splitter {key} not restored: {exc}")
+        self._expand_graphs()
 
-    def _deplier_graphes(self):
+    def _expand_graphs(self):
         """No shown graph squeezed to nothing.
 
         The layout saved by a session with three graphs gave the fourth
@@ -2681,19 +2676,19 @@ class MainWindow(QMainWindow):
         if sp is None or sp.count() == 0:
             return
         sp.setChildrenCollapsible(False)
-        tailles = sp.sizes()
-        montres = [i for i in range(sp.count()) if not sp.widget(i).isHidden()]
-        if not montres or all(tailles[i] >= 60 for i in montres):
+        sizes = sp.sizes()
+        shown_idx = [i for i in range(sp.count()) if not sp.widget(i).isHidden()]
+        if not shown_idx or all(sizes[i] >= 60 for i in shown_idx):
             return
-        total = sum(tailles[i] for i in montres) or 400 * len(montres)
-        part = total // len(montres)
-        sp.setSizes([part if i in montres else 0 for i in range(sp.count())])
+        total = sum(sizes[i] for i in shown_idx) or 400 * len(shown_idx)
+        part = total // len(shown_idx)
+        sp.setSizes([part if i in shown_idx else 0 for i in range(sp.count())])
 
-    def _enregistrer_panneaux(self):
-        for cle, sp in (("splitter_graphs", getattr(self, '_graph_splitter', None)),
+    def _save_panels(self):
+        for key, sp in (("splitter_graphs", getattr(self, '_graph_splitter', None)),
                         ("splitter_main", getattr(self, '_h_splitter', None))):
             if sp is not None:
-                self._settings.set(cle, bytes(sp.saveState().toBase64()).decode('ascii'))
+                self._settings.set(key, bytes(sp.saveState().toBase64()).decode('ascii'))
 
     def closeEvent(self, event):
         """Handle window close: save settings, stop everything."""
@@ -2705,25 +2700,25 @@ class MainWindow(QMainWindow):
         if self._fft_window:
             self._settings.set("fft_width", self._fft_window.width())
             self._settings.set("fft_height", self._fft_window.height())
-        self._enregistrer_panneaux()
+        self._save_panels()
         self._settings.save()
 
         # Stop everything
         self._disconnect()
-        if self._connexion_en_cours and self._poller is not None:
+        if self._connecting and self._poller is not None:
             poller, self._poller = self._poller, None
-            self._liberer_poller(poller)
+            self._release_poller(poller)
 
         # The night report is written in a background thread: let it finish
         # (the files are on disk already, this is only the report), and never
         # let a running QThread be destroyed -- that aborts the process.
-        for travail in list(self._travaux_nuit.values()) + [getattr(self, "_travail_relecture", None)]:
-            if travail is not None:
+        for job in list(self._night_jobs.values()) + [getattr(self, "_replay_job", None)]:
+            if job is not None:
                 try:
-                    travail.wait(120_000)
+                    job.wait(120_000)
                 except RuntimeError:
                     pass
-        for poller in list(self._pollers_finissants):
+        for poller in list(self._finishing_pollers):
             poller.wait(5000)
 
         if self._fft_window:

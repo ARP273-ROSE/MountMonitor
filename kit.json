@@ -68,17 +68,22 @@
   "description_en": "Telescope mount tracking monitor",
   "categories_linux": "Science;Astronomy;",
   "icone_icns": "logo.icns",
+  "controles": [
+    "check_symbols.py",
+    "check_signals.py",
+    "check_installer.py"
+  ],
   "tests_ci": [
     "tests/test_confidentialite.py",
-    "tests/test_langues.py",
-    "tests/test_textes_en_dur.py",
+    "tests/test_languages.py",
+    "tests/test_hardcoded_texts.py",
     "tests/test_kit.py",
-    "tests/test_updater_multiplateforme.py",
-    "tests/test_rapport_trilingue.py",
-    "tests/test_corrections_septembre.py",
-    "tests/test_analyse_suivi.py",
+    "tests/test_updater_cross_platform.py",
+    "tests/test_trilingual_report.py",
+    "tests/test_september_fixes.py",
+    "tests/test_tracking_analysis.py",
     "tests/test_gui.py",
-    "tests/test_audit_novembre.py",
+    "tests/test_november_audit.py",
     "tests/test_signature_maj.py"
   ],
   "rapports": {

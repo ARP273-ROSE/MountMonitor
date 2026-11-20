@@ -1,18 +1,18 @@
 # -*- coding: utf-8 -*-
-"""Les textes du rapport de nuit, en trois langues.
+"""The night report texts, in three languages.
 
-Le rapport etait ecrit en dur, chaque phrase suivie de sa traduction
-francaise. Cela le rendait deux fois plus long a lire, impossible a etendre a
-une troisieme langue, et sourd a la langue choisie dans les preferences.
+The report used to be hard-coded, each sentence followed by its French
+translation. That made it twice as long to read, impossible to extend to a
+third language, and deaf to the language chosen in the preferences.
 
-Ici, chaque texte porte une cle et existe en anglais, en francais et en
-neerlandais. `R(cle)` rend celui de la langue demandee, et retombe sur
-l'anglais si une traduction manque — jamais sur une ligne vide.
+Here each text has a key and exists in English, French and Dutch.
+`R(key)` returns the one for the requested language, and falls back on
+English if a translation is missing — never on an empty line.
 
-Les cles sont groupees dans l'ordre ou elles apparaissent dans le rapport.
+Keys are grouped in the order they appear in the report.
 """
 
-from ..utils.i18n import LANGUE_DEFAUT
+from ..utils.i18n import DEFAULT_LANGUAGE
 
 TR = {
     "t_mouvements": {"en": "COMMANDED MOVES", "fr": "MOUVEMENTS COMMANDÉS",
@@ -104,7 +104,7 @@ TR = {
         "nl": "[i] Geen typische periodieke fout in het bereik 2-15 min"},
 
 
-    # ── titres de section ──────────────────────────────────────────────
+    # ── section titles ─────────────────────────────────────────────────
     "t_apercu": {
         "en": "SESSION OVERVIEW", "fr": "APERCU DE LA SESSION",
         "nl": "OVERZICHT VAN DE SESSIE"},
@@ -139,7 +139,7 @@ TR = {
     "t_recommandations": {
         "en": "RECOMMENDATIONS", "fr": "RECOMMANDATIONS", "nl": "AANBEVELINGEN"},
 
-    # ── apercu ─────────────────────────────────────────────────────────
+    # ── overview ───────────────────────────────────────────────────────
     "date": {"en": "Date", "fr": "Date", "nl": "Datum"},
     "observatoire": {"en": "Observatory", "fr": "Observatoire", "nl": "Sterrenwacht"},
     "monture": {"en": "Mount", "fr": "Monture", "nl": "Montering"},
@@ -167,7 +167,7 @@ TR = {
         "fr": "Seuls des échantillons SLEWING/PARKED/IDLE dans le fichier.",
         "nl": "Alleen SLEWING/PARKED/IDLE-meetpunten in het bestand."},
 
-    # ── qualite ────────────────────────────────────────────────────────
+    # ── quality ────────────────────────────────────────────────────────
     "note": {"en": "Rating", "fr": "Note", "nl": "Beoordeling"},
     "s_jitter": {
         "en": "1. Tracking jitter", "fr": "1. Jitter de suivi",
@@ -301,7 +301,7 @@ TR = {
         "fr": "Vérifiez : alignement polaire, serrage, équilibrage.",
         "nl": "Controleer: poolopstelling, aandraaien, uitbalancering."},
 
-    # ── statistiques par axe ───────────────────────────────────────────
+    # ── per-axis statistics ────────────────────────────────────────────
     "dev_moyenne": {
         "en": "Mean deviation", "fr": "Déviation moyenne", "nl": "Gemiddelde afwijking"},
     "dev_mediane": {
@@ -395,7 +395,7 @@ TR = {
         "fr": "=> EP élevée — envisagez une calibration PEC",
         "nl": "=> Hoge PF — overweeg PEC-kalibratie"},
 
-    # ── temps, continuite, environnement ───────────────────────────────
+    # ── time, continuity, environment ──────────────────────────────────
     "derive_horloge": {
         "en": "Clock drift rate", "fr": "Dérive de l'horloge", "nl": "Klokdrift"},
     "derive_horloge_forte": {
@@ -439,12 +439,12 @@ TR = {
         "fr": "- Aucun problème majeur détecté. Continuez avec ces réglages.",
         "nl": "- Geen grote problemen gevonden. Ga zo door met deze instellingen."},
 
-    # ── pied ───────────────────────────────────────────────────────────
+    # ── footer ─────────────────────────────────────────────────────────
     "genere_le": {
         "en": "Report generated on", "fr": "Rapport généré le",
         "nl": "Rapport gegenereerd op"},
     "a_heure": {"en": "at", "fr": "à", "nl": "om"},
-    # ── complement ─────────────────────────────────────────────────────
+    # ── supplement ─────────────────────────────────────────────────────
     "temps_total_perdu": {
         "en": "Total gap time", "fr": "Temps total perdu", "nl": "Totaal verloren tijd"},
     "pc_a_du_mal": {
@@ -501,7 +501,7 @@ TR = {
     "note_bon": {"en": "GOOD", "fr": "BON", "nl": "GOED"},
     "note_moyen": {"en": "FAIR", "fr": "MOYEN", "nl": "MATIG"},
     "note_mauvais": {"en": "POOR", "fr": "MAUVAIS", "nl": "ONVOLDOENDE"},
-    # recommandations
+    # recommendations
     "r_ad_instable": {
         "en": "- RA jitter > {seuil}\": check RA balance, clamp tightness, cable drag",
         "fr": "- Jitter AD > {seuil}\" : vérifiez l'équilibrage AD, le serrage, les câbles",
@@ -539,10 +539,10 @@ TR = {
 }
 
 
-def R(cle: str, langue: str = LANGUE_DEFAUT, **kw) -> str:
-    """Le texte de `cle` dans `langue`, anglais a defaut, la cle en dernier recours."""
-    entree = TR.get(cle)
-    if entree is None:
-        return cle
-    texte = entree.get(langue) or entree.get(LANGUE_DEFAUT) or cle
-    return texte.format(**kw) if kw else texte
+def R(key: str, language: str = DEFAULT_LANGUAGE, **kw) -> str:
+    """The text of `key` in `language`, English by default, the key as a last resort."""
+    entry = TR.get(key)
+    if entry is None:
+        return key
+    text = entry.get(language) or entry.get(DEFAULT_LANGUAGE) or key
+    return text.format(**kw) if kw else text

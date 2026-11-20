@@ -25,10 +25,10 @@ class Settings:
             return
         self._initialized = True
         if path is None:
-            # Depuis les sources : a cote du code. Installee : dans le dossier
-            # de donnees, que la mise a jour n'efface pas. Voir config/paths.py.
-            from .paths import fichier_reglages
-            self._path = fichier_reglages()
+            # From source: next to the code. Installed: in the data folder,
+            # which updates do not wipe. See config/paths.py.
+            from .paths import settings_file
+            self._path = settings_file()
         else:
             self._path = Path(path)
         self._data: dict[str, Any] = {}

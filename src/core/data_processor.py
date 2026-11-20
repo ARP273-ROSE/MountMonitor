@@ -23,13 +23,13 @@ logger = logging.getLogger(__name__)
 
 
 
-def _ecart_angle_deg(a: float, b: float) -> float:
+def _angle_diff_deg(a: float, b: float) -> float:
     """a - b in degrees, brought into (-180, 180]."""
     d = (a - b) % 360.0
     return d - 360.0 if d > 180.0 else d
 
-def ecarts_a_la_mediane(valeurs, facteur: float, tour: Optional[float] = None):
-    """Deviations of `valeurs` from their median, times `facteur`.
+def deviations_from_median(values, factor: float, wrap: Optional[float] = None):
+    """Deviations of `values` from their median, times `factor`.
 
     This is what the RA/DEC graphs show, as in MountMonitor 3: the centre
     is the median of the VISIBLE data, recomputed at every refresh. The
@@ -37,16 +37,16 @@ def ecarts_a_la_mediane(valeurs, facteur: float, tour: Optional[float] = None):
     non-sidereal target (Sun, planet, comet) drew a line leaving zero at
     the start of the window instead of a drift centred on the screen.
 
-    `tour` is the wrap period (24 h for RA): values are unwrapped around
+    `wrap` is the wrap period (24 h for RA): values are unwrapped around
     the first one first, so a target crossing 0 h does not jump 24 h.
     """
-    v = np.asarray(valeurs, dtype=np.float64)
+    v = np.asarray(values, dtype=np.float64)
     if len(v) == 0:
         return v
     d = v - v[0]
-    if tour:
-        d = (d + tour / 2.0) % tour - tour / 2.0
-    return (d - float(np.median(d))) * float(facteur)
+    if wrap:
+        d = (d + wrap / 2.0) % wrap - wrap / 2.0
+    return (d - float(np.median(d))) * float(factor)
 
 
 class DataProcessor:
@@ -273,20 +273,20 @@ class DataProcessor:
             dt = now - self._prev_axis_time
             if dt > 0:
                 if ra_pos is not None:
-                    ra_speed = _ecart_angle_deg(ra_pos, self._prev_ra_axis) * 3600.0 / dt
+                    ra_speed = _angle_diff_deg(ra_pos, self._prev_ra_axis) * 3600.0 / dt
                     sample.ra_axis_speed = ra_speed
                     self.ra_speed_raw_buffer.append(now, ra_speed)
                     self._ra_speed_history.append(ra_speed)
 
                 if dec_pos is not None and self._prev_dec_axis is not None:
-                    dec_speed = _ecart_angle_deg(dec_pos, self._prev_dec_axis) * 3600.0 / dt
+                    dec_speed = _angle_diff_deg(dec_pos, self._prev_dec_axis) * 3600.0 / dt
                     sample.dec_axis_speed = dec_speed
                     self.dec_speed_raw_buffer.append(now, dec_speed)
                     self._dec_speed_history.append(dec_speed)
 
                 # 6-sample running average
-                # Les deques sont bornées à maxlen=6 : pas de slice (une deque
-                # ne se slice pas — TypeError), np.mean sur l'itérable suffit.
+                # The deques are bounded at maxlen=6: no slicing (a deque
+                # cannot be sliced — TypeError), np.mean over the iterable is enough.
                 if len(self._ra_speed_history) >= 6:
                     avg_ra = np.mean(self._ra_speed_history)
                     self.ra_speed_avg_buffer.append(now, float(avg_ra))
@@ -363,9 +363,9 @@ class DataProcessor:
     def compute_fft(self, data: np.ndarray, sample_rate: float) -> tuple[np.ndarray, np.ndarray]:
         """Spectrum of an evenly sampled series: (frequencies, PEAK amplitudes).
 
-        See src/core/spectre.py (Hann scaling, drift removal)."""
-        from .spectre import spectre_regulier
-        return spectre_regulier(np.asarray(data, dtype=np.float64), sample_rate)
+        See src/core/spectrum.py (Hann scaling, drift removal)."""
+        from .spectrum import regular_spectrum
+        return regular_spectrum(np.asarray(data, dtype=np.float64), sample_rate)
 
     @property
     def actual_frequency(self) -> float:

@@ -91,8 +91,8 @@ class CrashReporter:
 
     def __init__(self, app_dir: Optional[Path] = None):
         if app_dir is None:
-            from ..config.paths import dossier_donnees
-            app_dir = dossier_donnees()
+            from ..config.paths import data_folder
+            app_dir = data_folder()
         self._app_dir = app_dir
         self._crash_file = app_dir / _CRASH_FILE
         self._original_excepthook = sys.excepthook
@@ -130,9 +130,9 @@ class CrashReporter:
         except Exception:
             pass
 
-        # Et on le signale a celui qui maintient l'application, si l'accord a
-        # ete donne. Le fichier local ne sert qu'a celui qui sait le trouver ;
-        # un plantage que personne ne rapporte n'est jamais corrige.
+        # And report it to whoever maintains the application, if consent has
+        # been given. The local file only helps someone who knows where to find
+        # it; a crash nobody reports is never fixed.
         try:
             import reporting
             reporting.signaler_plantage(

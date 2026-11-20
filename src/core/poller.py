@@ -158,7 +158,7 @@ class MountPoller(QThread):
         self._retrieve_mount_info()
 
         last_stdev_compute = 0.0
-        echecs = 0
+        failures = 0
 
         while self._running:
             interval = 1.0 / self._frequency_hz
@@ -170,18 +170,18 @@ class MountPoller(QThread):
                 continue
 
             if not self._connection.connected:
-                if echecs == 0:
+                if failures == 0:
                     # Once per loss, not every 2 s.
                     self.connection_lost.emit()
                 if not self._running:
                     break
                 if self._connection.reconnect():
-                    echecs = 0
+                    failures = 0
                     self.connection_restored.emit()
                     self.log_message.emit("Connection restored")
                 else:
-                    echecs += 1
-                    self._wait(min(self.RECONNECT_MAX_S, 2.0 ** min(echecs, 6)))
+                    failures += 1
+                    self._wait(min(self.RECONNECT_MAX_S, 2.0 ** min(failures, 6)))
                     continue
 
             try:
@@ -193,9 +193,9 @@ class MountPoller(QThread):
                     if self._slew_delay_active:
                         elapsed = time.time() - self._slew_delay_start
                         if elapsed < self._delay_after_slew:
-                            # continue sauterait le sleep de cadencement en
-                            # fin de boucle → polling à vitesse max contre la
-                            # monture. Dormir le reliquat d'abord.
+                            # continue would skip the pacing sleep at the end
+                            # of the loop → polling the mount at full speed.
+                            # Sleep off the remainder first.
                             self._sleep_remainder(loop_start, interval)
                             continue
                         else:
@@ -237,7 +237,7 @@ class MountPoller(QThread):
             self._sleep_remainder(loop_start, interval)
 
     def _sleep_remainder(self, loop_start: float, interval: float) -> None:
-        """Dort ce qui reste de l'intervalle de polling courant."""
+        """Sleep for what remains of the current polling interval."""
         self._wait(interval - (time.perf_counter() - loop_start))
 
     @staticmethod
@@ -276,14 +276,14 @@ class MountPoller(QThread):
         # Get mount time. The PC reference is taken in the MIDDLE of the
         # round trip: taken before the status query, it was early by a whole
         # exchange (tens of ms) and the offset carried that bias.
-        t_avant = time.time()
+        t_before = time.time()
         mount_time_str = self._connection.get_mount_time()
-        t_milieu = (t_avant + time.time()) / 2.0
+        t_mid = (t_before + time.time()) / 2.0
         # Same time zone as the mount: ASCOM UTCDate is UTC, LX200 :GL# local.
         if self._connection.mount_time_is_utc:
-            pc_ref = datetime.fromtimestamp(t_milieu, timezone.utc)
+            pc_ref = datetime.fromtimestamp(t_mid, timezone.utc)
         else:
-            pc_ref = datetime.fromtimestamp(t_milieu)
+            pc_ref = datetime.fromtimestamp(t_mid)
         pc_seconds = pc_ref.hour * 3600.0 + pc_ref.minute * 60.0 + pc_ref.second + pc_ref.microsecond / 1e6
 
         # Compute time differences
@@ -393,11 +393,11 @@ class MountPoller(QThread):
                 self.log_message.emit(f'{T("poller_wrong_setup")}: {warning}')
                 logger.warning(f"Mount settings issue: {warning}")
             if not warnings:
-                # Ce message annoncait « Logging started. » — herite du Java,
-                # il ne decrit pas un demarrage d'enregistrement mais le
-                # resultat des controles apres une rotation. Il revenait a
-                # chaque slew et donnait a croire que la session redemarrait
-                # en boucle.
+                # This message used to say "Logging started." — inherited
+                # from the Java version, it does not describe a recording
+                # start but the result of the checks after a slew. It came
+                # back on every slew and made it look as if the session kept
+                # restarting.
                 self.log_message.emit(T("poller_checks_ok"))
         except Exception as e:
             logger.debug(f"Mount settings check failed: {e}")
