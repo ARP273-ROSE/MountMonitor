@@ -84,5 +84,6 @@
   "rapports": {
     "poste": "installation"
   },
-  "cle_publique_maj": "kHjUuLfq9BPw5+cmaBXwqFGMR4J9Jq5r0wBQLybZN0s="
+  "cle_publique_maj": "kHjUuLfq9BPw5+cmaBXwqFGMR4J9Jq5r0wBQLybZN0s=",
+  "release_unique": true
 }
