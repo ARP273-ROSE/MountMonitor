@@ -21,7 +21,6 @@ DEFAULTS = {
     "reference_mode": "median",  # median, target
     "tolerance_ra_arcsec": 1.5,
     "tolerance_dec_arcsec": 1.5,
-    "tolerance_as_ha_seconds": False,
     # Show right ascension in degrees of arc rather than in hours.
     "ra_in_degrees": False,
     "tolerance_seismic_percent": 5.0,

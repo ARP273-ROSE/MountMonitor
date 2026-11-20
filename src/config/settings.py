@@ -1,12 +1,54 @@
 """Settings manager for MountMonitor. JSON-based, atomic saves."""
 
 import json
+import logging
 import os
 import tempfile
 from pathlib import Path
 from typing import Any
 
 from .defaults import DEFAULTS
+
+logger = logging.getLogger(__name__)
+
+# Version of the settings file layout. Raise it whenever a setting is renamed,
+# split or changes meaning, and add the step in _MIGRATIONS: a file written by
+# an older MountMonitor is then converted once at load, instead of silently
+# keeping a value whose meaning changed. Files written before 4.4.3 carry no
+# number and count as version 0.
+SETTINGS_VERSION = 1
+VERSION_KEY = "settings_version"
+
+
+def _v0_to_v1(data: dict) -> None:
+    """4.4.3: the version number itself. The separate "tolerance in seconds
+    of hour angle" box was folded into the RA unit choice in 4.3.0; its key
+    is dropped."""
+    data.pop("tolerance_as_ha_seconds", None)
+
+
+# _MIGRATIONS[n] turns a version-n file into a version n+1 one, in place.
+_MIGRATIONS = {0: _v0_to_v1}
+
+
+def migrate(data: dict) -> dict:
+    """Bring a loaded settings dict up to SETTINGS_VERSION, step by step."""
+    try:
+        version = int(data.get(VERSION_KEY, 0))
+    except (TypeError, ValueError):
+        version = 0
+    if version > SETTINGS_VERSION:
+        # Written by a newer MountMonitor (downgrade): keep everything as it
+        # is -- unknown keys are ignored and kept, nothing is converted back.
+        logger.warning("Settings file version %s is newer than this program (%s)",
+                       version, SETTINGS_VERSION)
+        return data
+    while version < SETTINGS_VERSION:
+        _MIGRATIONS[version](data)
+        version += 1
+        logger.info("Settings converted to version %s", version)
+    data[VERSION_KEY] = version
+    return data
 
 
 class Settings:
@@ -37,13 +79,22 @@ class Settings:
     def _load(self):
         """Load settings from disk, merging with defaults."""
         self._data = dict(DEFAULTS)
+        self._data[VERSION_KEY] = SETTINGS_VERSION
         if self._path.exists():
             try:
                 with open(self._path, 'r', encoding='utf-8') as f:
                     saved = json.load(f)
-                self._data.update(saved)
-            except (json.JSONDecodeError, OSError):
-                pass  # Use defaults on corrupted file
+                if not isinstance(saved, dict):
+                    raise ValueError("settings file is not a JSON object")
+                self._data.update(migrate(saved))
+            except (json.JSONDecodeError, ValueError, OSError) as e:
+                # Defaults, but keep the unreadable file aside: the next save
+                # would otherwise overwrite every setting without a trace.
+                logger.warning("Settings file unreadable (%s), defaults used", e)
+                try:
+                    self._path.replace(self._path.with_suffix(self._path.suffix + '.corrupt'))
+                except OSError:
+                    pass
 
     def save(self):
         """Atomic save: write to temp file, fsync, then replace."""
@@ -81,6 +132,7 @@ class Settings:
     def reset_to_defaults(self):
         """Reset all settings to defaults."""
         self._data = dict(DEFAULTS)
+        self._data[VERSION_KEY] = SETTINGS_VERSION
 
     @classmethod
     def reset_singleton(cls):

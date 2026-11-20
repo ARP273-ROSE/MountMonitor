@@ -368,3 +368,38 @@ def test_stray_bytes_are_dropped_before_the_next_command():
     import time; time.sleep(0.1)
     assert c.get_tracking_rate() == "60.2"
     a.close(); b.close()
+
+
+# ── Settings file carries a version (suggestion of 20/11/2026) ───────────
+
+def test_settings_file_is_versioned_and_migrated(tmp_path):
+    import json
+    from src.config import settings as st
+    f = tmp_path / "settings.json"
+    f.write_text(json.dumps({"tolerance_ra_arcsec": 0.5, "tolerance_as_ha_seconds": True}))
+    st.Settings.reset_singleton()
+    try:
+        s = st.Settings(f)
+        assert s.get(st.VERSION_KEY) == st.SETTINGS_VERSION
+        assert s.get("tolerance_ra_arcsec") == 0.5          # kept
+        assert "tolerance_as_ha_seconds" not in s.get_all()  # converted
+        s.save()
+        assert json.loads(f.read_text())[st.VERSION_KEY] == st.SETTINGS_VERSION
+    finally:
+        st.Settings.reset_singleton()
+
+
+def test_newer_or_broken_settings_files(tmp_path):
+    import json
+    from src.config import settings as st
+    newer = {st.VERSION_KEY: st.SETTINGS_VERSION + 5, "future_key": 1}
+    assert st.migrate(dict(newer)) == newer                  # left as is
+    f = tmp_path / "settings.json"
+    f.write_text("{ not json")
+    st.Settings.reset_singleton()
+    try:
+        s = st.Settings(f)
+        assert s.get("tolerance_ra_arcsec") is not None      # defaults
+        assert (tmp_path / "settings.json.corrupt").exists() # kept aside
+    finally:
+        st.Settings.reset_singleton()
