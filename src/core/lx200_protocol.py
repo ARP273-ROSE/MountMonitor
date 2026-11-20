@@ -93,10 +93,28 @@ class LX200Connection(MountConnection):
     # Maximum response size to prevent unbounded buffer growth (security)
     _MAX_RESPONSE_BYTES = 4096
 
-    def _send_command(self, command: str) -> Optional[str]:
+    def _drain(self):
+        """Drop bytes left over from an earlier exchange (a reply that came
+        after its timeout). Read as the start of the next answer, one stray
+        "1" shifted every reply that followed: the status read as PARKED
+        while the mount tracked."""
+        import select
+        try:
+            while select.select([self._socket], [], [], 0)[0]:
+                if not self._socket.recv(1024):
+                    break
+        except (OSError, ValueError):
+            pass
+
+    def _send_command(self, command: str, fixed_len: Optional[int] = None) -> Optional[str]:
         """Send a command and receive the response.
 
-        Commands start with : and responses end with #.
+        Commands start with : and responses end with #. A few 10Micron
+        commands answer without the '#' (":GREF#", ":Gdat#", ":Guaf#" answer
+        one character '0'/'1' -- MountWizzard4 lists them as COMMAND_B):
+        for those pass `fixed_len`, the number of characters to read.
+        Waiting for a '#' that never comes cost the 5 s timeout and a
+        reconnection at every check.
         Returns None on failure.
         Security: response buffer is bounded to _MAX_RESPONSE_BYTES.
         """
@@ -105,17 +123,21 @@ class LX200Connection(MountConnection):
 
         with self._io_lock:
             try:
+                self._drain()
                 # Send command
                 self._socket.sendall(command.encode('ascii'))
 
-                # Receive response (read until # or buffer limit)
+                # Receive response (read until #, or fixed_len chars, or limit)
                 response = b''
                 while True:
                     chunk = self._socket.recv(1024)
                     if not chunk:
                         raise ConnectionError("Connection closed by mount")
                     response += chunk
-                    if b'#' in chunk:
+                    if fixed_len is not None:
+                        if len(response) >= fixed_len:
+                            break
+                    elif b'#' in chunk:
                         break
                     if len(response) > self._MAX_RESPONSE_BYTES:
                         logger.warning(f"Response exceeded {self._MAX_RESPONSE_BYTES} bytes, aborting")
@@ -197,6 +219,7 @@ class LX200Connection(MountConnection):
     def get_firmware_version(self) -> str:
         """Get firmware version: :GVN# -> version string"""
         result = self._send_command(':GVN#')
+        self._firmware = result or ""
         return result or "Unknown"
 
     def get_product_name(self) -> str:
@@ -290,7 +313,7 @@ class LX200Connection(MountConnection):
 
     def is_refraction_enabled(self) -> Optional[bool]:
         """Check refraction correction via :GREF# (10Micron)"""
-        result = self._send_command(':GREF#')
+        result = self._send_command(':GREF#', fixed_len=1)
         if result is None:
             return None
         return result.strip() == '1'
@@ -340,19 +363,32 @@ class LX200Connection(MountConnection):
 
     def is_dual_tracking_enabled(self) -> Optional[bool]:
         """Check dual tracking via :Gdat# (10Micron). Returns True if enabled."""
-        result = self._send_command(':Gdat#')
+        result = self._send_command(':Gdat#', fixed_len=1)
         if result is None:
             return None
         return result.strip() == '1'
 
     def is_gps_synced(self) -> Optional[bool]:
-        """Check if GPS clock is synchronized via :gps# (10Micron)."""
-        result = self._send_command(':gps#')
+        """GPS clock synchronisation (10Micron): :gtgpps# from firmware 3.2.5,
+        :gtg# before (as MountWizzard4 reads it). ":gps#" is not a 10Micron
+        command: the mount never answered and the check timed out."""
+        cmd = ':gtgpps#' if self._firmware_at_least(3, 2, 5) else ':gtg#'
+        result = self._send_command(cmd)
         if result is None:
             return None
         return result.strip() == '1'
 
-    def check_mount_settings(self) -> list[str]:
+    def _firmware_at_least(self, *version) -> bool:
+        import re
+        nums = re.findall(r'\d+', str(getattr(self, '_firmware', '') or ''))
+        try:
+            return tuple(int(n) for n in nums[:3]) >= tuple(version)
+        except ValueError:
+            return False
+
+    PRLIST_CONFIRMED = False
+
+    def check_mount_settings(self) -> Optional[list[str]]:
         """Verify 10Micron mount configuration for monitoring.
 
         Checks (like Java checkMountSettings):
@@ -367,6 +403,13 @@ class LX200Connection(MountConnection):
         product = getattr(self, '_product_name', '') or ''
         if '10micron' not in product.lower():
             return warnings
+        if not self.PRLIST_CONFIRMED:
+            # ":PRnext#" is not a command documented anywhere we could check
+            # (not in MountWizzard4); an unknown command gets no answer and
+            # cost a 5 s timeout plus a reconnection after every slew. Off
+            # until the exact :PRlist# follow-up command is confirmed. The
+            # tracking rate itself is checked through :GT#.
+            return None
 
         try:
             # Start listing preferences

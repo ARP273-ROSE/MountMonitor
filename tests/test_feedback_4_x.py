@@ -191,7 +191,7 @@ def test_refraction_mode_read_by_wsg(monkeypatch):
     from src.core.lx200_protocol import LX200Connection
     c = LX200Connection.__new__(LX200Connection)
     sent = []
-    def send(cmd):
+    def send(cmd, fixed_len=None):
         sent.append(cmd)
         return {":WSG#": "2", ":GREF#": "1"}[cmd]
     monkeypatch.setattr(c, "_send_command", send)
@@ -313,3 +313,58 @@ def test_loop_times_centred_on_their_average(window):
     assert g._right_axis.tickStrings([0.0, 100.0], 1, 1) == ["1000", "1100"]
     (_, _), (y0, y1) = g._plot.getViewBox().viewRange()
     assert y1 - y0 < 600                                # no 1300 ms stretch
+
+
+# ── Feedback of 20/11/2026 night: checks made the link time out ──────────
+
+def _fake_mount(replies):
+    """A socket pair whose far end answers each command like a 10Micron."""
+    import socket, threading
+    a, b = socket.socketpair()
+
+    def serve():
+        buf = b""
+        while True:
+            try:
+                data = b.recv(1024)
+            except OSError:
+                return
+            if not data:
+                return
+            buf += data
+            while b"#" in buf:
+                cmd, buf = buf.split(b"#", 1)
+                b.sendall(replies[cmd.decode() + "#"])
+    threading.Thread(target=serve, daemon=True).start()
+    return a, b
+
+
+def test_commands_without_hash_do_not_time_out():
+    import threading, time
+    from src.core.lx200_protocol import LX200Connection
+    a, b = _fake_mount({":GREF#": b"1", ":Gdat#": b"0", ":GT#": b"60.3#",
+                        ":GVN#": b"3.2.5#", ":gtgpps#": b"1#", ":Gstat#": b"0#"})
+    a.settimeout(2.0)
+    c = LX200Connection.__new__(LX200Connection)
+    c._socket, c._connected, c._io_lock = a, True, threading.RLock()
+    t = time.monotonic()
+    assert c.is_refraction_enabled() is True
+    assert c.is_dual_tracking_enabled() is False
+    assert c.get_tracking_rate() == "60.3"          # no stray "1" in front
+    c.get_firmware_version()
+    assert c.is_gps_synced() is True                # :gtgpps# on 3.2.5
+    assert c._connected and time.monotonic() - t < 1.0
+    a.close(); b.close()
+
+
+def test_stray_bytes_are_dropped_before_the_next_command():
+    import threading
+    from src.core.lx200_protocol import LX200Connection
+    a, b = _fake_mount({":GT#": b"60.2#"})
+    a.settimeout(2.0)
+    c = LX200Connection.__new__(LX200Connection)
+    c._socket, c._connected, c._io_lock = a, True, threading.RLock()
+    b.sendall(b"1")                                  # late answer of an old query
+    import time; time.sleep(0.1)
+    assert c.get_tracking_rate() == "60.2"
+    a.close(); b.close()

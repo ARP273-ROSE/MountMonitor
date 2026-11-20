@@ -393,6 +393,8 @@ class MountPoller(QThread):
         """Check mount settings after slew ends (like Java checkMountSettings)."""
         try:
             warnings = self._connection.check_mount_settings()
+            if warnings is None:          # check not available on this mount
+                return
             for warning in warnings:
                 self.log_message.emit(f'{T("poller_wrong_setup")}: {warning}')
                 logger.warning(f"Mount settings issue: {warning}")
