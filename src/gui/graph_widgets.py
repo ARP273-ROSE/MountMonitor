@@ -234,6 +234,30 @@ def derive_horloge(t, v, duree=DUREE_DERIVE_S):
     return float(a)
 
 
+def echelle_ecart_type(sd_max):
+    """(haut, pas) de l'axe de l'ecart-type, regle du MountMonitor 3 :
+
+        theLog = round(log10(maxSD * 3.3)), au moins -3
+        haut = 10^theLog ; pas = 2 * 10^(theLog - 1)
+
+    soit une puissance de dix entre une et dix fois le plus grand sigma,
+    graduee en cinq.
+    """
+    try:
+        x = float(sd_max) * 3.3
+    except (TypeError, ValueError):
+        x = 0.0
+    if not (x > 0) or not np.isfinite(x):
+        n = -1
+    else:
+        n = max(-3, int(round(np.log10(x))))
+    haut = 10.0 ** n
+    if sd_max and haut < sd_max:     # never cut the curve
+        haut *= 10.0
+        n += 1
+    return haut, 2.0 * 10.0 ** (n - 1)
+
+
 def debut_fenetre(timestamps, borne):
     """Indice du premier echantillon a garder pour tracer depuis `borne`.
 
@@ -292,6 +316,8 @@ class TrackingGraph(QWidget):
         self._data_color = data_color
         self._tolerance = 1.5  # arcseconds
         self._mode_vertical = "data"
+        self._unite = '"'      # '"' (arcsec) or 's' (seconds of time, RA)
+        self._decimales = 2
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -313,9 +339,35 @@ class TrackingGraph(QWidget):
         pen = pg.mkPen(color=data_color, width=1.5)
         self._data_curve = self._plot.plot(pen=pen, name=title)
 
-        # STDEV line (plotted on main axis — avoids dual-ViewBox signal loops)
+        # STDEV on its own scale (right axis), from zero at the bottom, as in
+        # MountMonitor 3: on the deviation scale a 0.1" sigma was a flat line
+        # at the foot of the graph, and under non-sidereal tracking (Sun,
+        # planets, comets) the drift pushed the scale so far it vanished.
+        # The second view is never linked: its range is set by hand in
+        # update_data, signals blocked like the main one (no range cascade).
+        self._vb_sd = pg.ViewBox(enableMouse=False)
+        self._vb_sd.disableAutoRange()
+        self._vb_sd.setMenuEnabled(False)
+        pi = self._plot.getPlotItem()
+        pi.showAxis('right')
+        pi.scene().addItem(self._vb_sd)
+        axe_d = pi.getAxis('right')
+        axe_d.linkToView(self._vb_sd)
+        axe_d.setLabel('σ', units='"', color=Colors.GRAPH_STDEV.name())
+        axe_d.enableAutoSIPrefix(False)
+        axe_d.setPen(pg.mkPen(Colors.GRAPH_STDEV))
+        axe_d.setTextPen(pg.mkPen(Colors.GRAPH_STDEV))
+
+        def _caler():
+            self._vb_sd.setGeometry(pi.vb.sceneBoundingRect())
+        pi.vb.sigResized.connect(_caler)
+        self._caler_sd = _caler
+
         stdev_pen = pg.mkPen(color=Colors.GRAPH_STDEV, width=1.5)
-        self._stdev_curve = self._plot.plot(pen=stdev_pen)
+        self._stdev_curve = pg.PlotDataItem(pen=stdev_pen)
+        self._stdev_curve.setDownsampling(auto=True, method='peak')
+        self._stdev_curve.setClipToView(True)
+        self._vb_sd.addItem(self._stdev_curve)
 
         # Tolerance lines (green horizontal)
         tol_pen = pg.mkPen(color=Colors.GRAPH_TOLERANCE, width=1, style=Qt.PenStyle.SolidLine)
@@ -341,7 +393,7 @@ class TrackingGraph(QWidget):
         # Max STDEV line (blue dashed)
         max_stdev_pen = pg.mkPen(color=Colors.GRAPH_STDEV, width=1, style=Qt.PenStyle.DashLine)
         self._max_stdev_line = pg.InfiniteLine(pos=0, angle=0, pen=max_stdev_pen)
-        self._plot.addItem(self._max_stdev_line)
+        self._vb_sd.addItem(self._max_stdev_line)
         self._max_stdev_line.setVisible(False)
 
         # Watermark text
@@ -374,7 +426,7 @@ class TrackingGraph(QWidget):
             text='', color=Colors.GRAPH_STDEV, anchor=(0, 0.5)
         )
         self._max_stdev_label.setFont(QFont('Source Code Pro', 8))
-        self._plot.addItem(self._max_stdev_label)
+        self._vb_sd.addItem(self._max_stdev_label)
         self._max_stdev_label.setVisible(False)
 
         # Stats text overlay
@@ -452,10 +504,10 @@ class TrackingGraph(QWidget):
             self._max_line.setPos(max_val)
             self._min_line.setVisible(True)
             self._max_line.setVisible(True)
-            self._min_label.setText(f" {min_val:+.2f}\"")
+            self._min_label.setText(f" {min_val:+.{self._decimales}f}{self._unite}")
             self._min_label.setPos(t_end, min_val)
             self._min_label.setVisible(True)
-            self._max_label.setText(f" {max_val:+.2f}\"")
+            self._max_label.setText(f" {max_val:+.{self._decimales}f}{self._unite}")
             self._max_label.setPos(t_end, max_val)
             self._max_label.setVisible(True)
 
@@ -463,7 +515,8 @@ class TrackingGraph(QWidget):
         if max_stdev is not None and max_stdev > 0:
             self._max_stdev_line.setPos(max_stdev)
             self._max_stdev_line.setVisible(True)
-            self._max_stdev_label.setText(f" max σ={max_stdev:.3f}\"")
+            self._max_stdev_label.setText(
+                f" max σ={max_stdev:.{self._decimales + 1}f}{self._unite}")
             self._max_stdev_label.setPos(t_end, max_stdev)
             self._max_stdev_label.setVisible(True)
 
@@ -471,9 +524,8 @@ class TrackingGraph(QWidget):
         if len(values) > 0:
             current = values[-1]
             rms = float(np.std(values))
-            self._stats_text.setText(
-                f"{current:+.2f}\"  \u03c3={rms:.2f}\""
-            )
+            d, u = self._decimales, self._unite
+            self._stats_text.setText(f"{current:+.{d}f}{u}  \u03c3={rms:.{d}f}{u}")
 
         # Manually set range (replaces auto-range)
         y_bas, y_haut = plage_verticale(self._mode_vertical, values,
@@ -487,6 +539,19 @@ class TrackingGraph(QWidget):
         vb.setRange(xRange=(x0, x1), yRange=(y_bas, y_haut), padding=0)
         vb.blockSignals(False)
         accorder_les_axes(self._plot)
+
+        # Sigma scale: 0 at the bottom, top from the largest sigma seen.
+        sd_max = float(max_stdev or 0.0)
+        if stdev_values is not None and len(stdev_values):
+            sd_max = max(sd_max, float(np.nanmax(stdev_values)))
+        haut_sd, pas_sd = echelle_ecart_type(sd_max)
+        self._vb_sd.blockSignals(True)
+        self._vb_sd.setRange(xRange=(x0, x1), yRange=(0.0, haut_sd), padding=0)
+        self._vb_sd.blockSignals(False)
+        axe_d = self._plot.getPlotItem().getAxis('right')
+        axe_d.setRange(0.0, haut_sd)
+        axe_d.setTickSpacing(pas_sd * 5, pas_sd)
+        self._caler_sd()
 
         # Time fix markers every 30 seconds (apres la plage : ils la lisent)
         self._update_time_fixes(t0, rel_times, mount_times)
@@ -505,8 +570,22 @@ class TrackingGraph(QWidget):
         self._tolerance = arcsec
         self._tol_upper.setPos(arcsec)
         self._tol_lower.setPos(-arcsec)
-        self._tol_upper_label.setText(f'{arcsec:+.2f}"')
-        self._tol_lower_label.setText(f'{-arcsec:+.2f}"')
+        d, u = self._decimales, self._unite
+        self._tol_upper_label.setText(f'{arcsec:+.{d}f}{u}')
+        self._tol_lower_label.setText(f'{-arcsec:+.{d}f}{u}')
+
+    def set_unite(self, unite: str):
+        """'"' (arcseconds) or 's' (seconds of time, RA in hours mode)."""
+        if unite == self._unite:
+            return
+        self._unite = unite
+        self._decimales = 3 if unite == 's' else 2
+        self._plot.setLabel('left', T('deviation'), units=unite,
+                            color=Colors.TEXT_SECONDARY.name())
+        self._plot.getPlotItem().getAxis('right').setLabel(
+            'σ', units=unite, color=Colors.GRAPH_STDEV.name())
+        t, self._tolerance = self._tolerance, None
+        self.set_tolerance(t)
 
     def set_vertical_zoom(self, mode: str):
         """Mode de l'axe vertical : data, tolerance, maximum, minmax.
@@ -648,6 +727,9 @@ class TimeGraph(QWidget):
             pen=pg.mkPen(Colors.GRAPH_TIME_MOUNT, width=1),
             name="Mount loop"
         )
+        # Green (PC loop) drawn on top, as in MountMonitor 3: the mount loop
+        # (red) otherwise hid it completely.
+        self._pc_loop_curve.setZValue(10)
         self._ntp_curve = self._plot.plot(
             pen=pg.mkPen(Colors.GRAPH_NTP, width=1.5),
             name="PC-NTP"

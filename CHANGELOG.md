@@ -6,6 +6,49 @@ behaviour changes, the patch number when only a defect is fixed.
 
 Figures quoted below were measured on real sessions, not estimated.
 
+## 4.3.0 — 2026-11-20
+
+Second comparison with MountMonitor 3 by Nicolàs de Hilster, side by side on a
+10Micron in solar and sidereal tracking.
+
+### Changed
+- **Standard deviation on its own scale**, right axis, from zero at the
+  bottom, top = the power of ten just above 3.3 × the largest sigma (the
+  MountMonitor 3 rule). On the deviation scale it was a flat line, and under
+  non-sidereal tracking the drift pushed the scale so far it disappeared.
+- **Graphs centred on the median of the visible data**, recomputed at every
+  refresh, from the raw coordinates. Each stored deviation had been taken
+  from the median of its own moment, so a target drifting at a
+  non-sidereal rate drew a line leaving zero instead of a centred drift.
+- **RA in hours or degrees, applied everywhere and at once**: hours (default)
+  shows RA deviations, sigma and tolerance in seconds of time; degrees in
+  arcseconds of RA (× 15), as in MountMonitor 3. The choice used to change
+  only the RA readout, and only after a restart. The RA tolerance is entered
+  in the chosen unit; tolerance alarms compare in that unit. The night report
+  keeps true arcseconds on the sky. The separate "tolerance in seconds of
+  hour angle" box is gone (it is the hours mode).
+- **Mount checks in MountMonitor 3's order, refraction split in two**:
+  refraction correction enabled/disabled (`:GREF#`), refraction update mode
+  (`:WSG#`), GPS, dual tracking, tracking rate. The mode check is skipped
+  when the correction is off.
+- **Time graph**: the green PC-loop curve is drawn on top, as in MM3.
+
+### Fixed
+- **Refraction update mode read with the wrong command**: `:GREF#` only says
+  whether the correction is on (0/1); read as the mode, an enabled
+  correction reported "not updating while tracking". The mode is `:WSG#`
+  (checked against MountWizzard4, which reads and sets it with
+  `:WSG#`/`:WSS<n>#`).
+- **Seismometer showed nothing**: the graph layout saved by a session with
+  three graphs squeezed a fourth one to zero height; enabling the
+  seismometer took effect only after reconnecting, and its graph only after a
+  restart; a port that would not open (often held by JamaSeis) was reported
+  in the log file alone; only CR+LF line ends were read. Now: applied at once
+  from the preferences, a hidden graph gets its share back, the history says
+  when the port cannot be opened or when nothing has arrived after 15 s,
+  lines may end in CR, LF or both, the baud rate can be set, and values are
+  delivered every second even from a device slower than the setting.
+
 ## 4.2.1 — 2026-11-20
 
 ### Changed

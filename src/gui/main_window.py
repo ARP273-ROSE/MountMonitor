@@ -38,7 +38,7 @@ from ..core.mount_connection import MountConnection
 from ..core.lx200_protocol import LX200Connection
 from ..core.lx200_serial import LX200SerialConnection
 from ..core.ascom_connection import ASCOMConnection
-from ..core.data_processor import DataProcessor
+from ..core.data_processor import DataProcessor, ecarts_a_la_mediane
 from ..core.poller import MountPoller
 from ..core.ntp_client import NTPClient
 from ..core.seismometer import Seismometer
@@ -703,16 +703,8 @@ class MainWindow(QMainWindow):
             sim_sei.start()
             self._seismometer = sim_sei
             self._status_panel.add_message(T("sim_seismometer"), Colors.STATUS_WARNING)
-        elif self._settings.get("seismometer_enabled"):
-            sei = Seismometer(
-                port=self._settings.get("seismometer_port"),
-                frequency_hz=self._settings.get("seismometer_frequency_hz"),
-                offset=self._settings.get("seismometer_offset"),
-                data_range=self._settings.get("seismometer_range"),
-            )
-            sei.set_callback(self.sismique_recue.emit)
-            if sei.start():
-                self._seismometer = sei
+        else:
+            self._appliquer_sismometre()
 
         # Logging starts on connection -- but ARMED if that is what the user
         # asked for. This call used to go straight to _start_logging, which
@@ -749,6 +741,7 @@ class MainWindow(QMainWindow):
             if hasattr(self._seismometer, 'stop'):
                 self._seismometer.stop()
             self._seismometer = None
+            self._config_sei_actuelle = None
 
         self._connection = None
         self._connected = False
@@ -1046,22 +1039,37 @@ class MainWindow(QMainWindow):
         # previous version rebuilt seven 50,000-element arrays four times a
         # second to keep about a thousand points of each.
         # RA / DEC
-        for buf, graphe, tol_cle in (
-                (self._processor.ra_buffer, self._ra_graph, "tolerance_ra_arcsec"),
-                (self._processor.dec_buffer, self._dec_graph, "tolerance_dec_arcsec")):
-            t, v, sd_t, sd = buf.get_tail(largeur)
+        # Positions are drawn from the RAW coordinates, around the median of
+        # what is visible (ecarts_a_la_mediane), in the RA unit chosen in the
+        # preferences: seconds of time (hours mode) or arcseconds of RA
+        # (degrees mode, 15 times more), like MountMonitor 3. The running
+        # sigma is computed on sky (x cos dec) and converted the same way.
+        p = self._processor
+        en_degres = bool(self._settings.get("ra_in_degrees"))
+        cos_d = max(abs(np.cos(np.radians(p.declination_deg))), 1e-3)
+        k_ra = (1.0 if en_degres else 1.0 / 15.0) / cos_d     # sky " -> unit
+        self._ra_graph.set_unite('"' if en_degres else 's')
+        for raw, buf, graphe, facteur, tour, k_sd, tol in (
+                (p.ra_raw_buffer, p.ra_buffer, self._ra_graph,
+                 54000.0 if en_degres else 3600.0, 24.0, k_ra,
+                 self._tolerance_ra_affichee()),
+                (p.dec_raw_buffer, p.dec_buffer, self._dec_graph,
+                 3600.0, None, 1.0, self._settings.get("tolerance_dec_arcsec"))):
+            t, brut, _, _ = raw.get_tail(largeur)
             if len(t) == 0:
                 continue
+            v = ecarts_a_la_mediane(brut, facteur, tour)
+            _, _, sd_t, sd = buf.get_tail(largeur, float(t[-1]))
             graphe.update_data(
                 t, v,
-                stdev_values=sd if len(sd) else None,
+                stdev_values=sd * k_sd if len(sd) else None,
                 stdev_timestamps=(sd_t - half_range) if len(sd) else None,
-                min_val=buf.min_value,
-                max_val=buf.max_value,
-                max_stdev=buf.max_stdev,
+                min_val=float(np.min(v)),
+                max_val=float(np.max(v)),
+                max_stdev=(buf.max_stdev or 0.0) * k_sd,
                 largeur_s=largeur,
             )
-            graphe.set_tolerance(self._settings.get(tol_cle))
+            graphe.set_tolerance(tol)
 
         # Time graph
         diff_t, diff_v, _, _ = self._processor.time_diff_buffer.get_tail(largeur)
@@ -1769,6 +1777,78 @@ class MainWindow(QMainWindow):
 
     # ── Zoom and reset ───────────────────────────────────────────
 
+    def _config_sismometre(self):
+        g = self._settings.get
+        return (g("seismometer_port"), float(g("seismometer_frequency_hz") or 20),
+                int(g("seismometer_offset") or 0), int(g("seismometer_range") or 2000),
+                int(g("seismometer_baud") or 9600))
+
+    def _appliquer_sismometre(self):
+        """Start, restart or stop the seismometer to match the preferences,
+        at once, and show or hide its graph.
+
+        It used to start only at connection and its graph to be added only
+        when the window was built: ticking « Enable » showed nothing until a
+        restart, and a port that would not open (often because JamaSeis held
+        it) was reported in the log file alone.
+        """
+        if self._sim_mode in ("seismometer", "all"):
+            return
+        voulu = bool(self._settings.get("seismometer_enabled"))
+        cfg = self._config_sismometre()
+        actuel = getattr(self, '_config_sei_actuelle', None)
+        if self._seismometer is not None and (not voulu or cfg != actuel):
+            try:
+                self._seismometer.stop()
+            except Exception as e:
+                logger.warning(f"Seismometer stop: {e}")
+            self._seismometer = None
+            self._config_sei_actuelle = None
+        if voulu and self._graph_splitter.indexOf(self._seismic_graph) < 0:
+            self._graph_splitter.addWidget(self._seismic_graph)
+        self._seismic_graph.setVisible(voulu)
+        self._deplier_graphes()
+        if not voulu or self._seismometer is not None:
+            return
+        port, freq, offset, plage, baud = cfg
+        if not port:
+            self._status_panel.add_message(T("sei_pas_de_port"), Colors.STATUS_WARNING)
+            return
+        sei = Seismometer(port=port, frequency_hz=freq, offset=offset,
+                          data_range=plage, baudrate=baud)
+        sei.set_callback(self.sismique_recue.emit)
+        if not sei.start():
+            self._status_panel.add_message(
+                T("sei_echec").format(port=port, e=sei.erreur), Colors.STATUS_ERROR)
+            return
+        self._seismometer = sei
+        self._config_sei_actuelle = cfg
+        self._status_panel.add_message(
+            T("sei_demarre").format(port=port, baud=baud), Colors.STATUS_OK)
+        n0 = self._dernier_sismique()
+        QTimer.singleShot(15_000, lambda s=sei, n=n0: self._verifier_sismometre(s, n))
+
+    def _dernier_sismique(self) -> float:
+        try:
+            t, _ = self._processor.seismic_buffer.get_last_n(1)
+            return float(t[-1]) if len(t) else 0.0
+        except Exception:
+            return 0.0
+
+    def _verifier_sismometre(self, sei, n0):
+        if sei is not self._seismometer or not self._processor:
+            return
+        if self._dernier_sismique() <= n0:
+            self._status_panel.add_message(
+                T("sei_muet").format(port=self._settings.get("seismometer_port")),
+                Colors.STATUS_WARNING)
+
+    def _tolerance_ra_affichee(self) -> float:
+        """RA tolerance in the displayed unit: the setting is in arcseconds
+        of RA; in hours mode it is shown, and compared, in seconds of time."""
+        tol = float(self._settings.get("tolerance_ra_arcsec") or 0.0)
+        return tol if self._settings.get("ra_in_degrees") else tol / 15.0
+
     def _largeur(self) -> float:
         """Seconds shown by the scrolling graphs (View > Time span)."""
         return largeur_affichee(self._settings.get("time_span_s"))
@@ -2036,6 +2116,10 @@ class MainWindow(QMainWindow):
         self._ra_graph.set_tolerance(self._settings.get("tolerance_ra_arcsec"))
         self._dec_graph.set_tolerance(self._settings.get("tolerance_dec_arcsec"))
 
+        self._status_panel.set_ra_en_degres(self._settings.get("ra_in_degrees"))
+        self._appliquer_sismometre()
+        self._refresh_graphs_now()
+
         # Update status panel tolerance display
         self._status_panel.set_tolerances(
             self._settings.get("tolerance_ra_arcsec"),
@@ -2105,6 +2189,7 @@ class MainWindow(QMainWindow):
         if not self._connection or not self._connected:
             return
         cfg = {k: self._settings.get(k) for k in (
+            "check_refraction_status",
             "check_refraction_enabled", "check_tracking_rate",
             "check_gps_sync", "check_dual_tracking")}
         # A parked mount still reports its CONFIGURED tracking rate, so the
@@ -2115,10 +2200,10 @@ class MainWindow(QMainWindow):
 
         def lire(c):
             r = {}
+            if cfg["check_refraction_status"]:
+                r["refraction"] = c.is_refraction_enabled()
             if cfg["check_refraction_enabled"]:
                 r["mode"] = c.get_refraction_mode()
-                if r["mode"] is None:
-                    r["refraction"] = c.is_refraction_enabled()
             if suit and cfg["check_tracking_rate"]:
                 r["rate"] = c.get_tracking_rate()
             if cfg["check_gps_sync"]:
@@ -2133,8 +2218,19 @@ class MainWindow(QMainWindow):
         warnings = []
         ok_checks = []
 
-        # Check refraction mode (3-way: not_updating, not_updating_tracking, continuously_updating)
-        if self._settings.get("check_refraction_enabled"):
+        # Refraction correction on/off (:GREF#)
+        if self._settings.get("check_refraction_status") and r.get("refraction") is not None:
+            expected_val = self._settings.get("check_refraction_status_value") or "enabled"
+            actual = "enabled" if r["refraction"] else "disabled"
+            if actual == expected_val:
+                ok_checks.append(T("chk_refr_status_ok").format(v=T(f"val_{actual}")) + " \u2713")
+            else:
+                warnings.append(T("chk_refr_status_ko").format(
+                    a=T(f"val_{actual}"), e=T(f"val_{expected_val}")))
+
+        # Refraction update mode (:WSG#: not_updating, not_updating_tracking,
+        # continuously_updating). Pointless when the correction is off.
+        if self._settings.get("check_refraction_enabled") and r.get("refraction") is not False:
             expected = self._settings.get("check_refraction_value")
             mode = r.get("mode")
             if mode is not None:
@@ -2146,22 +2242,6 @@ class MainWindow(QMainWindow):
                     warnings.append(
                         T("chk_refraction_ko").format(a=mode_display, e=expected_display)
                     )
-            elif r.get("refraction") is not None:
-                actual = "enabled" if r["refraction"] else "disabled"
-                ok_checks.append(T("chk_refraction_simple").format(v=actual))
-
-        # Check tracking rate
-        if not suit:
-            ok_checks.append(T("chk_parked"))
-        if suit and self._settings.get("check_tracking_rate"):
-            expected_val = self._settings.get("check_tracking_rate_value")
-            rate = r.get("rate")
-            if rate is not None:
-                rate_lower = str(rate).lower().strip()
-                if expected_val.lower() in rate_lower or rate_lower.startswith("60"):
-                    ok_checks.append(T("chk_rate_ok").format(v=rate) + " \u2713")
-                else:
-                    warnings.append(T("chk_rate_ko").format(a=rate, e=expected_val))
 
         # Check GPS sync
         if self._settings.get("check_gps_sync") and r.get("gps") is not None:
@@ -2180,6 +2260,19 @@ class MainWindow(QMainWindow):
                 ok_checks.append(T("chk_dual_ok").format(v=actual) + " \u2713")
             else:
                 warnings.append(T("chk_dual_ko").format(a=actual, e=expected_val))
+
+        # Check tracking rate
+        if not suit:
+            ok_checks.append(T("chk_parked"))
+        if suit and self._settings.get("check_tracking_rate"):
+            expected_val = self._settings.get("check_tracking_rate_value")
+            rate = r.get("rate")
+            if rate is not None:
+                rate_lower = str(rate).lower().strip()
+                if expected_val.lower() in rate_lower or rate_lower.startswith("60"):
+                    ok_checks.append(T("chk_rate_ok").format(v=rate) + " \u2713")
+                else:
+                    warnings.append(T("chk_rate_ko").format(a=rate, e=expected_val))
 
         # Display results
         for msg in ok_checks:
@@ -2533,6 +2626,27 @@ class MainWindow(QMainWindow):
                     sp.restoreState(QByteArray.fromBase64(etat.encode('ascii')))
                 except Exception as exc:
                     logger.debug(f"Splitter {cle} not restored: {exc}")
+        self._deplier_graphes()
+
+    def _deplier_graphes(self):
+        """No shown graph squeezed to nothing.
+
+        The layout saved by a session with three graphs gave the fourth
+        (seismometer, axial) a height of zero once restored: enabled, fed,
+        and invisible -- « nothing happens ». Any shown graph lower than
+        60 px gets an equal share again.
+        """
+        sp = getattr(self, '_graph_splitter', None)
+        if sp is None or sp.count() == 0:
+            return
+        sp.setChildrenCollapsible(False)
+        tailles = sp.sizes()
+        montres = [i for i in range(sp.count()) if not sp.widget(i).isHidden()]
+        if not montres or all(tailles[i] >= 60 for i in montres):
+            return
+        total = sum(tailles[i] for i in montres) or 400 * len(montres)
+        part = total // len(montres)
+        sp.setSizes([part if i in montres else 0 for i in range(sp.count())])
 
     def _enregistrer_panneaux(self):
         for cle, sp in (("splitter_graphs", getattr(self, '_graph_splitter', None)),

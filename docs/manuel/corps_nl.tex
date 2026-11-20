@@ -449,18 +449,6 @@ niet langer zeven uur niets. Een tweede klik schakelt uit. De knop zegt waarop
 hij wacht: \emph{Gereed: start zodra de montering volgt}, of, als de montering
 al bij daglicht volgt, \emph{Gereed: start bij het invallen van de nacht}.
 
-\section{Wat de grafieken tonen}
-
-\textbf{Beeld > Getoonde tijdspanne}, of een klik met de rechtermuisknop op een
-grafiek, bepaalt hoeveel tijd de schuivende grafieken tonen: van 30~s tot een
-uur. De keuze wordt onthouden. \textbf{Beeld > Verticale schaal} (ook via de
-rechtermuisknop op de RA- en DEC-grafiek): \emph{Alleen gegevens} past de
-schaal aan de curve aan en laat de tolerantielijnen buiten beeld vallen als het
-volgen veel beter is; \emph{Tolerantie}, \emph{Maximum} (gegevens en
-tolerantie beide zichtbaar) en \emph{Min/Max-lijnen}. De klokdrift onder de
-tijdgrafiek is een rechte lijn over het laatste halfuur, pieken uitgesloten, in
-ms per uur.
-
 \textbf{Onderbreken zodra de montering stopt met volgen}, met een respijttijd
 van twee minuten. Die respijttijd bestaat met reden: een onderbreking kan van
 voorbijgaande aard zijn --- een meridiaanommekeer, een autofocus, een zwenking
@@ -476,6 +464,28 @@ registratie onderbroken en hervat \emph{in hetzelfde bestand}. Alleen het
 daglicht sluit de sessie af en zet het rapport in gang --- en alleen wanneer de
 zon tijdens de sessie werkelijk onder de horizon is geweest, zodat een proef
 overdag zichzelf niet afsluit.
+
+\section{Wat de grafieken tonen}
+
+\textbf{Beeld > Getoonde tijdspanne}, of een klik met de rechtermuisknop op een
+grafiek, bepaalt hoeveel tijd de schuivende grafieken tonen: van 30~s tot een
+uur. De keuze wordt onthouden. \textbf{Beeld > Verticale schaal} (ook via de
+rechtermuisknop op de RA- en DEC-grafiek): \emph{Alleen gegevens} past de
+schaal aan de curve aan en laat de tolerantielijnen buiten beeld vallen als het
+volgen veel beter is; \emph{Tolerantie}, \emph{Maximum} (gegevens en
+tolerantie beide zichtbaar) en \emph{Min/Max-lijnen}. De klokdrift onder de
+tijdgrafiek is een rechte lijn over het laatste halfuur, pieken uitgesloten, in
+ms per uur.
+
+De \textbf{standaardafwijking} (blauw) heeft een eigen schaal rechts, vanaf nul,
+zodat ze leesbaar blijft ook als de positie verloopt (zon, planeten, kometen).
+De bovenkant is de macht van tien net boven 3,3 keer de grootste sigma, zoals in
+MountMonitor~3. De RA- en DEC-curven zijn gecentreerd op de \textbf{mediaan van
+de zichtbare gegevens}, bij elke verversing herberekend, en de tolerantielijnen
+liggen op die mediaan $\pm$ de tolerantie. \textbf{Rechte klimming in uren}
+(standaard): RA in u:m:s, afwijkingen, sigma en tolerantie in tijdseconden (s);
+\textbf{in graden}: alles in boogseconden RA, 15 keer groter. Het nachtrapport
+houdt echte boogseconden aan de hemel aan.
 
 % ─────────────────────────────────────────────────────────────────
 \chapter{Een nacht waarnemen}

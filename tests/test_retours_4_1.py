@@ -153,3 +153,87 @@ def test_options_automatiques_au_premier_onglet_et_au_clic_droit(fenetre, monkey
     jour["v"] = False
     w._option_auto("close_at_sunrise", False)
     assert partis
+
+
+# ── Retours du 20/11/2026 (comparaison avec MM3) ─────────────────────────
+
+def test_echelle_ecart_type_regle_mm3():
+    from src.gui.graph_widgets import echelle_ecart_type
+    assert echelle_ecart_type(0.3) == (1.0, 0.2)        # log10(0.99) -> 0
+    haut, pas = echelle_ecart_type(0.04)                # log10(0.132) -> -1
+    assert haut == pytest.approx(0.1) and pas == pytest.approx(0.02)
+    assert echelle_ecart_type(1.6)[0] == 10.0
+    for sd in (0.001, 0.02, 0.13, 0.31, 0.95, 2.9, 40.0):
+        assert echelle_ecart_type(sd)[0] >= sd          # la courbe tient toujours
+    assert echelle_ecart_type(0)[0] > 0
+
+
+def test_ecarts_centres_sur_la_mediane_visible():
+    from src.core.data_processor import ecarts_a_la_mediane
+    v = np.linspace(10.0, 10.0 + 20 / 54000, 101)       # dérive de 20" d'AD
+    e = ecarts_a_la_mediane(v, 54000.0, 24.0)
+    assert np.median(e) == pytest.approx(0.0, abs=1e-9)
+    assert e[0] == pytest.approx(-10.0) and e[-1] == pytest.approx(10.0)
+    # passage de 0 h : pas de saut de 24 h
+    w = np.array([23.99999, 0.00001, 0.00002])
+    assert np.ptp(ecarts_a_la_mediane(w, 3600.0, 24.0)) < 0.2
+
+
+def test_ligne_du_sismometre_cr_lf_ou_seul():
+    from src.core.seismometer import valeur_de_ligne, _FIN
+    lignes = _FIN.split(b"512\r\n498\n503\r-12,5\rX\r")
+    vals = [valeur_de_ligne(l) for l in lignes]
+    assert vals[:4] == [512.0, 498.0, 503.0, -12.5]
+    assert valeur_de_ligne(b"abc") is None
+
+
+def test_refraction_mode_lu_par_wsg(monkeypatch):
+    from src.core.lx200_protocol import LX200Connection
+    c = LX200Connection.__new__(LX200Connection)
+    envoyes = []
+    def envoyer(cmd):
+        envoyes.append(cmd)
+        return {":WSG#": "2", ":GREF#": "1"}[cmd]
+    monkeypatch.setattr(c, "_send_command", envoyer)
+    assert c.get_refraction_mode() == "continuously_updating"
+    assert c.is_refraction_enabled() is True
+    assert envoyes == [":WSG#", ":GREF#"]
+
+
+def test_controles_dans_l_ordre_de_mm3_et_refraction_separee(fenetre):
+    from src.gui.preferences_dialog import PreferencesDialog
+    from src.utils.i18n import T
+    from PyQt6.QtWidgets import QCheckBox
+    d = PreferencesDialog(fenetre._settings, fenetre)
+    attendus = [T(k) for k in ("check_refr_status_label", "check_refraction_label",
+                               "check_gps_label", "check_dual_label", "check_tracking_label")]
+    grille = d._check_refr_status.parentWidget().layout()
+    ordre = []
+    for ligne in range(1, grille.rowCount()):
+        it = grille.itemAtPosition(ligne, 0)
+        if it and isinstance(it.widget(), QCheckBox):
+            ordre.append(it.widget().text())
+    assert ordre == attendus
+    d.close()
+    # correction de réfraction coupée : un seul avertissement, pas le mode
+    w = fenetre
+    msgs = []
+    w._status_panel.add_message = lambda m, c=None: msgs.append(m)
+    w._juger_controles({"refraction": False, "mode": "not_updating"}, True)
+    assert any(T("chk_refr_status_ko").split("{")[0] in m for m in msgs)
+    assert not any("not updating" in m for m in msgs)
+
+
+def test_ra_en_secondes_de_temps_ou_en_secondes_d_arc(fenetre, monkeypatch):
+    w = fenetre
+    vals = {"ra_in_degrees": False, "tolerance_ra_arcsec": 1.5}
+    orig = w._settings.get
+    monkeypatch.setattr(w._settings, "get", lambda k: vals.get(k, orig(k)))
+    assert w._tolerance_ra_affichee() == pytest.approx(0.1)
+    vals["ra_in_degrees"] = True
+    assert w._tolerance_ra_affichee() == pytest.approx(1.5)
+
+
+def test_courbe_verte_au_dessus_dans_le_graphe_du_temps(fenetre):
+    g = fenetre._time_graph
+    assert g._pc_loop_curve.zValue() > max(g._mount_loop_curve.zValue(), g._diff_curve.zValue())

@@ -4,6 +4,7 @@ Handles statistics computation, tolerance checking, FFT analysis,
 and axial velocity/displacement calculations.
 """
 
+import math
 import numpy as np
 import logging
 import time as time_module
@@ -26,6 +27,27 @@ def _ecart_angle_deg(a: float, b: float) -> float:
     """a - b in degrees, brought into (-180, 180]."""
     d = (a - b) % 360.0
     return d - 360.0 if d > 180.0 else d
+
+def ecarts_a_la_mediane(valeurs, facteur: float, tour: Optional[float] = None):
+    """Deviations of `valeurs` from their median, times `facteur`.
+
+    This is what the RA/DEC graphs show, as in MountMonitor 3: the centre
+    is the median of the VISIBLE data, recomputed at every refresh. The
+    stored deviations were each taken from the median of the moment, so a
+    non-sidereal target (Sun, planet, comet) drew a line leaving zero at
+    the start of the window instead of a drift centred on the screen.
+
+    `tour` is the wrap period (24 h for RA): values are unwrapped around
+    the first one first, so a target crossing 0 h does not jump 24 h.
+    """
+    v = np.asarray(valeurs, dtype=np.float64)
+    if len(v) == 0:
+        return v
+    d = v - v[0]
+    if tour:
+        d = (d + tour / 2.0) % tour - tour / 2.0
+    return (d - float(np.median(d))) * float(facteur)
+
 
 class DataProcessor:
     """Central data processing engine.
@@ -286,7 +308,10 @@ class DataProcessor:
         now = sample.timestamp
 
         # RA value tolerance
-        ra_exceeded = abs(sample.ra_deviation_arcsec) > self._tolerance_ra_arcsec
+        # The RA tolerance is in arcseconds of RA (MountMonitor 3, and what
+        # the graph shows), the deviation on sky: divide by cos(dec).
+        cos_d = max(abs(math.cos(math.radians(self._declination_deg))), 1e-3)
+        ra_exceeded = abs(sample.ra_deviation_arcsec) / cos_d > self._tolerance_ra_arcsec
         if ra_exceeded and not self.tolerance_state.ra_exceeded:
             self.tolerance_state.ra_exceeded = True
             self.tolerance_state.ra_exceeded_since = now
@@ -307,7 +332,7 @@ class DataProcessor:
 
         # RA StDev tolerance (like Java: STDEV EXCEEDED tolerance level)
         if sample.ra_stdev > 0:
-            ra_stdev_exceeded = sample.ra_stdev > self._tolerance_ra_arcsec
+            ra_stdev_exceeded = sample.ra_stdev / cos_d > self._tolerance_ra_arcsec
             if ra_stdev_exceeded and not self.tolerance_state.ra_stdev_exceeded:
                 self.tolerance_state.ra_stdev_exceeded = True
                 logger.warning(f"RA STDEV exceeded tolerance: {sample.ra_stdev:.3f}\"")
@@ -350,6 +375,20 @@ class DataProcessor:
     @property
     def sample_count(self) -> int:
         return self._sample_count
+
+    @property
+    def ra_raw_buffer(self) -> DataBuffer:
+        """Raw RA (decimal hours) since the current target was acquired."""
+        return self._ra_raw_buffer
+
+    @property
+    def dec_raw_buffer(self) -> DataBuffer:
+        """Raw DEC (decimal degrees) since the current target was acquired."""
+        return self._dec_raw_buffer
+
+    @property
+    def declination_deg(self) -> float:
+        return self._declination_deg
 
     @property
     def ra_reference(self) -> Optional[float]:

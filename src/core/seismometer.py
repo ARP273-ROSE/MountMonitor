@@ -4,6 +4,7 @@ Reads data from USB seismometer AD-converters (e.g., Mindsets SEP-064)
 at a configurable sampling rate (default 20 Hz).
 """
 
+import re
 import time
 import logging
 import threading
@@ -11,6 +12,20 @@ from typing import Optional, Callable
 from collections import deque
 
 logger = logging.getLogger(__name__)
+
+_FIN = re.compile(rb'\r\n|\r|\n')
+_NOMBRE = re.compile(r'[-+]?\d+(?:[.,]\d+)?')
+
+
+def valeur_de_ligne(ligne: bytes):
+    """First number of a line from the AD converter, or None."""
+    m = _NOMBRE.search(ligne.decode('ascii', errors='ignore'))
+    if not m:
+        return None
+    try:
+        return float(m.group(0).replace(',', '.'))
+    except ValueError:
+        return None
 
 
 class Seismometer:
@@ -21,8 +36,10 @@ class Seismometer:
     """
 
     def __init__(self, port: str = "", frequency_hz: float = 20.0,
-                 offset: int = 300, data_range: int = 2000):
+                 offset: int = 300, data_range: int = 2000, baudrate: int = 9600):
         self._port = port
+        self._baudrate = int(baudrate or 9600)
+        self.erreur: str = ""            # why start() failed, for the window
         self._frequency_hz = frequency_hz
         self._offset = offset
         self._range = data_range
@@ -56,7 +73,7 @@ class Seismometer:
             import serial
             self._serial = serial.Serial(
                 port=self._port,
-                baudrate=9600,
+                baudrate=self._baudrate,
                 timeout=1.0,
                 bytesize=serial.EIGHTBITS,
                 parity=serial.PARITY_NONE,
@@ -70,9 +87,11 @@ class Seismometer:
             logger.info(f"Seismometer started on {self._port} at {self._frequency_hz} Hz")
             return True
         except ImportError:
-            logger.error("pyserial not installed")
+            self.erreur = "pyserial not installed"
+            logger.error(self.erreur)
             return False
         except Exception as e:
+            self.erreur = str(e)
             logger.error(f"Failed to open serial port {self._port}: {e}")
             return False
 
@@ -96,6 +115,7 @@ class Seismometer:
         values = []
         freq_start = time.time()
         freq_count = 0
+        derniere_livraison = time.time()
 
         while self._running and self._serial:
             try:
@@ -104,31 +124,33 @@ class Seismometer:
                     continue
 
                 buffer += data
-                if len(buffer) > 4096 and b'\r\n' not in buffer:
+                if len(buffer) > 4096 and not _FIN.search(buffer):
                     # Wrong port or baud rate: no line ever ends. Unbounded,
                     # the buffer grew all night and every search in it
                     # cost more than the last.
                     buffer = b''
                     continue
-                # Parse values separated by CR+LF
-                while b'\r\n' in buffer:
-                    line, buffer = buffer.split(b'\r\n', 1)
-                    line_str = line.decode('ascii', errors='ignore').strip()
-                    if line_str:
-                        try:
-                            raw_val = float(line_str)
-                            offset_val = raw_val - self._offset
-                            values.append(offset_val)
-                            freq_count += 1
+                # One value per line. Lines may end in CR+LF, LF or CR alone
+                # (only CR+LF was accepted: any other device gave nothing at
+                # all, without a word); the first number on the line is taken.
+                *lignes, buffer = _FIN.split(buffer)
+                for line in lignes:
+                    raw_val = valeur_de_ligne(line)
+                    if raw_val is None:
+                        continue
+                    offset_val = raw_val - self._offset
+                    values.append(offset_val)
+                    freq_count += 1
+                    with self._lock:
+                        self._data_buffer.append(offset_val)
 
-                            with self._lock:
-                                self._data_buffer.append(offset_val)
-                        except ValueError:
-                            pass
-
-                # Deliver values at the expected frequency
-                if len(values) >= self._frequency_hz:
-                    now = time.time()
+                # Deliver about once a second: at the expected count, or
+                # after a second whatever the count (a device slower than
+                # the setting used to deliver nothing for 20 s at a time).
+                now = time.time()
+                if values and (len(values) >= self._frequency_hz
+                               or now - derniere_livraison >= 1.0):
+                    derniere_livraison = now
                     if self._callback:
                         self._callback(now, values.copy())
                     values.clear()

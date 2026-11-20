@@ -434,17 +434,6 @@ longer records seven hours of nothing. A second click disarms. The button says
 what it waits for: \emph{Armed: starts when the mount tracks}, or, when the
 mount already tracks in daylight, \emph{Armed: starts at nightfall}.
 
-\section{What the graphs show}
-
-\textbf{View > Time span}, or a right click on any graph, sets how much time
-the scrolling graphs show: from 30~s to one hour. The choice is kept.
-\textbf{View > Vertical scale} (also on the right click of the RA and DEC
-graphs): \emph{Data only} fits the curve and lets the tolerance lines leave
-the frame when tracking is much better than them; \emph{Tolerance},
-\emph{Maximum} (data and tolerance both visible) and \emph{Min/Max lines}.
-The clock drift under the time graph is a straight-line fit over the last
-half hour, spikes excluded, in ms per hour.
-
 \textbf{Suspend when the mount stops tracking}, with a two-minute grace delay.
 The delay exists for a reason: a stop may be transient --- a meridian flip, an
 autofocus run, a slew between targets --- and cutting on the first sample would
@@ -457,6 +446,27 @@ mount tracks and lasts until you stop it. Ticked, a night is one unit: if the mo
 file}. Only daylight closes the session and triggers the report --- and only
 once the Sun has actually been below the horizon during the session, so that a
 daytime trial does not close itself.
+
+\section{What the graphs show}
+
+\textbf{View > Time span}, or a right click on any graph, sets how much time
+the scrolling graphs show: from 30~s to one hour. The choice is kept.
+\textbf{View > Vertical scale} (also on the right click of the RA and DEC
+graphs): \emph{Data only} fits the curve and lets the tolerance lines leave
+the frame when tracking is much better than them; \emph{Tolerance},
+\emph{Maximum} (data and tolerance both visible) and \emph{Min/Max lines}.
+The clock drift under the time graph is a straight-line fit over the last
+half hour, spikes excluded, in ms per hour.
+
+The \textbf{standard deviation} (blue) has its own scale on the right, starting
+at zero, so that it stays readable even when the position drifts (Sun, planets,
+comets). Its top is the power of ten just above 3.3 times the largest sigma,
+as in MountMonitor~3. The RA and DEC curves are centred on the \textbf{median of
+the visible data}, recomputed at each refresh, and the tolerance lines are that
+median $\pm$ the tolerance. \textbf{Right ascension in hours} (default): RA in
+h:m:s and its deviations, sigma and tolerance in seconds of time (s);
+\textbf{in degrees}: everything in arcseconds of RA, 15 times larger. The night
+report keeps true arcseconds on the sky.
 
 % ─────────────────────────────────────────────────────────────────
 \chapter{A night out}
