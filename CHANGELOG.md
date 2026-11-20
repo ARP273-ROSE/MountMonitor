@@ -6,6 +6,21 @@ behaviour changes, the patch number when only a defect is fixed.
 
 Figures quoted below were measured on real sessions, not estimated.
 
+## 4.4.1 — 2026-11-20
+
+### Changed
+- **Time graph as in MountMonitor 3** (definitions from its author): the two
+  loop times are drawn centred on their average and read on a right-hand axis
+  showing average ± range, while the PC-mount and PC-NTP differences keep the
+  left axis. Drawn at their raw ~1000 ms, the loop times stretched the scale
+  over 1300 ms and flattened everything. The PC-NTP curve now counts in the
+  vertical range too.
+
+### Fixed
+- **PC loop time** is the PC time at the mount's `:GL#` answer minus the
+  previous one (MM3: pcNew - pcOld). It used the start of the polling cycle,
+  set by the timer: a flat line that hid the latency jitter.
+
 ## 4.4.0 — 2026-11-20
 
 Nicolàs de Hilster's test of 4.3.0 on his 10Micron, and the code in English.

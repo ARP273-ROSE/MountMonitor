@@ -699,6 +699,28 @@ class TrackingGraph(QWidget):
             item.setVisible(False)
 
 
+class OffsetAxis(pg.AxisItem):
+    """Axis whose labels are the view value plus `offset` (loop times are
+    drawn centred on their average; this axis shows their real values)."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.offset = 0.0
+
+    def tickStrings(self, values, scale, spacing):
+        return [f"{v + self.offset:.0f}" for v in values]
+
+
+def loop_average(*series):
+    """Mean of the loop-time samples (MM3 « SO »), ignoring empty series."""
+    parts = [np.asarray(s, dtype=float) for s in series if s is not None and len(s)]
+    if not parts:
+        return 0.0
+    v = np.concatenate(parts)
+    v = v[np.isfinite(v)]
+    return float(np.mean(v)) if len(v) else 0.0
+
+
 class TimeGraph(QWidget):
     """Time comparison graph.
 
@@ -707,6 +729,11 @@ class TimeGraph(QWidget):
     - PC loop time (green)
     - Mount loop time (red)
     - PC-NTP difference (blue, when connected)
+
+    As in MountMonitor 3, the two loop times are drawn centred on their
+    average (they sit around 1000 ms at 1 Hz, far from the clock offsets):
+    one scale, read on the left for the differences and on the right
+    (average +- range) for the loop times.
     """
 
     def __init__(self, parent=None):
@@ -714,8 +741,14 @@ class TimeGraph(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        self._plot = pg.PlotWidget()
+        self._plot = pg.PlotWidget(axisItems={'right': OffsetAxis('right')})
         self._right_axis = align_axes(self._plot)
+        self._right_axis.setStyle(showValues=True, tickLength=5)
+        self._right_axis.setPen(pg.mkPen(Colors.GRAPH_TIME_PC))
+        self._right_axis.setTextPen(pg.mkPen(Colors.GRAPH_TIME_PC))
+        self._right_axis.setLabel(T('loop_time'), units='ms', color=Colors.GRAPH_TIME_PC.name())
+        self._right_axis.enableAutoSIPrefix(False)
+        self._right_axis.linkToView(self._plot.getViewBox())
         self._plot.setBackground(Colors.BG_GRAPH)
         self._plot.showGrid(x=False, y=True, alpha=0.1)
         self._plot.setTitle(T("time_graph_title"), color='#aaaaaa', size='11pt')
@@ -795,20 +828,22 @@ class TimeGraph(QWidget):
 
             rel_t = diff_t - t0
             self._diff_curve.setData(rel_t, diff_v)
+            avg = loop_average(pc_loop_v, mount_loop_v)
+            self._right_axis.offset = avg
+            all_v = [np.asarray(diff_v, dtype=float), np.zeros(1)]
             if pc_loop_t is not None and len(pc_loop_t) > 0:
-                self._pc_loop_curve.setData(pc_loop_t - t0, pc_loop_v)
+                self._pc_loop_curve.setData(pc_loop_t - t0, pc_loop_v - avg)
+                all_v.append(pc_loop_v - avg)
             if mount_loop_t is not None and len(mount_loop_t) > 0:
-                self._mount_loop_curve.setData(mount_loop_t - t0, mount_loop_v)
+                self._mount_loop_curve.setData(mount_loop_t - t0, mount_loop_v - avg)
+                all_v.append(mount_loop_v - avg)
             if ntp_t is not None and len(ntp_t) > 0:
                 self._ntp_curve.setData(ntp_t - t0, ntp_v)
+                all_v.append(np.asarray(ntp_v, dtype=float))
 
-            # Manual range
-            all_v = [diff_v]
-            if pc_loop_v is not None and len(pc_loop_v) > 0:
-                all_v.append(pc_loop_v)
-            if mount_loop_v is not None and len(mount_loop_v) > 0:
-                all_v.append(mount_loop_v)
+            # Manual range: differences, NTP and centred loop times together
             combined = np.concatenate(all_v)
+            combined = combined[np.isfinite(combined)]
             y_min = float(np.min(combined))
             y_max = float(np.max(combined))
             y_margin = max(abs(y_max - y_min) * 0.1, 1.0)
@@ -823,6 +858,11 @@ class TimeGraph(QWidget):
                         yRange=(y_min - y_margin, y_max + y_margin), padding=0)
             vb.blockSignals(False)
             match_axes(self._plot)
+            # The right axis follows the same range (signals were blocked) and
+            # must redraw its labels when only the offset changed.
+            self._right_axis.setRange(y_min - y_margin, y_max + y_margin)
+            self._right_axis.picture = None
+            self._right_axis.update()
 
             # Position overlays
             self._values_text.setPos(x1, y_max + y_margin)
@@ -838,6 +878,9 @@ class TimeGraph(QWidget):
                 parts.append(f"PC loop: {pc_loop_v[-1]:.1f}ms")
             if mount_loop_v is not None and len(mount_loop_v) > 0:
                 parts.append(f"Mt loop: {mount_loop_v[-1]:.1f}ms")
+            if (pc_loop_v is not None and len(pc_loop_v)) or \
+                    (mount_loop_v is not None and len(mount_loop_v)):
+                parts.append(f"loops avg: {avg:.0f}ms")
             if ntp_v is not None and len(ntp_v) > 0:
                 parts.append(f"NTP: {ntp_v[-1]:+.1f}ms")
             self._values_text.setText("  ".join(parts))
