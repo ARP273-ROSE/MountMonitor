@@ -265,9 +265,9 @@ TX = {
         "fr": "Délai de grâce — slews et autofocus finissent largement avant",
         "nl": "Respijttijd — zwenkbewegingen en autofocus zijn er ruim binnen klaar"},
     "tt_sunrise": {
-        "en": "Needs a known site. Only daylight ends a night: a mount that parks at 02:00 and resumes at 03:00 stays one night, one file, one report.",
-        "fr": "Demande un site connu. Seul le jour termine une nuit : une monture qui parque à 02 h et repart à 03 h reste une seule nuit, un seul fichier, un seul rapport.",
-        "nl": "Vereist een bekende locatie. Alleen het daglicht beëindigt een nacht: een montering die om 02:00 parkeert en om 03:00 verdergaat, blijft één nacht, één bestand, één rapport."},
+        "en": "Unticked: recording starts whenever the mount tracks, day or night, and the session ends when you stop it. Ticked: needs a known site. Only daylight ends a night: a mount that parks at 02:00 and resumes at 03:00 stays one night, one file, one report.",
+        "fr": "Décoché : l'enregistrement démarre dès que la monture suit, de jour comme de nuit, et la session dure jusqu'à ce que vous l'arrêtiez. Coché : demande un site connu. Seul le jour termine une nuit : une monture qui parque à 02 h et repart à 03 h reste une seule nuit, un seul fichier, un seul rapport.",
+        "nl": "Uitgevinkt: de registratie start zodra de montering volgt, dag of nacht, en de sessie loopt tot u haar stopt. Aangevinkt: vereist een bekende locatie. Alleen het daglicht beëindigt een nacht: een montering die om 02:00 parkeert en om 03:00 verdergaat, blijft één nacht, één bestand, één rapport."},
     "tt_delay_slew": {
         "en": "Wait time after slew before logging resumes",
         "fr": "Délai après rotation avant reprise",
@@ -449,13 +449,13 @@ TX = {
                         "fr": "Armé : démarre à la nuit",
                         "nl": "Gereed: start bij het invallen van de nacht"},
     "tt_armed": {
-        "en": "Nothing is being recorded yet. The log opens by itself once the mount tracks and the Sun is down. Click to disarm.",
-        "fr": "Rien n'est encore enregistré. Le journal s'ouvrira seul quand la monture suivra et que le Soleil sera couché. Cliquer pour désarmer.",
-        "nl": "Er wordt nog niets opgenomen. Het log opent vanzelf zodra de montering volgt en de zon onder is. Klik om uit te schakelen."},
+        "en": "Nothing is being recorded yet. The log opens by itself once the mount tracks (and, in \"Night only\" mode, the Sun is down). Click to disarm; right click for the automatic options.",
+        "fr": "Rien n'est encore enregistré. Le journal s'ouvrira seul quand la monture suivra (et, en mode « La nuit seulement », que le Soleil sera couché). Cliquer pour désarmer ; clic droit pour les options automatiques.",
+        "nl": "Er wordt nog niets opgenomen. Het log opent vanzelf zodra de montering volgt (en, in de modus \"Alleen 's nachts\", de zon onder is). Klik om uit te schakelen; rechtsklik voor de automatische opties."},
     "logging_armed_day": {
-        "en": "The mount tracks, but the Sun is up: recording will start at nightfall.",
-        "fr": "La monture suit, mais il fait jour : l'enregistrement démarrera à la nuit.",
-        "nl": "De montering volgt, maar de zon is op: de registratie start bij het invallen van de nacht."},
+        "en": "The mount tracks, but the Sun is up: recording will start at nightfall. To record by day too, untick \"Night only\" (right click on the log button, or Preferences).",
+        "fr": "La monture suit, mais il fait jour : l'enregistrement démarrera à la nuit. Pour enregistrer aussi de jour, décocher « La nuit seulement » (clic droit sur le bouton d'enregistrement, ou Préférences).",
+        "nl": "De montering volgt, maar de zon is op: de registratie start bij het invallen van de nacht. Om ook overdag op te nemen: \"Alleen 's nachts\" uitvinken (rechtsklik op de logknop, of Voorkeuren)."},
     "logging_armed": {
         "en": "Logger armed: recording starts when the mount begins tracking.",
         "fr": "Enregistreur armé : l'enregistrement démarrera quand la monture suivra.",
@@ -483,9 +483,15 @@ TX = {
         "fr": "Suspendre l'enregistrement quand la monture cesse de suivre",
         "nl": "Registratie onderbreken zodra de montering stopt met volgen"},
     "pref_close_sunrise": {
-        "en": "End the night and write the report at sunrise",
-        "fr": "Terminer la nuit et écrire le rapport au lever du Soleil",
-        "nl": "De nacht beëindigen en het rapport schrijven bij zonsopkomst"},
+        "en": "Night only: record after sunset, end the night and write the report at sunrise",
+        "fr": "La nuit seulement : enregistrer après le coucher du Soleil, clore la nuit et écrire le rapport à son lever",
+        "nl": "Alleen 's nachts: opnemen na zonsondergang, de nacht afsluiten en het rapport schrijven bij zonsopkomst"},
+    "pref_unattended": {"en": "Unattended operation", "fr": "Fonctionnement sans surveillance",
+                        "nl": "Onbemande werking"},
+    "pref_unattended_intro": {
+        "en": "For an observatory PC that starts everything at boot: launch MountMonitor with --connect (or tick the first box). Untick \"Night only\" to record day-time sessions too (solar observing).",
+        "fr": "Pour un PC d'observatoire qui lance tout au démarrage : lancer MountMonitor avec --connect (ou cocher la première case). Décocher « La nuit seulement » pour enregistrer aussi de jour (observation solaire).",
+        "nl": "Voor een observatorium-pc die alles bij het opstarten start: MountMonitor starten met --connect (of het eerste vakje aanvinken). Vink \"Alleen 's nachts\" uit om ook overdag op te nemen (zonnewaarnemingen)."},
     "pref_connect_launch": {
         "en": "Connect to the mount when MountMonitor opens",
         "fr": "Se connecter à la monture à l'ouverture de MountMonitor",
@@ -498,10 +504,6 @@ TX = {
         "en": "Start recording when the mount starts tracking",
         "fr": "Démarrer l'enregistrement quand la monture se met à suivre",
         "nl": "Registratie starten zodra de montering begint te volgen"},
-    "pref_autostop": {
-        "en": "Stop and write the night report when the mount parks",
-        "fr": "Arrêter et écrire le rapport de nuit quand la monture se parque",
-        "nl": "Stoppen en het nachtrapport schrijven zodra de montering parkeert"},
     "lang_auto": {"en": "Automatic (system)", "fr": "Automatique (système)",
                   "nl": "Automatisch (systeem)"},
     "lang_restart_titre": {"en": "Language changed", "fr": "Langue changée",

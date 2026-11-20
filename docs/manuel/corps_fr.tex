@@ -434,7 +434,13 @@ démarre quand la monture se met à suivre.
 
 \section{L'armement de l'enregistreur}
 
-Deux réglages commandent le comportement du bouton d'enregistrement.
+Ces réglages sont réunis dans \textbf{Préférences > Général > Fonctionnement
+sans surveillance}, et au clic droit sur le bouton d'enregistrement. Pour un PC
+d'observatoire qui lance tout au démarrage, lancer MountMonitor avec
+\texttt{--connect} (ou cocher \emph{Se connecter à la monture à l'ouverture}) :
+il réessaie jusqu'à ce que la monture réponde, puis s'arme seul. Les fichiers
+sont forcés sur le disque au moins toutes les 5~s : une coupure de courant ne
+coûte que quelques secondes.
 
 \textbf{Démarrer l'enregistrement quand la monture se met à suivre}, actif par
 défaut. Le bouton \emph{arme} alors l'enregistreur au lieu de le démarrer : rien n'est écrit tant
@@ -459,7 +465,10 @@ délai de grâce de deux minutes. Le délai existe pour une raison : un arrêt p
 passager --- retournement au méridien, autofocus, slew entre deux cibles ---
 et couper au premier échantillon percerait un trou à chaque dither.
 
-\textbf{Terminer la nuit au lever du Soleil}, actif par défaut. Une nuit est un
+\textbf{La nuit seulement : enregistrer après le coucher du Soleil, clore la nuit
+à son lever}, actif par défaut. Décoché, pour les séances de jour (observation
+solaire), l'enregistrement démarre dès que la monture suit et dure jusqu'à ce
+qu'on l'arrête. Coché, une nuit est un
 tout : si la
 monture se parque à 2~h et repart à 3~h, l'enregistrement se suspend puis
 reprend \emph{dans le même fichier}. Seul le jour clôt la session et déclenche

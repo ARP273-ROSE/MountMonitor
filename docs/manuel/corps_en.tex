@@ -419,7 +419,13 @@ when the mount starts tracking.
 
 \section{Arming the logger}
 
-Three settings govern the record button. All three are \textbf{on by default}.
+These settings sit together in \textbf{Preferences > General > Unattended
+operation}, and on a right click of the record button. For an observatory PC
+that starts everything at boot, launch MountMonitor with \texttt{--connect}
+(or tick \emph{Connect to the mount when MountMonitor opens}): it retries until
+the mount answers, then arms itself. The three settings below are \textbf{on
+by default}; the files are forced to the disk at least every 5~s, so a power
+cut costs a few seconds of data.
 
 \textbf{Start recording when the mount starts tracking.} The button then
 \emph{arms} the logger instead of starting it: nothing is written until the
@@ -444,7 +450,9 @@ The delay exists for a reason: a stop may be transient --- a meridian flip, an
 autofocus run, a slew between targets --- and cutting on the first sample would
 punch a hole at every dither.
 
-\textbf{End the night at sunrise.} A night is one unit: if the mount parks at
+\textbf{Night only: record after sunset, end the night at sunrise.} Untick it
+for day-time sessions (solar observing): recording then starts whenever the
+mount tracks and lasts until you stop it. Ticked, a night is one unit: if the mount parks at
 02:00 and resumes at 03:00, recording suspends and resumes \emph{in the same
 file}. Only daylight closes the session and triggers the report --- and only
 once the Sun has actually been below the horizon during the session, so that a

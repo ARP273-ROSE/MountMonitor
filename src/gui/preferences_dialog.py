@@ -163,6 +163,47 @@ class PreferencesDialog(QDialog):
 
         layout.addWidget(conn_group)
 
+        # Unattended operation, in its own group on the first tab: these
+        # four boxes decide when MountMonitor connects, records and closes
+        # the night. Buried in the Processing tab under "Log mode", a user
+        # who observes the Sun by day never found the one that restricts
+        # recording to the night.
+        auto_group = QGroupBox(T("pref_unattended"))
+        log_form = QFormLayout(auto_group)
+        intro = QLabel(T("pref_unattended_intro"))
+        intro.setWordWrap(True)
+        log_form.addRow(intro)
+        self._connect_launch = QCheckBox(T("pref_connect_launch"))
+        self._connect_launch.setChecked(bool(self._settings.get("connect_on_launch")))
+        self._connect_launch.setToolTip(T("tt_connect_launch"))
+        log_form.addRow(self._connect_launch)
+
+        self._autostart = QCheckBox(T("pref_autostart"))
+        self._autostart.setChecked(bool(self._settings.get("autostart_on_tracking")))
+        self._autostart.setToolTip(T("tt_arm"))
+        log_form.addRow(self._autostart)
+
+        self._autostop = QCheckBox(T("pref_pause"))
+        self._autostop.setChecked(bool(self._settings.get("pause_when_not_tracking")))
+        self._autostop.setToolTip(T("tt_pause"))
+        log_form.addRow(self._autostop)
+
+        self._park_delay = QSpinBox()
+        self._park_delay.setRange(0, 3600)
+        self._park_delay.setValue(int(self._settings.get("pause_delay_s") or 120))
+        self._park_delay.setSuffix(" s")
+        self._park_delay.setToolTip(T("tt_pause_delay"))
+        self._park_delay.setEnabled(self._autostop.isChecked())
+        self._autostop.toggled.connect(self._park_delay.setEnabled)
+        log_form.addRow("    ↳", self._park_delay)
+
+        self._close_sunrise = QCheckBox(T("pref_close_sunrise"))
+        self._close_sunrise.setChecked(bool(self._settings.get("close_at_sunrise")))
+        self._close_sunrise.setToolTip(T("tt_sunrise"))
+        log_form.addRow(self._close_sunrise)
+
+        layout.addWidget(auto_group)
+
         # Layout group
         layout_group = QGroupBox(T("pref_layout"))
         layout_form = QFormLayout(layout_group)
@@ -297,39 +338,6 @@ class PreferencesDialog(QDialog):
         self._site_elev = QLineEdit(str(self._settings.get("site_elevation_m") or ""))
         self._site_elev.setPlaceholderText("650")
         log_form.addRow(T("pref_site_elev"), self._site_elev)
-
-        # Arming. Put next to the log mode because it answers the same
-        # question -- what ends up in the file -- and because a mount
-        # connected at noon for a night that starts at 19:00 writes seven
-        # hours of nothing.
-        self._connect_launch = QCheckBox(T("pref_connect_launch"))
-        self._connect_launch.setChecked(bool(self._settings.get("connect_on_launch")))
-        self._connect_launch.setToolTip(T("tt_connect_launch"))
-        log_form.addRow(self._connect_launch)
-
-        self._autostart = QCheckBox(T("pref_autostart"))
-        self._autostart.setChecked(bool(self._settings.get("autostart_on_tracking")))
-        self._autostart.setToolTip(T("tt_arm"))
-        log_form.addRow(self._autostart)
-
-        self._autostop = QCheckBox(T("pref_pause"))
-        self._autostop.setChecked(bool(self._settings.get("pause_when_not_tracking")))
-        self._autostop.setToolTip(T("tt_pause"))
-        log_form.addRow(self._autostop)
-
-        self._park_delay = QSpinBox()
-        self._park_delay.setRange(0, 3600)
-        self._park_delay.setValue(int(self._settings.get("pause_delay_s") or 120))
-        self._park_delay.setSuffix(" s")
-        self._park_delay.setToolTip(T("tt_pause_delay"))
-        self._park_delay.setEnabled(self._autostop.isChecked())
-        self._autostop.toggled.connect(self._park_delay.setEnabled)
-        log_form.addRow("    ↳", self._park_delay)
-
-        self._close_sunrise = QCheckBox(T("pref_close_sunrise"))
-        self._close_sunrise.setChecked(bool(self._settings.get("close_at_sunrise")))
-        self._close_sunrise.setToolTip(T("tt_sunrise"))
-        log_form.addRow(self._close_sunrise)
 
         self._delay_slew = QDoubleSpinBox()
         self._delay_slew.setRange(0, 60)

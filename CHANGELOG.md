@@ -6,6 +6,29 @@ behaviour changes, the patch number when only a defect is fixed.
 
 Figures quoted below were measured on real sessions, not estimated.
 
+## 4.2.1 — 2026-11-20
+
+### Changed
+- **Unattended operation in one place**: the four boxes that decide when
+  MountMonitor connects, records and closes the night moved from the
+  Processing tab (under "Log mode") to their own group on the General tab,
+  with a line saying how to start it at boot (`--connect`). They are also on
+  a right click of the record button.
+- **"Night only" says what it does**: the box formerly called "End the night
+  and write the report at sunrise" also kept recording from starting in
+  daylight. It is now "Night only: record after sunset, end the night and
+  write the report at sunrise"; unticked, day-time sessions (solar observing)
+  are recorded. Unticking it while armed in daylight with the mount tracking
+  starts recording at once. The daylight message and the button tooltip say
+  where to change it.
+
+### Fixed
+- **Power cut**: the files were flushed every 20 lines but never forced to
+  the disk; whatever the operating system still held was lost. They are now
+  flushed and synced (fsync) at least every 5 s.
+- Removed an unused label that described the pause on park as "stop and
+  write the night report".
+
 ## 4.2.0 — 2026-11-19
 
 First feedback from Nicolàs de Hilster on 4.1.0.

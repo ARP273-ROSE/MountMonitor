@@ -408,6 +408,11 @@ class MainWindow(QMainWindow):
         self._btn_logging.setToolTip(T("tt_start_logging"))
         self._btn_logging.setEnabled(False)
         self._btn_logging.clicked.connect(self._toggle_logging)
+        # Right click: the automatic options, where they are needed. In the
+        # Preferences alone they went unnoticed (a user observing the Sun by
+        # day did not know recording could be allowed in daylight).
+        self._btn_logging.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._btn_logging.customContextMenuRequested.connect(self._menu_enregistrement)
         toolbar.addWidget(self._btn_logging)
 
         toolbar.addSeparator()
@@ -1213,6 +1218,35 @@ class MainWindow(QMainWindow):
             self._timer_armement = QTimer(self)
             self._timer_armement.timeout.connect(self._verifier_armement)
         self._timer_armement.start(60_000)
+
+    OPTIONS_AUTO = (("connect_on_launch", "pref_connect_launch", "tt_connect_launch"),
+                    ("autostart_on_tracking", "pref_autostart", "tt_arm"),
+                    ("pause_when_not_tracking", "pref_pause", "tt_pause"),
+                    ("close_at_sunrise", "pref_close_sunrise", "tt_sunrise"))
+
+    def _menu_enregistrement(self, pos):
+        menu = QMenu(self)
+        for cle, libelle, aide in self.OPTIONS_AUTO:
+            a = QAction(T(libelle), menu)
+            a.setCheckable(True)
+            a.setChecked(bool(self._settings.get(cle)))
+            a.setToolTip(T(aide))
+            a.toggled.connect(lambda on, c=cle: self._option_auto(c, on))
+            menu.addAction(a)
+        menu.setToolTipsVisible(True)
+        menu.addSeparator()
+        menu.addAction(T("menu_preferences"), self._show_preferences)
+        menu.exec(self._btn_logging.mapToGlobal(pos))
+
+    def _option_auto(self, cle: str, active: bool):
+        self._settings.set(cle, bool(active))
+        self._settings.save()
+        if self._logging_armed:
+            # « Night only » just switched off while the mount tracks in
+            # daylight: start now rather than at the next minute's check.
+            if getattr(self, '_prev_mount_status', None) == MountStatus.TRACKING:
+                self._demarrer_sur_suivi()
+            self._maj_bouton_armement()
 
     def _verifier_armement(self):
         if not self._logging_armed or self._logging_active:
