@@ -564,6 +564,11 @@ jobs:
   publier:
     needs: [decider, tests, build, build-unix]
     runs-on: ubuntu-latest
+    # The signing key lives in the « publication » environment, open to tags
+    # v* only -- and only the owner may create those (tag ruleset). A
+    # collaborator with write access cannot reach it from a branch, even with
+    # a modified workflow.
+    environment: publication
     steps:
       - uses: actions/checkout@v4
         with:
