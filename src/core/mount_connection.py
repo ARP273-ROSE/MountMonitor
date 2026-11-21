@@ -201,14 +201,10 @@ class MountConnection(ABC):
         """Send a raw command and get the response. For advanced/10Micron commands."""
         return None
 
-    def check_mount_settings(self) -> list[str]:
-        """Verify mount configuration is correct for monitoring.
-
-        Returns list of warning messages for incorrect settings.
-        Empty list means all settings are OK.
-        Default implementation returns no warnings.
-        """
-        return []
+    def check_mount_settings(self) -> Optional[dict]:
+        """Tracking preferences read from the mount (10Micron :PRlist#, see
+        LX200Connection.check_mount_settings); None when not available."""
+        return None
 
     def get_environment(self) -> EnvironmentSample:
         """Get environmental and diagnostic data from the mount.

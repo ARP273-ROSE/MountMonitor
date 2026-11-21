@@ -403,3 +403,58 @@ def test_newer_or_broken_settings_files(tmp_path):
         assert (tmp_path / "settings.json.corrupt").exists() # kept aside
     finally:
         st.Settings.reset_singleton()
+
+
+# ── Feedback of 21/11/2026: :PRlist# sequence, status at check time ──────
+
+def test_preference_list_read_as_the_mount_sends_it():
+    import threading
+    from src.core.lx200_protocol import LX200Connection
+    chunks = iter([
+        b"Air pressure,3,W,1012.7,1,0.0,1200.0;Follow object,1,W,1;x#",
+        b"Tracking correction (%),3,W,0.120,3,-9.999,9.999;"
+        b"Tracking speed,2,W,1,5,Sidereal,Solar,Lunar,Custom,Stop;c#",
+    ])
+
+    class Replies(dict):
+        def __getitem__(self, cmd):
+            if cmd == ":PRclr#":
+                return b"1"                          # no '#'
+            if cmd == ":PRlist#":
+                return next(chunks, b"c#")
+            return dict.__getitem__(self, cmd)
+    a, b = _fake_mount(Replies())
+    a.settimeout(2.0)
+    c = LX200Connection.__new__(LX200Connection)
+    c._socket, c._connected, c._io_lock = a, True, threading.RLock()
+    c._product_name = "10micron GM3000HPS"
+    r = c.check_mount_settings()
+    assert r == {"follow_object": True, "tracking_correction": "0.120",
+                 "tracking_speed": "Solar"}
+    assert c._connected
+    a.close(); b.close()
+
+
+def test_preference_warnings_reach_the_alert(window, monkeypatch):
+    from src.utils.i18n import T
+    w = window
+    vals = {"check_tracking_rate": True, "check_tracking_rate_value": "sidereal",
+            "check_refraction_status": False, "check_refraction_enabled": False,
+            "check_gps_sync": False, "check_dual_tracking": False, "mount_alert_popup": True}
+    orig = w._settings.get
+    monkeypatch.setattr(w._settings, "get", lambda k: vals.get(k, orig(k)))
+    monkeypatch.setattr("src.utils.win_desktop.bring_alert_to_user", lambda h: "")
+    w._status_panel.add_message = lambda m, c=None: None
+    w._judge_checks({"rate": "60.2", "prefs": {"follow_object": True,
+                                               "tracking_correction": "0.000",
+                                               "tracking_speed": "Sidereal"}}, True)
+    assert T("chk_follow_ko") in w._alert_box.text()
+    w._judge_checks({"rate": "60.2", "prefs": {"follow_object": False,
+                                               "tracking_correction": "0.000",
+                                               "tracking_speed": "Sidereal"}}, True)
+    assert not w._alert_box.isVisible()
+
+
+def test_virtual_desktop_helpers_are_harmless_off_windows():
+    from src.utils import win_desktop
+    assert win_desktop.bring_alert_to_user(12345) == ""

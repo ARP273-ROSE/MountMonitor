@@ -386,77 +386,68 @@ class LX200Connection(MountConnection):
         except ValueError:
             return False
 
-    PRLIST_CONFIRMED = False
+    PRLIST_MAX_CHUNKS = 200      # a full list is a few dozen chunks
 
-    def check_mount_settings(self) -> Optional[list[str]]:
-        """Verify 10Micron mount configuration for monitoring.
+    def read_mount_preferences(self) -> Optional[dict]:
+        """The mount's preference list, as {name: [fields...]} (10Micron).
 
-        Checks (like Java checkMountSettings):
-        - Tracking speed should be sidereal (0)
-        - Tracking correction should be 0.000%
-        - Follow object should be OFF (0)
-
-        Uses :PRlist# command to iterate settings, then :PRnext# to read them.
-        Returns list of warning messages.
+        Sequence confirmed by Nicolas de Hilster on a GM3000HPS (fw 3.2.5):
+        ":PRclr#" restarts the list and answers one character ('1', no '#');
+        then each ":PRlist#" returns the next chunk, ending in '#', made of
+        "Name,type,W,value,...;" entries. A chunk whose last entry is "x"
+        means more follows; "c" means the list is complete (after that,
+        ":PRlist#" keeps answering "c#"). Example entries:
+            Tracking correction (%),3,W,0.000,3,-9.999,9.999
+            Tracking speed,2,W,0,5,Sidereal,Solar,Lunar,Custom,Stop
+        Returns None when the mount is not a 10Micron or does not answer.
         """
-        warnings = []
         product = getattr(self, '_product_name', '') or ''
         if '10micron' not in product.lower():
-            return warnings
-        if not self.PRLIST_CONFIRMED:
-            # ":PRnext#" is not a command documented anywhere we could check
-            # (not in MountWizzard4); an unknown command gets no answer and
-            # cost a 5 s timeout plus a reconnection after every slew. Off
-            # until the exact :PRlist# follow-up command is confirmed. The
-            # tracking rate itself is checked through :GT#.
             return None
+        if self._send_command(':PRclr#', fixed_len=1) is None:
+            return None
+        prefs: dict[str, list[str]] = {}
+        for _ in range(self.PRLIST_MAX_CHUNKS):
+            chunk = self._send_command(':PRlist#')
+            if chunk is None:
+                return prefs or None
+            entries = [e for e in chunk.strip().split(';') if e != '']
+            done = False
+            for entry in entries:
+                if entry in ('c', 'x'):
+                    done = entry == 'c'
+                    continue
+                fields = entry.split(',')
+                prefs[fields[0].strip()] = [f.strip() for f in fields[1:]]
+            if done or not entries:
+                break
+        return prefs
 
-        try:
-            # Start listing preferences
-            response = self._send_command(':PRlist#')
-            if response is None:
-                return warnings
-
-            # Read through preference entries
-            while True:
-                entry = self._send_command(':PRnext#')
-                if entry is None or entry.strip() == 'c':
-                    break
-
-                # Each entry may contain multiple settings separated by ';'
-                for setting in entry.split(';'):
-                    parts = setting.split(',')
-                    if len(parts) < 4:
-                        continue
-
-                    name = parts[0] if parts else ''
-
-                    if 'Follow object' in name:
-                        if parts[3] != '0':
-                            warnings.append(f"Follow object is ON (should be OFF)")
-                            logger.warning("WRONG SET-UP: Follow object is ON!")
-                        else:
-                            logger.info("Verified: Follow object is OFF")
-
-                    elif 'Tracking correction' in name:
-                        if parts[3] != '0.000':
-                            warnings.append(f"Tracking correction is {parts[3]}% (should be 0.000%)")
-                            logger.warning(f"WRONG SET-UP: Tracking correction is {parts[3]}%!")
-                        else:
-                            logger.info(f"Verified: Tracking correction is {parts[3]}%")
-
-                    elif 'Tracking speed' in name:
-                        if parts[3] != '0':
-                            speed_name = parts[5 + int(parts[3])] if len(parts) > 5 + int(parts[3]) else parts[3]
-                            warnings.append(f"Tracking speed is {speed_name} (should be Sidereal)")
-                            logger.warning(f"WRONG SET-UP: Tracking speed is {speed_name}!")
-                        else:
-                            logger.info(f"Verified: Tracking speed is Sidereal")
-
-        except Exception as e:
-            logger.debug(f"checkMountSettings error: {e}")
-
-        return warnings
+    def check_mount_settings(self) -> Optional[dict]:
+        """Tracking-related preferences, as MountMonitor 3 checks them:
+        {"follow_object": bool, "tracking_correction": "0.000",
+         "tracking_speed": "Sidereal"} -- keys missing when not reported.
+        None when the list cannot be read."""
+        prefs = self.read_mount_preferences()
+        if prefs is None:
+            return None
+        result = {}
+        for name, f in prefs.items():
+            if len(f) < 3:
+                continue
+            value = f[2]                    # Name,type,W,VALUE,...
+            low = name.lower()
+            if low.startswith('follow object'):
+                result["follow_object"] = value != '0'
+            elif low.startswith('tracking correction'):
+                result["tracking_correction"] = value
+            elif low.startswith('tracking speed'):
+                try:
+                    choices = f[4:]        # count, then the names
+                    result["tracking_speed"] = choices[int(value)]
+                except (ValueError, IndexError):
+                    result["tracking_speed"] = value
+        return result
 
     def set_high_precision(self) -> bool:
         """Ultra-precision output (10Micron :U2#), sent WITHOUT reading a reply.

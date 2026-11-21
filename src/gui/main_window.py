@@ -2210,23 +2210,35 @@ class MainWindow(QMainWindow):
         # check passed and printed « Tracking rate: Sidereal OK » next to a
         # mount that was not tracking at all. Rate-dependent checks are
         # skipped unless the mount is actually tracking.
-        tracking_now = getattr(self, '_prev_mount_status', None) == MountStatus.TRACKING
+        tracking_gui = getattr(self, '_prev_mount_status', None) == MountStatus.TRACKING
 
         def read(c):
             r = {}
+            # The status is read here, with the checks. The window's own copy
+            # lags right after connecting (still UNKNOWN), which printed
+            # "Mount parked: tracking checks skipped" one second after
+            # "Mount is tracking: recording started".
+            status = c.get_status() if cfg["check_tracking_rate"] else None
+            tracking_now = (status == MountStatus.TRACKING if status not in
+                            (None, MountStatus.UNKNOWN) else tracking_gui)
+            r["tracking"] = tracking_now
             if cfg["check_refraction_status"]:
                 r["refraction"] = c.is_refraction_enabled()
             if cfg["check_refraction_enabled"]:
                 r["mode"] = c.get_refraction_mode()
             if tracking_now and cfg["check_tracking_rate"]:
                 r["rate"] = c.get_tracking_rate()
+                # Follow object, tracking correction and speed from the
+                # mount's preference list, as MountMonitor 3 does.
+                r["prefs"] = c.check_mount_settings()
             if cfg["check_gps_sync"]:
                 r["gps"] = c.is_gps_synced()
             if cfg["check_dual_tracking"]:
                 r["dual"] = c.is_dual_tracking_enabled()
             return r
 
-        self._mount_request(read, lambda r: self._judge_checks(r or {}, tracking_now))
+        self._mount_request(read, lambda r: self._judge_checks(
+            r or {}, (r or {}).get("tracking", tracking_gui)))
 
     def _judge_checks(self, r: dict, tracking_now: bool):
         warnings = []
@@ -2290,6 +2302,31 @@ class MainWindow(QMainWindow):
                 else:
                     warnings.append(T("chk_rate_ko").format(a=read_value, e=T(f"val_{expected_val}")))
 
+        # Mount preference list (:PRlist#): follow object off, tracking
+        # correction 0.000 %, tracking speed Sidereal.
+        prefs = r.get("prefs") if tracking_now else None
+        if prefs and self._settings.get("check_tracking_rate"):
+            if "follow_object" in prefs:
+                if prefs["follow_object"]:
+                    warnings.append(T("chk_follow_ko"))
+                else:
+                    ok_checks.append(T("chk_follow_ok") + " \u2713")
+            corr = prefs.get("tracking_correction")
+            if corr is not None:
+                try:
+                    zero = abs(float(corr)) < 1e-9
+                except ValueError:
+                    zero = False
+                if zero:
+                    ok_checks.append(T("chk_corr_ok").format(v=corr) + " \u2713")
+                else:
+                    warnings.append(T("chk_corr_ko").format(v=corr))
+            speed = prefs.get("tracking_speed")
+            expected = (self._settings.get("check_tracking_rate_value") or "sidereal").lower()
+            if speed is not None and speed.lower() != expected \
+                    and not any(T(f"val_{speed.lower()}") in w for w in warnings):
+                warnings.append(T("chk_speed_ko").format(a=speed, e=T(f"val_{expected}")))
+
         # Display results. The periodic check (every few minutes) writes to
         # the history only when the outcome changes, not every time.
         summary = (tuple(ok_checks), tuple(warnings))
@@ -2322,7 +2359,9 @@ class MainWindow(QMainWindow):
                  + "\n\n" + T("mount_alert_disable"))
         box = getattr(self, "_alert_box", None)
         if box is None:
-            box = QMessageBox(self)
+            # Top-level, without owner: Windows only moves an owner-less
+            # window to another virtual desktop (see bring_alert_to_user).
+            box = QMessageBox(None)
             box.setIcon(QMessageBox.Icon.Warning)
             box.setWindowTitle(T("mount_alert_title"))
             box.setStandardButtons(QMessageBox.StandardButton.Ok)
@@ -2338,6 +2377,12 @@ class MainWindow(QMainWindow):
         # Taskbar / dock flashes until the window is looked at.
         QApplication.alert(self, 0)
         QApplication.alert(box, 0)
+        # MountMonitor on another virtual desktop (Windows): the alert comes
+        # to the desktop the user is on, or Windows switches to ours.
+        from ..utils.win_desktop import bring_alert_to_user
+        where = bring_alert_to_user(int(box.winId()))
+        if where:
+            logger.info(f"Mount alert brought to the user ({where})")
 
     # ── Help ─────────────────────────────────────────────────────
 
@@ -2690,6 +2735,11 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         """Handle window close: save settings, stop everything."""
+        # The alert box has no owner: closed by hand, or it would keep the
+        # application alive after the main window.
+        box = getattr(self, "_alert_box", None)
+        if box is not None:
+            box.close()
         # Save window geometry
         self._settings.set("window_width", self.width())
         self._settings.set("window_height", self.height())
