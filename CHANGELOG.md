@@ -6,6 +6,37 @@ behaviour changes, the patch number when only a defect is fixed.
 
 Figures quoted below were measured on real sessions, not estimated.
 
+## 4.4.5 — 2026-11-21
+
+Nicolàs de Hilster's remarks on the preferences and the FFT window, and the
+:PRlist# lists he read on his GM3000HPS in sixteen situations.
+
+### Fixed
+- **Fields that do not apply now look disabled**: the connection fields of
+  the other protocols were already disabled, but the style sheet painted them
+  like active ones, so they looked editable until clicked. Disabled fields,
+  their labels and greyed boxes are now drawn greyed throughout.
+- **Follow object no longer raises a false alarm**: the lists show that
+  Follow object switches the tracking speed to "Custom" and writes the
+  object's rates there. With a non-sidereal rate expected, "Custom" is now
+  reported as the object's rate (r.a. and dec. given), not as a wrong speed.
+- **Empty DEC spectrum**: on a quantised axis most samples do not move, so
+  the median step was zero and the dither filter took every move for a jump,
+  flattening the whole signal. Jumps are now judged against the median of
+  the steps that do move. Test: a 0.3" sine read in 0.1" units, with a
+  dither, gives its 480 s peak at 0.31".
+- **FFT window**: the seismometer has its own scale (right axis, ADC counts)
+  instead of going off the arcsecond scale; the vertical scale follows the
+  zoom; periods longer than the data (an artefact of zero padding, a flat
+  plateau) are no longer drawn; a new button brings back the full
+  horizontal range.
+
+### Changed
+- **Observing site in its own group**: read from the mount at each connection
+  (:Gt#, :Gg#, :Gev#) and now kept in the preferences, where it shows greyed
+  out while the mount is connected. Typing it is only needed when the mount or
+  its driver does not report a site.
+
 ## 4.4.4 — 2026-11-21
 
 Nicolàs de Hilster's test of 4.4.3 (the alert now pops up on the desktop the

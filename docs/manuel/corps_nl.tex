@@ -305,6 +305,11 @@ spectrum betekent dat er geen aantoonbare is --- het geval van de
 10Micron-monteringen na correctie. Brede, zwervende pieken zijn ruis, meestal
 wind.
 
+In het venster delen RK en DECL de linkerschaal, in boogseconden; de
+seismometer heeft een eigen schaal rechts, in ADC-tellingen. De knoppen
+zoomen en verschuiven horizontaal; de laatste, de ronde pijl, herstelt het volledige
+bereik.
+
 % ═══════════════════════════════════════════════════════════════════
 \part{Gebruiken}
 
@@ -386,10 +391,12 @@ ASCOM & Alleen Windows, via het stuurprogramma van de fabrikant. \\
 \section{De waarnemingslocatie}
 
 \begin{warning}
-Vul \textbf{breedtegraad, lengtegraad en hoogte} in bij de voorkeuren. Eerst
-wordt de montering bevraagd (\texttt{:Gt\#} en \texttt{:Gg\#}), maar veel
-opstellingen hebben haar nooit hun locatie doorgegeven en dan antwoordt zij
-niets. Zonder locatie kunnen de efemeriden van de nacht niet worden berekend.
+De locatie wordt bij elke verbinding van de montering gelezen (\texttt{:Gt\#},
+\texttt{:Gg\#}, \texttt{:Gev\#}) en in de voorkeuren bewaard, waar zij grijs
+verschijnt zolang de montering verbonden is: een later afgespeelde nacht heeft
+zo nog zijn schemeringen. Vul \textbf{breedtegraad, lengtegraad en hoogte}
+daar alleen in als de montering of de driver geen locatie doorgeeft. Zonder
+locatie kunnen de efemeriden van de nacht niet worden berekend.
 
 De lengtegraad voert u \textbf{positief naar het oosten} in. Het
 LX200-protocol telt andersom; de omrekening gebeurt voor u zodra de montering

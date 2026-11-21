@@ -188,6 +188,18 @@ STYLESHEET = """
         QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {
             border-color: #5082c8;
         }
+        /* A disabled field must LOOK disabled: without these rules the
+           colours above won over the palette and a greyed-out field looked
+           editable until one clicked in it. */
+        QLineEdit:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled,
+        QComboBox:disabled {
+            background-color: #1a1a20;
+            color: #50505f;
+            border-color: #26262f;
+        }
+        QLabel:disabled, QCheckBox:disabled, QRadioButton:disabled {
+            color: #50505f;
+        }
         QGroupBox {
             color: #c8c8d2;
             border: 1px solid #3c3c4b;

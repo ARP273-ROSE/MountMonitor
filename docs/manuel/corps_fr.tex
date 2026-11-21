@@ -308,6 +308,10 @@ Un pic net à une période stable désigne une erreur périodique. Un spectre pl
 signifie qu'il n'y en a pas de décelable --- le cas des 10Micron après
 correction. Des pics larges et mouvants sont du bruit, du vent le plus souvent.
 
+Dans la fenêtre, AD et DÉC partagent l'échelle de gauche, en secondes d'arc ;
+le sismomètre a sa propre échelle à droite, en coups ADC. Les boutons zooment
+et décalent horizontalement, et le dernier, la flèche circulaire, revient à la vue complète.
+
 % ═══════════════════════════════════════════════════════════════════
 \part{Utiliser}
 
@@ -388,11 +392,12 @@ ASCOM & Windows uniquement, via le pilote du constructeur. \\
 \section{Le site d'observation}
 
 \begin{warning}
-Renseignez \textbf{latitude, longitude et altitude} dans les préférences. La
-monture est interrogée en premier (\texttt{:Gt\#} et \texttt{:Gg\#}), mais
-beaucoup d'installations ne lui ont jamais transmis leur site et elle ne répond
-alors rien. Sans site, les éphémérides de la nuit ne peuvent pas être
-calculées.
+Le site est lu sur la monture à chaque connexion (\texttt{:Gt\#},
+\texttt{:Gg\#}, \texttt{:Gev\#}) et conservé dans les préférences, où il
+apparaît grisé tant que la monture est connectée : une nuit relue plus tard a
+ainsi encore ses crépuscules. N'y saisissez \textbf{latitude, longitude et
+altitude} que si la monture ou son pilote ne donne pas de site. Sans site, les
+éphémérides de la nuit ne peuvent pas être calculées.
 
 La longitude se saisit \textbf{positive vers l'est}. Le protocole LX200 la
 compte à l'envers ; la conversion est faite pour vous quand la monture répond.

@@ -296,6 +296,10 @@ A sharp peak at a stable period marks a periodic error. A flat spectrum means
 there is no detectable one --- the case of 10Micron mounts after correction.
 Broad, wandering peaks are noise, usually wind.
 
+In the window, RA and DEC share the left scale, in arcseconds; the
+seismometer has its own scale on the right, in ADC counts. The buttons zoom
+and shift horizontally, and the last one, the circular arrow, brings back the full range.
+
 % ═══════════════════════════════════════════════════════════════════
 \part{Using}
 
@@ -375,9 +379,11 @@ ASCOM & Windows only, through the manufacturer's driver. \\
 \section{The observing site}
 
 \begin{warning}
-Fill in \textbf{latitude, longitude and elevation} in the preferences. The
-mount is asked first (\texttt{:Gt\#} and \texttt{:Gg\#}), but many setups never
-pushed their site to it and it then answers nothing. Without a site the night
+The site is read from the mount at each connection (\texttt{:Gt\#},
+\texttt{:Gg\#}, \texttt{:Gev\#}) and kept in the preferences, where it shows
+greyed out while the mount is connected: a night replayed later then still
+has its twilights. Type \textbf{latitude, longitude and elevation} there only
+when the mount or its driver does not report a site. Without a site the night
 ephemeris cannot be computed.
 
 Longitude is entered \textbf{positive east}. The LX200 protocol counts the

@@ -426,7 +426,10 @@ class LX200Connection(MountConnection):
     def check_mount_settings(self) -> Optional[dict]:
         """Tracking-related preferences, as MountMonitor 3 checks them:
         {"follow_object": bool, "tracking_correction": "0.000",
-         "tracking_speed": "Sidereal"} -- keys missing when not reported.
+         "tracking_speed": "Sidereal", "custom_rate_ra": "00.000",
+         "custom_rate_dec": "00.000"} -- keys missing when not reported.
+        Follow object switches the speed to "Custom" and writes the
+        object's rates there (lists sent by N. de Hilster, fw 3.2.5).
         None when the list cannot be read."""
         prefs = self.read_mount_preferences()
         if prefs is None:
@@ -441,6 +444,10 @@ class LX200Connection(MountConnection):
                 result["follow_object"] = value != '0'
             elif low.startswith('tracking correction'):
                 result["tracking_correction"] = value
+            elif low.startswith('custom tracking rate r.a'):
+                result["custom_rate_ra"] = value
+            elif low.startswith('custom tracking rate dec'):
+                result["custom_rate_dec"] = value
             elif low.startswith('tracking speed'):
                 try:
                     choices = f[4:]        # count, then the names

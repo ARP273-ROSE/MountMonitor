@@ -915,6 +915,7 @@ class MainWindow(QMainWindow):
                 f"{T('pan_site')} : {latitude} {longitude}{elev_str}"
             )
             self._mount_site = (latitude, longitude, elevation)
+            self._remember_site()
             self._announce_night()
 
         # Log to file
@@ -1972,13 +1973,9 @@ class MainWindow(QMainWindow):
         Greenwich comes back negative and must be flipped -- getting it
         wrong moves the observatory and shifts every twilight.
         """
-        from ..core.ephemerides import parse_latitude_lx200, parse_longitude_lx200
-        if self._mount_site:
-            lat_t, lon_t, elev = self._mount_site
-            lat = parse_latitude_lx200(lat_t)
-            lon = parse_longitude_lx200(lon_t)
-            if lat is not None and lon is not None:
-                return lat, lon, (elev if elev is not None else 0.0)
+        site = self._site_from_mount()
+        if site:
+            return site
         lat_p = self._settings.get("site_latitude")
         lon_p = self._settings.get("site_longitude")
         if lat_p not in (None, "") and lon_p not in (None, ""):
@@ -1988,6 +1985,37 @@ class MainWindow(QMainWindow):
                 elev = 0.0
             return float(lat_p), float(lon_p), elev
         return None
+
+    def _site_from_mount(self):
+        """(lat, lon east, elevation) as reported by the mount, or None."""
+        from ..core.ephemerides import parse_latitude_lx200, parse_longitude_lx200
+        if not self._mount_site:
+            return None
+        lat_t, lon_t, elev = self._mount_site
+        lat = parse_latitude_lx200(lat_t)
+        lon = parse_longitude_lx200(lon_t)
+        if lat is None or lon is None:
+            return None
+        return lat, lon, (elev if elev is not None else 0.0)
+
+    def _remember_site(self):
+        """Keep the mount's site in the preferences.
+
+        The fields there are the fallback for a mount or driver that does
+        not report its site; filled from the mount they also serve when a
+        night is replayed with no mount connected.
+        """
+        site = self._site_from_mount()
+        if not site:
+            return
+        lat, lon, elev = site
+        self._settings.set("site_latitude", f"{lat:.5f}")
+        self._settings.set("site_longitude", f"{lon:.5f}")
+        self._settings.set("site_elevation_m", f"{elev:.0f}")
+        try:
+            self._settings.save()
+        except OSError as exc:
+            logger.warning(f"Could not save the site: {exc}")
 
     def _announce_night(self):
         """Post tonight's twilights to the status panel."""
@@ -2078,7 +2106,9 @@ class MainWindow(QMainWindow):
     def _show_preferences(self):
         """Show preferences dialog."""
         before = self._settings.get("language")
-        dialog = PreferencesDialog(self._settings, self)
+        dialog = PreferencesDialog(
+            self._settings, self,
+            mount_site=self._site_from_mount() if self._connected else None)
         if dialog.exec():
             self._apply_settings()
             # Check the mount at once with the new expectations, as
@@ -2291,6 +2321,14 @@ class MainWindow(QMainWindow):
             else:
                 warnings.append(T("chk_dual_ko").format(a=actual, e=expected_val))
 
+        # Follow object on, and allowed (expected rate not sidereal): the
+        # mount then tracks at the object's own rate, shown as speed
+        # "Custom" in its preference list and as a non-standard :GT# rate.
+        # Neither is then a wrong setting.
+        prefs = r.get("prefs") if tracking_now else None
+        expected = (self._settings.get("check_tracking_rate_value") or "sidereal").lower()
+        following = bool(prefs and prefs.get("follow_object") and expected != "sidereal")
+
         # Check tracking rate
         if not tracking_now:
             ok_checks.append(T("chk_parked"))
@@ -2303,13 +2341,13 @@ class MainWindow(QMainWindow):
                 read_value = T(f"val_{name}") if name else f"{rate}"
                 if name == (expected_val or "").lower():
                     ok_checks.append(T("chk_rate_ok").format(v=read_value) + " \u2713")
+                elif following and name != "sidereal":
+                    pass                # the object's rate, reported below
                 else:
                     warnings.append(T("chk_rate_ko").format(a=read_value, e=T(f"val_{expected_val}")))
 
         # Mount preference list (:PRlist#): follow object off, tracking
         # correction 0.000 %, tracking speed Sidereal.
-        prefs = r.get("prefs") if tracking_now else None
-        expected = (self._settings.get("check_tracking_rate_value") or "sidereal").lower()
         if prefs and self._settings.get("check_tracking_rate"):
             if "follow_object" in prefs:
                 if not prefs["follow_object"]:
@@ -2333,7 +2371,11 @@ class MainWindow(QMainWindow):
                 else:
                     warnings.append(T("chk_corr_ko").format(v=corr))
             speed = prefs.get("tracking_speed")
-            if speed is not None and speed.lower() != expected \
+            if following and speed is not None and speed.lower() == "custom":
+                ok_checks.append(T("chk_speed_follow").format(
+                    ra=prefs.get("custom_rate_ra", "?"),
+                    dec=prefs.get("custom_rate_dec", "?")) + " \u2713")
+            elif speed is not None and speed.lower() != expected \
                     and not any(T(f"val_{speed.lower()}") in w for w in warnings):
                 warnings.append(T("chk_speed_ko").format(a=speed, e=T(f"val_{expected}")))
 

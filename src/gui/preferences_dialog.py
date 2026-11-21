@@ -46,9 +46,11 @@ def _ascom_choose(current_driver: str = "") -> str:
 class PreferencesDialog(QDialog):
     """Preferences dialog with 4 tabs."""
 
-    def __init__(self, settings: Settings, parent=None):
+    def __init__(self, settings: Settings, parent=None, mount_site=None):
         super().__init__(parent)
         self._settings = settings
+        # (lat, lon east, elevation) reported by the connected mount, or None
+        self._mount_site = mount_site
         self.setWindowTitle(T("menu_preferences"))
         self.setMinimumSize(600, 550)
         self.resize(680, 620)
@@ -101,6 +103,7 @@ class PreferencesDialog(QDialog):
         # Connection group
         conn_group = QGroupBox(T("pref_connection"))
         conn_form = QFormLayout(conn_group)
+        self._conn_form = conn_form
 
         self._protocol = QComboBox()
         self._protocol.addItems(["LX200 (TCP/IP)", T("proto_lx200_serie"), "ASCOM",
@@ -160,6 +163,7 @@ class PreferencesDialog(QDialog):
         self._ascom_choose_btn.clicked.connect(self._on_ascom_choose)
         ascom_row.addWidget(self._ascom_choose_btn)
         conn_form.addRow(T("pref_ascom_driver"), ascom_row)
+        self._ascom_row = ascom_row
 
         layout.addWidget(conn_group)
 
@@ -322,22 +326,41 @@ class PreferencesDialog(QDialog):
         self._log_mode.setToolTip(T("tt_log_mode"))
         log_form.addRow(T("pref_log_mode_label"), self._log_mode)
 
-        # Observing site. Only used when the mount does not report one --
-        # and it often does not: a .dat without a site is a .dat whose
-        # twilights cannot be recomputed on replay.
+        # Observing site. MountMonitor reads it from the mount (:Gt#, :Gg#,
+        # :Gev#) at each connection and keeps it here, so that a .dat
+        # replayed later still has its twilights. Typing is only needed
+        # when the mount or its driver does not report a site.
+        site_group = QGroupBox(T("pref_site_group"))
+        site_form = QFormLayout(site_group)
+        site_intro = QLabel(T("pref_site_from_mount") if self._mount_site
+                            else T("pref_site_intro"))
+        site_intro.setWordWrap(True)
+        site_form.addRow(site_intro)
+
         self._site_lat = QLineEdit(str(self._settings.get("site_latitude") or ""))
         self._site_lat.setPlaceholderText("43.9317")
         self._site_lat.setToolTip(T("tt_site_auto"))
-        log_form.addRow(T("pref_site_lat"), self._site_lat)
+        site_form.addRow(T("pref_site_lat"), self._site_lat)
 
         self._site_lon = QLineEdit(str(self._settings.get("site_longitude") or ""))
         self._site_lon.setPlaceholderText("5.7122")
         self._site_lon.setToolTip(T("tt_site_lon"))
-        log_form.addRow(T("pref_site_lon"), self._site_lon)
+        site_form.addRow(T("pref_site_lon"), self._site_lon)
 
         self._site_elev = QLineEdit(str(self._settings.get("site_elevation_m") or ""))
         self._site_elev.setPlaceholderText("650")
-        log_form.addRow(T("pref_site_elev"), self._site_elev)
+        site_form.addRow(T("pref_site_elev"), self._site_elev)
+
+        if self._mount_site:
+            # The mount is the authority while connected: show what it
+            # reports, greyed out, rather than empty fields that look unused.
+            lat, lon, elev = self._mount_site
+            self._site_lat.setText(f"{lat:.5f}")
+            self._site_lon.setText(f"{lon:.5f}")
+            self._site_elev.setText(f"{elev:.0f}")
+            for field in (self._site_lat, self._site_lon, self._site_elev):
+                field.setEnabled(False)
+                site_form.labelForField(field).setEnabled(False)
 
         self._delay_slew = QDoubleSpinBox()
         self._delay_slew.setRange(0, 60)
@@ -387,6 +410,7 @@ class PreferencesDialog(QDialog):
         log_form.addRow(T("pref_history_lines"), self._history_lines)
 
         layout.addWidget(log_group)
+        layout.addWidget(site_group)
         layout.addStretch()
         return widget
 
@@ -616,6 +640,15 @@ class PreferencesDialog(QDialog):
         self._serial_baudrate.setEnabled(is_serial)
         self._ascom_driver.setEnabled(is_ascom)
         self._ascom_choose_btn.setEnabled(is_ascom)
+        # The row labels follow their field, so that what does not apply
+        # to the chosen protocol is visibly out of play.
+        for field, on in ((self._mount_ip, is_tcp), (self._mount_port, is_tcp),
+                          (self._serial_port, is_serial),
+                          (self._serial_baudrate, is_serial),
+                          (self._ascom_row, is_ascom)):
+            label = self._conn_form.labelForField(field)
+            if label is not None:
+                label.setEnabled(on)
 
     def _on_ascom_choose(self):
         """Open the ASCOM Chooser dialog."""

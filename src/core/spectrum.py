@@ -24,11 +24,17 @@ def remove_jumps(v: np.ndarray, factor: float = 8.0) -> np.ndarray:
     """Remove instantaneous jumps (dithers, recentrings) from a staircase.
 
     A jump is a step between two samples larger than `factor` times the
-    median step: the same robust threshold as the night report's plateaus."""
+    median NON-ZERO step. The median of all steps was zero on a quantised
+    axis (declination read in 0.1" units moves on few samples): every move
+    then counted as a jump and the whole signal was flattened to zero --
+    the empty DEC spectrum reported by N. de Hilster."""
     if len(v) < 3:
         return v
     d = np.diff(v)
-    threshold = factor * float(np.median(np.abs(d))) + 1e-12
+    moves = np.abs(d[d != 0])
+    if len(moves) == 0:
+        return v
+    threshold = factor * float(np.median(moves))
     d = np.where(np.abs(d) > threshold, 0.0, d)
     return np.concatenate(([v[0]], v[0] + np.cumsum(d)))
 

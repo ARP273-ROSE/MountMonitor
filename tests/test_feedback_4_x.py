@@ -135,7 +135,7 @@ def test_auto_options_on_first_tab_and_right_click(window, monkeypatch):
     from src.gui.preferences_dialog import PreferencesDialog
     from src.utils.i18n import T
     from PyQt6.QtWidgets import QGroupBox
-    d = PreferencesDialog(window._settings, window)
+    d = PreferencesDialog(window._settings)
     titles = [g.title() for g in d.findChildren(QGroupBox)]
     assert T("pref_unattended") in titles
     d.close()
@@ -204,7 +204,7 @@ def test_checks_in_mm3_order_with_separate_refraction(window):
     from src.gui.preferences_dialog import PreferencesDialog
     from src.utils.i18n import T
     from PyQt6.QtWidgets import QCheckBox
-    d = PreferencesDialog(window._settings, window)
+    d = PreferencesDialog(window._settings)
     expected_values = [T(k) for k in ("check_refr_status_label", "check_refraction_label",
                                "check_gps_label", "check_dual_label", "check_tracking_label")]
     grid = d._check_refr_status.parentWidget().layout()
@@ -497,8 +497,125 @@ def test_preferences_accepted_trigger_a_check(window, monkeypatch):
     w._connected = True
 
     class Dialog:
-        def __init__(self, *a): pass
+        def __init__(self, *a, **k): pass
         def exec(self): return True
     monkeypatch.setattr("src.gui.main_window.PreferencesDialog", Dialog)
     w._show_preferences()
     assert calls == [True]
+
+
+# ── Feedback of 21/11/2026 evening ───────────────────────────────────────
+
+def test_follow_object_custom_speed_is_not_an_error(window, monkeypatch):
+    """Lists sent by N. de Hilster: Follow object sets the speed to Custom
+    and writes the object's rates; the :GT# rate is then non-standard."""
+    from src.utils.i18n import T
+    w = window
+    vals = {"check_tracking_rate": True, "check_tracking_rate_value": "lunar",
+            "check_refraction_status": False, "check_refraction_enabled": False,
+            "check_gps_sync": False, "check_dual_tracking": False, "mount_alert_popup": True}
+    orig = w._settings.get
+    monkeypatch.setattr(w._settings, "get", lambda k: vals.get(k, orig(k)))
+    monkeypatch.setattr("src.utils.win_desktop.bring_alert_to_user", lambda h: "")
+    msgs = []
+    w._status_panel.add_message = lambda m, c=None: msgs.append(m)
+    prefs = {"follow_object": True, "tracking_correction": "0.000", "tracking_speed": "Custom",
+             "custom_rate_ra": "23.893", "custom_rate_dec": "15.729"}
+    w._judge_checks({"rate": "61.7", "prefs": prefs}, True)
+    assert not any("\u26a0" in m for m in msgs)
+    assert any("23.893" in m and "15.729" in m for m in msgs)
+    # Custom WITHOUT Follow object stays an error
+    msgs.clear()
+    w._judge_checks({"rate": "61.7", "prefs": dict(prefs, follow_object=False)}, True)
+    assert any("\u26a0" in m for m in msgs)
+
+
+def test_custom_rates_read_from_the_preference_list():
+    import threading
+    from src.core.lx200_protocol import LX200Connection
+    chunks = iter([
+        b"Custom tracking rate dec.,3,W,-0.341,3,-99.999,99.999;"
+        b"Custom tracking rate r.a.,3,W,-0.537,3,-99.999,99.999;Follow object,1,W,1;x#",
+        b"Tracking speed,2,W,3,5,Sidereal,Solar,Lunar,Custom,Stop;c#",
+    ])
+
+    class Replies(dict):
+        def __getitem__(self, cmd):
+            return b"1" if cmd == ":PRclr#" else next(chunks, b"c#")
+    a, b = _fake_mount(Replies())
+    a.settimeout(2.0)
+    c = LX200Connection.__new__(LX200Connection)
+    c._socket, c._connected, c._io_lock = a, True, threading.RLock()
+    c._product_name = "10micron GM3000HPS"
+    assert c.check_mount_settings() == {
+        "follow_object": True, "tracking_speed": "Custom",
+        "custom_rate_ra": "-0.537", "custom_rate_dec": "-0.341"}
+    a.close(); b.close()
+
+
+def test_disabled_fields_look_disabled():
+    from src.gui.theme import STYLESHEET
+    assert "QLineEdit:disabled" in STYLESHEET and "QComboBox:disabled" in STYLESHEET
+
+
+def test_connection_rows_follow_the_protocol(window):
+    from src.gui.preferences_dialog import PreferencesDialog
+    d = PreferencesDialog(window._settings)
+    d._on_protocol_changed(0)                      # LX200 TCP/IP
+    label = d._conn_form.labelForField
+    assert label(d._mount_ip).isEnabled() and not label(d._serial_port).isEnabled()
+    assert not label(d._ascom_row).isEnabled()
+    d._on_protocol_changed(1)                      # serial
+    assert not label(d._mount_ip).isEnabled() and label(d._serial_baudrate).isEnabled()
+    d.deleteLater()
+
+
+def test_site_read_from_the_mount_fills_the_preferences(window, monkeypatch):
+    from src.gui.preferences_dialog import PreferencesDialog
+    w = window
+    store = {}
+    monkeypatch.setattr(w._settings, "set", lambda k, v: store.__setitem__(k, v))
+    monkeypatch.setattr(w._settings, "save", lambda: None)
+    w._mount_site = ("+45*30:00", "-006*15:00", 120.0)   # LX200: longitude + WEST
+    w._remember_site()
+    assert store["site_latitude"] == "45.50000"
+    assert store["site_longitude"] == "6.25000"            # stored + EAST
+    assert store["site_elevation_m"] == "120"
+    d = PreferencesDialog(w._settings, None, mount_site=w._site_from_mount())
+    assert d._site_lat.text() == "45.50000" and not d._site_lat.isEnabled()
+    d.deleteLater()
+    w._mount_site = None
+
+
+# ── Feedback of 21/11/2026 night: FFT ────────────────────────────────────
+
+def test_quantised_declination_keeps_its_spectrum():
+    """DEC read in 0.1" units: the median step was 0, every move was taken
+    for a dither and removed, and the DEC spectrum came out flat."""
+    from src.core.spectrum import spectrum
+    t = np.arange(4000) * 1.0
+    v = np.round(0.3 * np.sin(2 * np.pi * t / 480) / 0.1) * 0.1
+    v[2000:] += 5.0                                   # one dither
+    f, a = spectrum(t, v)
+    i = int(np.argmax(a))
+    assert abs(1 / f[i] - 480) < 15 and 0.25 < a[i] < 0.4
+
+
+def test_fft_seismic_on_its_own_scale_and_reset(qtbot=None):
+    from PyQt6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from src.gui.fft_window import FFTWindow
+    w = FFTWindow()
+    f = np.linspace(0.001, 0.5, 500)
+    fs = np.linspace(0.01, 10, 500)
+    w.update_fft(ra_freqs=f, ra_mags=np.full(500, 0.05), dec_freqs=f,
+                 dec_mags=np.full(500, 0.02), sei_freqs=fs, sei_mags=np.full(500, 300.0))
+    main_vb = w._freq_plot.getViewBox()
+    assert w._freq_seismic.getViewBox() is not main_vb       # own scale
+    full = main_vb.viewRange()[0]
+    assert 0.49 < full[1] < 0.6                                # RA/DEC span
+    w._zoom_in(); w._shift_right()
+    assert main_vb.viewRange()[0] != full
+    w._reset_view()
+    assert np.allclose(main_vb.viewRange()[0], full)
+    w.deleteLater()
