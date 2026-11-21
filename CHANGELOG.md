@@ -6,6 +6,29 @@ behaviour changes, the patch number when only a defect is fixed.
 
 Figures quoted below were measured on real sessions, not estimated.
 
+## 4.4.3 — 2026-11-21
+
+Nicolàs de Hilster's test of 4.4.2: the alert works; three follow-ups.
+
+### Added
+- **Mount preference list checked again** (`:PRlist#`, as MountMonitor 3):
+  follow object off, tracking correction 0.000 %, tracking speed as expected.
+  Sequence confirmed on a GM3000HPS: `:PRclr#` (one character, no '#') then
+  `:PRlist#` chunk after chunk until the "c" end mark ("x" = more to come).
+  Any wrong value joins the single alert window.
+- **The alert comes to the user's virtual desktop** (Windows 10/11): it is
+  moved to the desktop the user is working on (documented
+  IVirtualDesktopManager interface); if that is not possible, it is forced to
+  the foreground and Windows switches to MountMonitor's desktop.
+
+### Fixed
+- **"Mount parked: tracking checks skipped" one second after "Mount is
+  tracking"**: right after connecting, the window's copy of the status was
+  still unknown. The status is now read together with the checks, and the
+  message says "not tracking" rather than "parked".
+- The post-slew check in the polling thread duplicated the window's own
+  check; removed.
+
 ## 4.4.2 — 2026-11-20
 
 Nicolàs de Hilster's test of 4.4.1 on his 10Micron GM3000HPS (firmware 3.2.5):

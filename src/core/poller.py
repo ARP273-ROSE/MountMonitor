@@ -200,8 +200,10 @@ class MountPoller(QThread):
                             continue
                         else:
                             self._slew_delay_active = False
-                            # After slew: check mount settings (like Java)
-                            self._check_mount_settings_after_slew()
+                            # The mount settings are checked after the slew by
+                            # the window (MainWindow._run_mount_checks), which
+                            # also raises the alert; a second check here only
+                            # duplicated the history lines.
 
                     # Skip if only logging tracking and mount isn't tracking
                     if self._log_tracking_only and sample.status != MountStatus.TRACKING:
@@ -388,25 +390,6 @@ class MountPoller(QThread):
             )
         except Exception as e:
             logger.error(f"Failed to retrieve mount info: {e}")
-
-    def _check_mount_settings_after_slew(self):
-        """Check mount settings after slew ends (like Java checkMountSettings)."""
-        try:
-            warnings = self._connection.check_mount_settings()
-            if warnings is None:          # check not available on this mount
-                return
-            for warning in warnings:
-                self.log_message.emit(f'{T("poller_wrong_setup")}: {warning}')
-                logger.warning(f"Mount settings issue: {warning}")
-            if not warnings:
-                # This message used to say "Logging started." — inherited
-                # from the Java version, it does not describe a recording
-                # start but the result of the checks after a slew. It came
-                # back on every slew and made it look as if the session kept
-                # restarting.
-                self.log_message.emit(T("poller_checks_ok"))
-        except Exception as e:
-            logger.debug(f"Mount settings check failed: {e}")
 
     def stop(self) -> bool:
         """Stop the polling loop; True once the thread has ended.
