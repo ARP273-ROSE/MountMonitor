@@ -6,6 +6,27 @@ behaviour changes, the patch number when only a defect is fixed.
 
 Figures quoted below were measured on real sessions, not estimated.
 
+## 4.4.4 — 2026-11-21
+
+Nicolàs de Hilster's test of 4.4.3 (the alert now pops up on the desktop the
+user is looking at).
+
+### Changed
+- **First departure from MountMonitor 3 -- Follow object allowed when the
+  expected rate is not sidereal**: following the Sun or a planet is precisely
+  what Follow object is for; with "solar" or "lunar" expected it is reported
+  as allowed, and remains an error only when sidereal is expected.
+- **Mount checked as soon as the preferences are accepted**, as MM3 does,
+  with the new expectations.
+- **History marker**: every check writes "### MOUNT SETTINGS CHECK ###" at
+  the head of its results, so the block is easy to find. Checks at
+  connection, after a slew and after the preferences always print their
+  results; the periodic one only when something changed.
+- **"King" removed from the expected tracking rates**: the King rate
+  (sidereal corrected for refraction) comes from the ASCOM standard and is
+  not offered by a 10Micron. The list now follows the mount: sidereal, solar,
+  lunar. Settings file version 2 turns a saved "king" into sidereal.
+
 ## 4.4.3 — 2026-11-21
 
 Nicolàs de Hilster's test of 4.4.2: the alert works; three follow-ups.

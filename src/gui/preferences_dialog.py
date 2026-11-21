@@ -556,9 +556,13 @@ class PreferencesDialog(QDialog):
 
         self._tracking_rate_value = QComboBox()
         # translated label, LX200 value as data (that is what gets saved)
-        for value in ("sidereal", "lunar", "solar", "king"):
+        # The rates a 10Micron offers, in its own order (:PRlist# "Tracking
+        # speed": Sidereal, Solar, Lunar). "King" -- the King rate, sidereal
+        # corrected for refraction, from the ASCOM standard -- is not one of
+        # them and was dropped (settings v2 turn it into sidereal).
+        for value in ("sidereal", "solar", "lunar"):
             self._tracking_rate_value.addItem(T(f"val_{value}"), value)
-        rate_val_map = {"sidereal": 0, "lunar": 1, "solar": 2, "king": 3}
+        rate_val_map = {"sidereal": 0, "solar": 1, "lunar": 2}
         self._tracking_rate_value.setCurrentIndex(
             rate_val_map.get(self._settings.get("check_tracking_rate_value"), 0)
         )

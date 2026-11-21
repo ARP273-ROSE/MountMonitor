@@ -2081,6 +2081,10 @@ class MainWindow(QMainWindow):
         dialog = PreferencesDialog(self._settings, self)
         if dialog.exec():
             self._apply_settings()
+            # Check the mount at once with the new expectations, as
+            # MountMonitor 3 does, rather than at the next slew or period.
+            if self._connected:
+                self._run_mount_checks(force=True)
             # The language combo also lives in Preferences. Changing it there
             # must say the same thing as the Language menu, otherwise it is
             # again an option that appears to do nothing.
@@ -2179,7 +2183,7 @@ class MainWindow(QMainWindow):
         connection and after a slew: a setting changed on the keypad in the
         middle of a target went unnoticed until the next slew."""
         if self._connected and self._connection:
-            self._run_mount_checks()
+            self._run_mount_checks(force=False)
 
     def _arm_periodic_check(self):
         minutes = float(self._settings.get("mount_check_interval_min") or 0)
@@ -2192,7 +2196,7 @@ class MainWindow(QMainWindow):
         else:
             t.stop()
 
-    def _run_mount_checks(self):
+    def _run_mount_checks(self, force: bool = True):
         """Run mount setting checks based on preferences.
 
         Checks refraction, tracking rate, GPS sync as configured in
@@ -2238,9 +2242,9 @@ class MainWindow(QMainWindow):
             return r
 
         self._mount_request(read, lambda r: self._judge_checks(
-            r or {}, (r or {}).get("tracking", tracking_gui)))
+            r or {}, (r or {}).get("tracking", tracking_gui), force))
 
-    def _judge_checks(self, r: dict, tracking_now: bool):
+    def _judge_checks(self, r: dict, tracking_now: bool, force: bool = True):
         warnings = []
         ok_checks = []
 
@@ -2305,12 +2309,19 @@ class MainWindow(QMainWindow):
         # Mount preference list (:PRlist#): follow object off, tracking
         # correction 0.000 %, tracking speed Sidereal.
         prefs = r.get("prefs") if tracking_now else None
+        expected = (self._settings.get("check_tracking_rate_value") or "sidereal").lower()
         if prefs and self._settings.get("check_tracking_rate"):
             if "follow_object" in prefs:
-                if prefs["follow_object"]:
-                    warnings.append(T("chk_follow_ko"))
-                else:
+                if not prefs["follow_object"]:
                     ok_checks.append(T("chk_follow_ok") + " \u2713")
+                elif expected != "sidereal":
+                    # First departure from MountMonitor 3: Follow object is
+                    # how the mount tracks the Sun or a planet. Expected only
+                    # with a sidereal rate; with solar or lunar it is allowed.
+                    ok_checks.append(T("chk_follow_allowed").format(e=T(f"val_{expected}"))
+                                     + " \u2713")
+                else:
+                    warnings.append(T("chk_follow_ko"))
             corr = prefs.get("tracking_correction")
             if corr is not None:
                 try:
@@ -2322,7 +2333,6 @@ class MainWindow(QMainWindow):
                 else:
                     warnings.append(T("chk_corr_ko").format(v=corr))
             speed = prefs.get("tracking_speed")
-            expected = (self._settings.get("check_tracking_rate_value") or "sidereal").lower()
             if speed is not None and speed.lower() != expected \
                     and not any(T(f"val_{speed.lower()}") in w for w in warnings):
                 warnings.append(T("chk_speed_ko").format(a=speed, e=T(f"val_{expected}")))
@@ -2332,7 +2342,7 @@ class MainWindow(QMainWindow):
         summary = (tuple(ok_checks), tuple(warnings))
         changed = summary != getattr(self, '_last_checks_summary', None)
         self._last_checks_summary = summary
-        if changed:
+        if (changed or force) and (ok_checks or warnings):
             for msg in ok_checks:
                 self._status_panel.add_message(msg, Colors.STATUS_OK)
                 if self._logging_active:
@@ -2341,6 +2351,9 @@ class MainWindow(QMainWindow):
                 self._status_panel.add_message(f"\u26a0 {msg}", Colors.STATUS_WARNING)
                 if self._logging_active:
                     self._file_logger.log_event(f"Check WARNING: {msg}")
+            # Marker written last: the history shows the newest line on top,
+            # so it heads the block of results (suggestion of N. de Hilster).
+            self._status_panel.add_message(T("chk_header"), Colors.TEXT_SECONDARY)
         if warnings:
             self._mount_alert(warnings)
         else:
