@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 # an older MountMonitor is then converted once at load, instead of silently
 # keeping a value whose meaning changed. Files written before 4.4.3 carry no
 # number and count as version 0.
-SETTINGS_VERSION = 1
+SETTINGS_VERSION = 2
 VERSION_KEY = "settings_version"
 
 
@@ -27,8 +27,15 @@ def _v0_to_v1(data: dict) -> None:
     data.pop("tolerance_as_ha_seconds", None)
 
 
+def _v1_to_v2(data: dict) -> None:
+    """4.4.4: "king" left the expected tracking rates (a 10Micron offers
+    sidereal, solar and lunar only)."""
+    if str(data.get("check_tracking_rate_value", "")).lower() == "king":
+        data["check_tracking_rate_value"] = "sidereal"
+
+
 # _MIGRATIONS[n] turns a version-n file into a version n+1 one, in place.
-_MIGRATIONS = {0: _v0_to_v1}
+_MIGRATIONS = {0: _v0_to_v1, 1: _v1_to_v2}
 
 
 def migrate(data: dict) -> dict:

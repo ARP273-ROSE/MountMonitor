@@ -262,7 +262,7 @@ def test_rate_alert_once_and_history_without_repeats(window, monkeypatch):
     msgs = []
     w._status_panel.add_message = lambda m, c=None: msgs.append(m)
     for _ in range(3):                                  # periodic check
-        w._judge_checks({"rate": "60.3"}, True)
+        w._judge_checks({"rate": "60.3"}, True, force=False)
     assert sum(T("val_solar") in m for m in msgs) == 1  # one line, not three
     box = w._alert_box
     assert box.isVisible() and T("val_solar") in box.text()
@@ -458,3 +458,47 @@ def test_preference_warnings_reach_the_alert(window, monkeypatch):
 def test_virtual_desktop_helpers_are_harmless_off_windows():
     from src.utils import win_desktop
     assert win_desktop.bring_alert_to_user(12345) == ""
+
+
+# ── Feedback of 21/11/2026 midday ────────────────────────────────────────
+
+def test_follow_object_allowed_when_rate_is_not_sidereal(window, monkeypatch):
+    from src.utils.i18n import T
+    w = window
+    vals = {"check_tracking_rate": True, "check_tracking_rate_value": "solar",
+            "check_refraction_status": False, "check_refraction_enabled": False,
+            "check_gps_sync": False, "check_dual_tracking": False, "mount_alert_popup": True}
+    orig = w._settings.get
+    monkeypatch.setattr(w._settings, "get", lambda k: vals.get(k, orig(k)))
+    monkeypatch.setattr("src.utils.win_desktop.bring_alert_to_user", lambda h: "")
+    msgs = []
+    w._status_panel.add_message = lambda m, c=None: msgs.append(m)
+    prefs = {"follow_object": True, "tracking_correction": "0.000", "tracking_speed": "Solar"}
+    w._judge_checks({"rate": "60.3", "prefs": prefs}, True)
+    assert not any("⚠" in m for m in msgs)            # no warning in solar
+    assert msgs[-1] == T("chk_header")                      # marker heads the block
+    vals["check_tracking_rate_value"] = "sidereal"
+    w._judge_checks({"rate": "60.2", "prefs": dict(prefs, tracking_speed="Sidereal")}, True)
+    assert any(T("chk_follow_ko") in m for m in msgs)       # sidereal: still an error
+
+
+def test_king_rate_gone_and_migrated():
+    from src.config import settings as st
+    d = st.migrate({"settings_version": 1, "check_tracking_rate_value": "king"})
+    assert d["check_tracking_rate_value"] == "sidereal"
+    assert d["settings_version"] == st.SETTINGS_VERSION
+
+
+def test_preferences_accepted_trigger_a_check(window, monkeypatch):
+    w = window
+    calls = []
+    monkeypatch.setattr(w, "_run_mount_checks", lambda force=True: calls.append(force))
+    monkeypatch.setattr(w, "_apply_settings", lambda: None)
+    w._connected = True
+
+    class Dialog:
+        def __init__(self, *a): pass
+        def exec(self): return True
+    monkeypatch.setattr("src.gui.main_window.PreferencesDialog", Dialog)
+    w._show_preferences()
+    assert calls == [True]
