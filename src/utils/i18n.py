@@ -129,13 +129,13 @@ TX = {
         "fr": "Suivi d'objet, correction et vitesse de suivi non vérifiés : le pilote ASCOM refuse :PRlist# (autoriser les « unchecked raw commands » dans la configuration du pilote 10Micron, ou se connecter en LX200 TCP/IP)",
         "nl": "Object volgen, volgcorrectie en -snelheid niet gecontroleerd: de ASCOM-driver weigert :PRlist# (sta \"unchecked raw commands\" toe in de instellingen van de 10Micron-driver, of verbind via LX200 TCP/IP)"},
     "env_none": {"en": "Air: not read yet", "fr": "Air : pas encore lu", "nl": "Lucht: nog niet gelezen"},
-    "env_inside": {"en": "mount elec.", "fr": "élec. monture", "nl": "elektr. montering"},
+    "env_inside": {"en": "RA driver", "fr": "driver AD", "nl": "RA-driver"},
     "env_flip": {"en": "flip", "fr": "flip", "nl": "flip"},
     "env_updated": {"en": "Read at {t}", "fr": "Lu à {t}", "nl": "Gelezen om {t}"},
     "tt_env": {
-        "en": "Read from the mount every 30 s: outside temperature and pressure (those used by the refraction correction, pushed by a weather station or a script), temperature of the mount's internal sensor 1 (:GTMP1#, in its electronics, so warmer than the air), time to the meridian flip. The arrow shows the direction of the last change.",
-        "fr": "Lu sur la monture toutes les 30 s : température et pression extérieures (celles qu'utilise la correction de réfraction, poussées par une station météo ou un script), température du capteur interne n° 1 de la monture (:GTMP1#, dans son électronique, donc plus chaude que l'air), temps avant le retournement. La flèche indique le sens du dernier changement.",
-        "nl": "Elke 30 s van de montering gelezen: buitentemperatuur en luchtdruk (die de refractiecorrectie gebruikt, aangeleverd door een weerstation of een script), temperatuur van interne sensor 1 van de montering (:GTMP1#, in de elektronica, dus warmer dan de lucht), tijd tot de meridiaanomslag. De pijl toont de richting van de laatste verandering."},
+        "en": "Read from the mount every 30 s: outside temperature and pressure (those used by the refraction correction, pushed by a weather station or a script), temperature of the right ascension motor driver (:GTMP1#, warmer than the air), time to the meridian flip. The arrow shows the direction of the last change.",
+        "fr": "Lu sur la monture toutes les 30 s : température et pression extérieures (celles qu'utilise la correction de réfraction, poussées par une station météo ou un script), température du driver du moteur d'ascension droite (:GTMP1#, plus chaude que l'air), temps avant le retournement. La flèche indique le sens du dernier changement.",
+        "nl": "Elke 30 s van de montering gelezen: buitentemperatuur en luchtdruk (die de refractiecorrectie gebruikt, aangeleverd door een weerstation of een script), temperatuur van de motordriver van de rechte klimming (:GTMP1#, warmer dan de lucht), tijd tot de meridiaanomslag. De pijl toont de richting van de laatste verandering."},
     "tt_dev_not_tracking": {
         "en": "The mount is not tracking (parked, idle or slewing): its right ascension drifts with the sky, so the deviation is not judged against the tolerance.",
         "fr": "La monture ne suit pas (parquée, à l'arrêt ou en pointage) : son ascension droite défile avec le ciel, l'écart n'est donc pas comparé à la tolérance.",

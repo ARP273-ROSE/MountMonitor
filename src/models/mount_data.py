@@ -97,7 +97,7 @@ class EnvironmentSample:
     timestamp: datetime = field(default_factory=datetime.now)
     temperature_ext: Optional[float] = None      # External temperature (°C) from :GRTMP#
     pressure: Optional[float] = None              # Barometric pressure (mbar) from :GRPRS#
-    temperature_int: Optional[float] = None       # Internal mount temperature (°C) from :GTMP1#
+    temperature_int: Optional[float] = None       # RA motor driver temperature (°C), :GTMP1#
     mount_status_code: Optional[int] = None       # Extended status code from :Gstat#
     tracking_rate: Optional[float] = None         # Tracking rate multiplier from :GT#
     meridian_flip_minutes: Optional[float] = None  # Minutes until meridian flip from :Gmte#

@@ -24,13 +24,16 @@ ASCOM through the 10Micron driver 1.7.2 shared with NINA; GUI of 4.4.11 and
 - (done) 4.4.13-4.4.15 checked on the real PC at 4K/200 %: line thickness, spin-box and drop-down arrows, Help > Manual opens; the installed manual_fr.pdf is byte-identical (1 231 245 bytes) to the one checked here for orphan headings.
 - A full night of real tracking in ASCOM since 4.4.7 (curves, night report,
   6 s preference read every 5 min).
-- What the :GTMP1# sensor measures (labelled "mount electronics"; question
-  sent to the MM3 author).
 
 **Next steps:**
-1. Send the recap mail to the MM3 author (4.4.5 -> 4.4.15, question on :GTMP1#): written, sent by the maintainer.
+1. (done) Recap mail sent to the MM3 author; answer received 22/11: :GTMP1# = RA motor driver
+   (protocol 3.2.5 p. 21; 9 = electronics box, special mounts only).
 2. After a real night: night report (FFT section now present), air gauge.
-3. Answer about :GTMP1# -> label `env_inside` and manuals.
+3. (done in the working tree, not released) `env_inside` = "RA driver" in EN/FR/NL, help text
+   and the three manuals; screenshots still show the old label -> rerun captures before the release.
+3b. MM3 author's point on ASCOM: never send non-ASCOM (LX200) commands to an ASCOM driver;
+   MM3 keeps an LX200 -> ASCOM table and skips rows without an ASCOM equivalent. Today
+   ascom_connection sends raw :GRTMP#, :GaXa#, :PRlist#... to ANY driver. Decision pending.
 4. Screenshots: `QT_QPA_PLATFORM=offscreen MM_CAPTURE_RUN_S=150 python -B
    docs/manuel/captures.py`, then `python docs/manuel/compiler.py`.
 5. Pre-existing: `check_subprocesses.py` flags `reporting.py:218` (kit file).

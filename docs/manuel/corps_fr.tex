@@ -594,8 +594,8 @@ brute, en blanc la vitesse moyennée, en blanc vif la droite de régression.
   (voir section~\ref{sec:conn}).
   \item \textbf{Air} : température et pression extérieures lues sur la monture
   toutes les 30~s --- celles qu'elle utilise pour la réfraction, quelle que soit
-  leur source (station météo, script) ---, température de son électronique
-  (plus chaude que l'air) et temps avant le retournement au méridien. Une
+  leur source (station météo, script) ---, température du driver du moteur
+  d'ascension droite (plus chaude que l'air) et temps avant le retournement au méridien. Une
   flèche indique le sens du dernier changement.
 \end{itemize}
 
@@ -923,7 +923,7 @@ c'est souvent la lecture qui est fausse, pas la monture. \\
 format que MountMonitor~3. \\
 \texttt{.dti} & Les mesures d'horloge PC / monture / NTP. \\
 \texttt{.fft} & Les spectres enregistrés en cours de session. \\
-\texttt{.env} & Température, pression, température de l'électronique. \\
+\texttt{.env} & Température, pression, température du driver du moteur AD. \\
 \texttt{.log} & Les événements : connexions, pointages, alertes,
 suspensions. \\
 \texttt{-rapport-fr.txt} (en, nl) & Le rapport de nuit, une version par
