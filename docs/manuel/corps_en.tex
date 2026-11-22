@@ -628,6 +628,10 @@ IP address, port & For LX200 TCP/IP. \\
 Serial port, baud rate & For LX200 serial; the rate must be the one set in the
 mount. \\
 ASCOM driver & The driver picked with \emph{Select\ldots} (ASCOM Chooser). \\
+10Micron commands through the ASCOM driver & Unticked (default): pure ASCOM,
+only standard ASCOM properties are read, as in MM3; any ASCOM mount will do.
+Ticked, and only with the 10Micron driver: temperature, pressure, axis angles,
+alignment model and the preference list are read as well. \\
 Unattended operation & See section~\ref{sec:unattended}. \\
 Graph:textbox ratio & Share of the height given to the graphs. \\
 Rounded curves & RA and DEC curves rounded without going beyond the samples
@@ -648,7 +652,8 @@ the port for itself, and one of the two programs would fail. Over the network
 (LX200 TCP/IP) a 10Micron accepts several clients at once.
 \end{warning}
 
-The 10Micron ASCOM driver 1.7 has two particularities. It refuses the mount's
+With the 10Micron ASCOM driver 1.7 and \emph{10Micron commands through the
+ASCOM driver} ticked, two particularities. The driver refuses the mount's
 preference list (\texttt{:PRlist\#}) unless \emph{unchecked raw commands} are
 allowed in its setup: until then follow object, tracking correction and
 tracking speed are not checked, and the history says so. It also serves

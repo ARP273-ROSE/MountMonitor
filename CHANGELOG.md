@@ -6,6 +6,26 @@ behaviour changes, the patch number when only a defect is fixed.
 
 Figures quoted below were measured on real sessions, not estimated.
 
+## 4.5.0 — 2026-11-22
+
+### Changed
+- ASCOM is now pure ASCOM by default, as in MM3: only standard ASCOM
+  properties are read and no LX200 command is ever sent to the driver, so any
+  ASCOM mount (iOptron, Sky-Watcher, Celestron...) can be used safely. The
+  refraction setting comes from `DoesRefraction`. A new preference,
+  "10Micron commands through the ASCOM driver" (off by default, honoured only
+  for the 10Micron driver), brings back temperature, pressure, axis angles,
+  alignment model and the mount preference list in ASCOM.
+- `:GTMP1#` is labelled as the right ascension motor driver temperature
+  ("RA driver"), as the 10Micron command protocol 3.2.5 defines it.
+
+### Fixed
+- The alignment model (`:getain#`) was never shown: the reply was read as
+  "stars,RMS,polar error" while the mount sends nine fields (RA axis azimuth
+  and altitude, polar error, position angle, orthogonality, knob turns,
+  number of model TERMS, RMS). It is now read as the protocol describes it,
+  "E" fields included; the report says "Model terms".
+
 ## 4.4.15 — 2026-11-22
 
 ### Fixed

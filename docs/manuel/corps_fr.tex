@@ -652,6 +652,11 @@ Port série, débit & Pour LX200 série ; le débit doit être celui réglé dan
 monture. \\
 Pilote ASCOM & Le pilote choisi avec \emph{Sélectionner\ldots} (sélecteur
 ASCOM). \\
+Commandes 10Micron via le pilote ASCOM & Décoché (par défaut) : ASCOM pur,
+seules les propriétés ASCOM standard sont lues, comme dans MM3 ; toute monture
+ASCOM convient. Coché, et seulement avec le pilote 10Micron : température,
+pression, angles des axes, modèle d'alignement et liste des préférences sont
+aussi lus. \\
 Fonctionnement sans surveillance & Voir la section~\ref{sec:unattended}. \\
 Ratio graphe:texte & Part de la hauteur donnée aux graphes. \\
 Courbes arrondies & Courbes AD et DÉC arrondies sans dépasser les mesures
@@ -672,7 +677,8 @@ port pour lui seul, et l'un des deux programmes échouerait. En réseau
 (LX200 TCP/IP), une 10Micron accepte plusieurs clients à la fois.
 \end{warning}
 
-Avec le pilote ASCOM 10Micron 1.7, deux particularités. Il refuse la liste des
+Avec le pilote ASCOM 10Micron 1.7 et l'option \emph{Commandes 10Micron via le
+pilote ASCOM} cochée, deux particularités. Il refuse la liste des
 préférences de la monture (\texttt{:PRlist\#}) tant que les \emph{unchecked
 raw commands} ne sont pas autorisées dans sa configuration : d'ici là, suivi
 d'objet, correction et vitesse de suivi ne sont pas vérifiés, et l'historique

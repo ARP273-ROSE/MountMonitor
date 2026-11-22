@@ -601,7 +601,9 @@ class MainWindow(QMainWindow):
                     return
                 self._settings.set("ascom_driver", driver_id)
                 self._settings.save()
-            self._connection = ASCOMConnection(driver_id=driver_id)
+            self._connection = ASCOMConnection(
+                driver_id=driver_id,
+                tenmicron_commands=bool(self._settings.get("ascom_10micron_commands")))
         else:
             self._status_panel.add_message(
                 f"{T('protocol_not_impl')}: {protocol}", Colors.STATUS_ERROR
@@ -2284,6 +2286,7 @@ class MainWindow(QMainWindow):
                 # mount's preference list, as MountMonitor 3 does.
                 r["prefs"] = c.check_mount_settings()
                 r["prefs_refused"] = bool(getattr(c, "preferences_refused", False))
+                r["prefs_pure_ascom"] = bool(getattr(c, "preferences_pure_ascom", False))
             if cfg["check_gps_sync"]:
                 r["gps"] = c.is_gps_synced()
             if cfg["check_dual_tracking"]:
@@ -2381,6 +2384,8 @@ class MainWindow(QMainWindow):
         if not prefs and r.get("prefs_refused") and tracking_now:
             # Said once per check, as information: not a wrong setting.
             ok_checks.append(T("chk_prefs_refused"))
+        elif not prefs and r.get("prefs_pure_ascom") and tracking_now:
+            ok_checks.append(T("chk_prefs_pure_ascom"))
         if prefs and self._settings.get("check_tracking_rate"):
             if "follow_object" in prefs:
                 if not prefs["follow_object"]:

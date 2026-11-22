@@ -657,6 +657,7 @@ def _ascom(driver):
     from src.core.ascom_connection import ASCOMConnection
     c = ASCOMConnection.__new__(ASCOMConnection)
     c._telescope, c._connected = driver, True
+    c.tenmicron_commands = True        # option "10Micron commands through the ASCOM driver"
     return c
 
 
@@ -828,3 +829,34 @@ def test_graph_greyed_when_not_tracking(window):
     assert g._data_curve.opts['pen'].color().name() != g._data_color.name()
     g.set_tracking(True)
     assert g._data_curve.opts['pen'].color().name() == g._data_color.name()
+
+
+class _AnyAscomDriver:
+    """An ASCOM driver of another make: CommandString must never be called."""
+    DoesRefraction = True
+    Name = "Some Mount"
+    DriverVersion = "6.6"
+
+    def CommandString(self, cmd, raw):
+        raise AssertionError(f"LX200 command sent to an ASCOM driver: {cmd}")
+
+    def CommandBool(self, cmd, raw):
+        raise AssertionError(f"LX200 command sent to an ASCOM driver: {cmd}")
+
+
+def test_pure_ascom_by_default_sends_no_lx200_command():
+    from src.core.ascom_connection import ASCOMConnection, is_tenmicron_driver
+    c = _ascom(_AnyAscomDriver())
+    c.tenmicron_commands = False
+    c._warned_properties = set()
+    assert c.is_refraction_enabled() is True           # DoesRefraction, as MM3
+    assert c.get_refraction_mode() is None and c.is_dual_tracking_enabled() is None
+    assert c.check_mount_settings() is None and c.preferences_pure_ascom
+    assert c.get_product_name() == "Some Mount"
+    env = c.get_environment()
+    assert env.temperature_ext is None and env.alignment_rms is None
+    # the option is honoured only for the 10Micron driver
+    assert ASCOMConnection("ASCOM.Celestron.Telescope", tenmicron_commands=True).tenmicron_commands is False
+    assert ASCOMConnection("ASCOM.tenmicron_mount.Telescope", tenmicron_commands=True).tenmicron_commands
+    assert ASCOMConnection("ASCOM.tenmicron_mount.Telescope").tenmicron_commands is False
+    assert is_tenmicron_driver("ASCOM.10micron.Telescope")

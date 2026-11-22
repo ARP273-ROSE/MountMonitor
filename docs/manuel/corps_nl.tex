@@ -653,6 +653,11 @@ Seriële poort, baudrate & Voor LX200 serieel; de snelheid moet die van de
 montering zijn. \\
 ASCOM-driver & Het stuurprogramma gekozen met \emph{Selecteren\ldots}
 (ASCOM Chooser). \\
+10Micron-commando's via de ASCOM-driver & Uit (standaard): zuiver ASCOM, alleen
+standaard ASCOM-eigenschappen worden gelezen, zoals in MM3; elke
+ASCOM-montering voldoet. Aan, en alleen met het 10Micron-stuurprogramma:
+temperatuur, luchtdruk, ashoeken, uitlijnmodel en de voorkeurenlijst worden
+ook gelezen. \\
 Onbemande werking & Zie paragraaf~\ref{sec:unattended}. \\
 Verhouding grafiek:tekst & Deel van de hoogte voor de grafieken. \\
 Afgeronde curven & RK- en DEC-curven afgerond zonder voorbij de metingen te
@@ -674,7 +679,8 @@ zou falen. Via het netwerk (LX200 TCP/IP) aanvaardt een 10Micron meerdere
 clients tegelijk.
 \end{warning}
 
-Het 10Micron-stuurprogramma 1.7 voor ASCOM heeft twee eigenaardigheden. Het
+Met het 10Micron-stuurprogramma 1.7 voor ASCOM en \emph{10Micron-commando's via
+de ASCOM-driver} aangevinkt, twee eigenaardigheden. Het
 weigert de voorkeurenlijst van de montering (\texttt{:PRlist\#}) zolang
 \emph{unchecked raw commands} niet zijn toegestaan in zijn instellingen: tot dan
 worden object volgen, volgcorrectie en volgsnelheid niet gecontroleerd, en de

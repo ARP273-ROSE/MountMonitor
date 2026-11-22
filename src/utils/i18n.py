@@ -124,6 +124,18 @@ TX = {
                      "nl": "Horizontale schaal en positie herstellen"},
     "fft_seismic_axis": {"en": "Seismic (ADC counts)", "fr": "Sismique (coups ADC)",
                          "nl": "Seismisch (ADC-tellingen)"},
+    "chk_prefs_pure_ascom": {
+        "en": "Follow object, tracking correction and speed not checked: no ASCOM equivalent (pure ASCOM; tick \"10Micron commands through the ASCOM driver\" in Preferences, or connect in LX200 TCP/IP)",
+        "fr": "Suivi d'objet, correction et vitesse de suivi non vérifiés : pas d'équivalent ASCOM (ASCOM pur ; cocher « Commandes 10Micron via le pilote ASCOM » dans les Préférences, ou se connecter en LX200 TCP/IP)",
+        "nl": "Object volgen, volgcorrectie en -snelheid niet gecontroleerd: geen ASCOM-equivalent (zuiver ASCOM; vink \"10Micron-commando's via de ASCOM-driver\" aan in Voorkeuren, of verbind via LX200 TCP/IP)"},
+    "pref_ascom_10micron": {
+        "en": "10Micron commands through the ASCOM driver",
+        "fr": "Commandes 10Micron via le pilote ASCOM",
+        "nl": "10Micron-commando's via de ASCOM-driver"},
+    "tt_ascom_10micron": {
+        "en": "Off (default): pure ASCOM, only standard ASCOM properties are read, so any ASCOM mount can be used safely; temperature, pressure, axis angles, alignment model and the mount preference list are then not read. On: those 10Micron commands are sent through the driver (CommandString), only if the driver is the 10Micron one; the driver may still refuse some unless \"unchecked raw commands\" is allowed in its setup.",
+        "fr": "Décoché (par défaut) : ASCOM pur, seules les propriétés ASCOM standard sont lues, ce qui convient à toute monture ASCOM sans risque ; température, pression, angles des axes, modèle d'alignement et liste des préférences de la monture ne sont alors pas lus. Coché : ces commandes 10Micron passent par le pilote (CommandString), seulement si c'est le pilote 10Micron ; il peut encore en refuser certaines si les « unchecked raw commands » ne sont pas autorisées dans sa configuration.",
+        "nl": "Uit (standaard): zuiver ASCOM, alleen standaard ASCOM-eigenschappen worden gelezen, zodat elke ASCOM-montering veilig gebruikt kan worden; temperatuur, luchtdruk, ashoeken, uitlijnmodel en de voorkeurenlijst van de montering worden dan niet gelezen. Aan: deze 10Micron-commando's gaan via de driver (CommandString), alleen als het de 10Micron-driver is; de driver kan er nog enkele weigeren als \"unchecked raw commands\" niet is toegestaan in zijn instellingen."},
     "chk_prefs_refused": {
         "en": "Follow object, tracking correction and speed not checked: the ASCOM driver refuses :PRlist# (allow \"unchecked raw commands\" in the 10Micron driver setup, or connect in LX200 TCP/IP)",
         "fr": "Suivi d'objet, correction et vitesse de suivi non vérifiés : le pilote ASCOM refuse :PRlist# (autoriser les « unchecked raw commands » dans la configuration du pilote 10Micron, ou se connecter en LX200 TCP/IP)",

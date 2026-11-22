@@ -12,6 +12,10 @@ DEFAULTS = {
     # in its menu, and the link then stays silent until both ends agree.
     "serial_baudrate": 9600,
     "ascom_driver": "",
+    # 10Micron LX200 commands through the ASCOM driver (CommandString/CommandBool).
+    # Off: pure ASCOM, as MM3 does, so that any ASCOM mount can be used
+    # safely; on: only accepted when the driver is the 10Micron one.
+    "ascom_10micron_commands": False,
     "language": "auto",  # auto, fr, en
 
     # Processing

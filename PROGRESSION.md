@@ -2,7 +2,9 @@
 
 ## Resume note (2026-11-22, evening)
 
-**State:** master = tag **v4.4.15** (release workflow: signed updates,
+**State:** master = tag **v4.5.0** (22/11 afternoon: pure ASCOM by default + option
+"10Micron commands through the ASCOM driver", :GTMP1# = RA driver, :getain# fixed).
+Before that: tag v4.4.15 (release workflow: signed updates,
 release_unique keeps only the latest Release). Code, comments and commits in
 English; user texts trilingual (EN/FR/NL) in `src/utils/i18n.py` and
 `src/gui/report_texts.py`.
@@ -29,24 +31,26 @@ ASCOM through the 10Micron driver 1.7.2 shared with NINA; GUI of 4.4.11 and
 1. (done) Recap mail sent to the MM3 author; answer received 22/11: :GTMP1# = RA motor driver
    (protocol 3.2.5 p. 21; 9 = electronics box, special mounts only).
 2. After a real night: night report (FFT section now present), air gauge.
-3. (done in the working tree, not released) `env_inside` = "RA driver" in EN/FR/NL, help text
+3. (released in 4.5.0) `env_inside` = "RA driver" in EN/FR/NL, help text
    and the three manuals; screenshots still show the old label -> rerun captures before the release.
-3a. (done, not released) :getain# read as protocol 3.2.5 p. 9 describes it
+3a. (released in 4.5.0) :getain# read as protocol 3.2.5 p. 9 describes it
    (`parse_getain`, tests/test_getain.py): polar error = field 3, model TERMS = field 8,
    RMS = field 9, "E" = not computed. The old code took the azimuth as a star count, so the
    int() failed and the alignment model was never shown. Label "Model terms".
    Protocol PDF kept privately (10Micron document, not for the public repo):
    in the private docs folder, 10Micron/ (pdf + pdftotext .txt). :PRclr#/:PRlist# are not in it.
    :Gmte# = time to tracking END (horizon or flip limit), not strictly the flip.
-3b. MM3 author's point on ASCOM: never send non-ASCOM (LX200) commands to an ASCOM driver;
-   MM3 keeps an LX200 -> ASCOM table and skips rows without an ASCOM equivalent. Today
-   ascom_connection sends raw :GRTMP#, :GaXa#, :PRlist#... to ANY driver. Decision pending.
-4. Screenshots: `QT_QPA_PLATFORM=offscreen MM_CAPTURE_RUN_S=150 python -B
+3b. (released in 4.5.0) MM3 author's point on ASCOM: never send LX200 commands to an ASCOM
+   driver. Now pure ASCOM by default (send_raw_* return None, DoesRefraction for :GREF#);
+   setting `ascom_10micron_commands` (off) re-enables them, only for a 10Micron driver id.
+   Not yet tried on real hardware in pure mode (expected: no temperature/pressure/axis/
+   alignment/preferences, history line "chk_prefs_pure_ascom").
+4. Screenshots (redone for 4.5.0): `QT_QPA_PLATFORM=offscreen MM_CAPTURE_RUN_S=150 python -B
    docs/manuel/captures.py`, then `python docs/manuel/compiler.py`.
 5. Pre-existing: `check_subprocesses.py` flags `reporting.py:218` (kit file).
 
 **How to work:**
-- Tests: `QT_QPA_PLATFORM=offscreen python -m pytest -q tests` (176 pass).
+- Tests: `QT_QPA_PLATFORM=offscreen python -m pytest -q tests` (180 pass).
 - Code must compile on Python 3.10 (the MM3 author runs from source).
 - Manuals: `cd docs/manuel && python compiler.py` (pdflatex), commit the
   three PDFs with the .tex.

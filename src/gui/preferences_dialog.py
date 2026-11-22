@@ -164,6 +164,10 @@ class PreferencesDialog(QDialog):
         ascom_row.addWidget(self._ascom_choose_btn)
         conn_form.addRow(T("pref_ascom_driver"), ascom_row)
         self._ascom_row = ascom_row
+        self._ascom_10micron = QCheckBox(T("pref_ascom_10micron"))
+        self._ascom_10micron.setToolTip(T("tt_ascom_10micron"))
+        self._ascom_10micron.setChecked(bool(self._settings.get("ascom_10micron_commands")))
+        conn_form.addRow("", self._ascom_10micron)
 
         layout.addWidget(conn_group)
 
@@ -645,6 +649,7 @@ class PreferencesDialog(QDialog):
         self._serial_baudrate.setEnabled(is_serial)
         self._ascom_driver.setEnabled(is_ascom)
         self._ascom_choose_btn.setEnabled(is_ascom)
+        self._ascom_10micron.setEnabled(is_ascom)
         # The row labels follow their field, so that what does not apply
         # to the chosen protocol is visibly out of play.
         for field, on in ((self._mount_ip, is_tcp), (self._mount_port, is_tcp),
@@ -686,6 +691,7 @@ class PreferencesDialog(QDialog):
         s.set("serial_port", self._serial_port.currentText())
         s.set("serial_baudrate", self._serial_baudrate.currentData())
         s.set("ascom_driver", self._ascom_driver.text())
+        s.set("ascom_10micron_commands", self._ascom_10micron.isChecked())
         s.set("graph_textbox_ratio", self._graph_ratio.value())
         s.set("smooth_curves", self._smooth_curves.isChecked())
         i = self._language.currentIndex()

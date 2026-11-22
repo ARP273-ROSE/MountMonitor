@@ -97,6 +97,12 @@ def _degrees_to_dms_lon(degrees: float) -> str:
     return f"{sign}{d:03d}*{m:02d}'{s:04.1f}"
 
 
+def is_tenmicron_driver(driver_id: str) -> bool:
+    """The 10Micron ASCOM driver (ASCOM.tenmicron_mount.Telescope, ...)."""
+    d = (driver_id or "").lower()
+    return "tenmicron" in d or "10micron" in d
+
+
 class ASCOMConnection(MountConnection):
     """ASCOM Telescope driver connection via Windows COM.
 
@@ -109,13 +115,17 @@ class ASCOMConnection(MountConnection):
     proper COM apartment threading (CoInitialize/CoUninitialize).
     """
 
-    def __init__(self, driver_id: str = "ASCOM.tenmicron_mount.Telescope"):
+    def __init__(self, driver_id: str = "ASCOM.tenmicron_mount.Telescope",
+                 tenmicron_commands: bool = False):
         """Initialize ASCOM connection.
 
         Args:
             driver_id: ASCOM driver ProgID (e.g. "ASCOM.tenmicron_mount.Telescope")
+            tenmicron_commands: allow 10Micron LX200 commands through the
+                driver (honoured only for the 10Micron driver)
         """
         super().__init__()
+        self.tenmicron_commands = bool(tenmicron_commands) and is_tenmicron_driver(driver_id)
         self._driver_id = driver_id
         self._protocol = ConnectionProtocol.ASCOM
         self._telescope = None  # COM object
@@ -466,8 +476,11 @@ class ASCOMConnection(MountConnection):
         Not all ASCOM drivers support this. Returns None if unavailable.
         For 10Micron, this may not be exposed via ASCOM; use send_raw_command(":GREF#").
         """
-        # ASCOM doesn't have a standard refraction property
-        # Try 10Micron-specific raw command if CommandString is available
+        # ASCOM's DoesRefraction (MM3's equivalent of :GREF#); the 10Micron
+        # command only when the option allows it and the property is missing.
+        value = self._safe_read("DoesRefraction")
+        if value is not None:
+            return bool(value)
         return self.send_raw_bool(":GREF#")
 
     def get_refraction_mode(self) -> Optional[str]:
@@ -592,6 +605,10 @@ class ASCOMConnection(MountConnection):
         """
         if self._telescope is None or not self._connected:
             return None
+        if not self.tenmicron_commands:
+            # Pure ASCOM (default, as MM3): an LX200 command is never sent
+            # to an ASCOM driver, which may belong to any make of mount.
+            return None
         bare = command.strip().lstrip(':').rstrip('#')
         last_error = None
         for cmd, raw in ((command, True), (bare, False)):
@@ -611,6 +628,8 @@ class ASCOMConnection(MountConnection):
         :Gdat#). The 10Micron driver only accepts those through
         CommandBool; CommandString rejects them."""
         if self._telescope is None or not self._connected:
+            return None
+        if not self.tenmicron_commands:
             return None
         try:
             return bool(self._telescope.CommandBool(command, True))
@@ -636,6 +655,9 @@ class ASCOMConnection(MountConnection):
         unless "unchecked raw commands" is allowed in its setup dialog;
         `preferences_refused` then tells the window why nothing came back."""
         self.preferences_refused = False
+        self.preferences_pure_ascom = not self.tenmicron_commands
+        if self.preferences_pure_ascom:
+            return None
         from .lx200_protocol import LX200Connection, parse_prlist_chunk
         cleared = self.send_raw_bool(':PRclr#')
         prefs: dict = {}
