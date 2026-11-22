@@ -36,7 +36,7 @@ ASCOM through the 10Micron driver 1.7.2 shared with NINA; GUI of 4.4.11 and
    RMS = field 9, "E" = not computed. The old code took the azimuth as a star count, so the
    int() failed and the alignment model was never shown. Label "Model terms".
    Protocol PDF kept privately (10Micron document, not for the public repo):
-   the 10Micron documentation folder (pdf + pdftotext .txt). :PRclr#/:PRlist# are not in it.
+   in the private docs folder, 10Micron/ (pdf + pdftotext .txt). :PRclr#/:PRlist# are not in it.
    :Gmte# = time to tracking END (horizon or flip limit), not strictly the flip.
 3b. MM3 author's point on ASCOM: never send non-ASCOM (LX200) commands to an ASCOM driver;
    MM3 keeps an LX200 -> ASCOM table and skips rows without an ASCOM equivalent. Today
