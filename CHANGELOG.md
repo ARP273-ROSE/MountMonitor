@@ -6,6 +6,13 @@ behaviour changes, the patch number when only a defect is fixed.
 
 Figures quoted below were measured on real sessions, not estimated.
 
+## 4.4.14 — 2026-11-22
+
+### Changed
+- Drop-down lists get the same arrow as the spin boxes (a clear white
+  arrow on a button of its own; greyed when the list is disabled), instead of
+  the faint grey mark left over from the system style.
+
 ## 4.4.13 — 2026-11-22
 
 Checked again on the observatory PC (4K screen at 200 %), and the manual

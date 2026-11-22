@@ -82,10 +82,13 @@ _ARROW_SVG = (
 def _style_sheet() -> str:
     """The style sheet with its small images: a tick in checked boxes (a
     plain blue square was hard to tell from an empty one) and real arrows
-    on the spin boxes (tiny dots on a 4K screen at 200 %)."""
+    on the spin boxes and drop-down lists (tiny dots or a faint grey mark on
+    a 4K screen at 200 %)."""
     images = {"%CHECK%": ("mountmonitor_check.svg", _CHECK_SVG),
               "%UP%": ("mountmonitor_up.svg", _ARROW_SVG.format(d="M0.5 7 L4.5 2 L8.5 7 Z")),
-              "%DOWN%": ("mountmonitor_down.svg", _ARROW_SVG.format(d="M0.5 2 L4.5 7 L8.5 2 Z"))}
+              "%DOWN%": ("mountmonitor_down.svg", _ARROW_SVG.format(d="M0.5 2 L4.5 7 L8.5 2 Z")),
+              "%DOWN_OFF%": ("mountmonitor_down_off.svg",
+                             _ARROW_SVG.format(d="M0.5 2 L4.5 7 L8.5 2 Z").replace("#c8c8d2", "#50505f"))}
     sheet = STYLESHEET
     try:
         import tempfile
@@ -202,6 +205,16 @@ STYLESHEET = """
             border: 1px solid #3c3c4b;
             border-radius: 4px;
             padding: 4px 8px;
+        }
+        QComboBox::drop-down {
+            subcontrol-origin: padding; subcontrol-position: top right;
+            width: 20px; border-left: 1px solid #3c3c4b;
+        }
+        QComboBox::down-arrow {
+            image: url(%DOWN%); width: 9px; height: 9px;
+        }
+        QComboBox::down-arrow:disabled {
+            image: url(%DOWN_OFF%);
         }
         QComboBox:hover {
             border-color: #5082c8;
