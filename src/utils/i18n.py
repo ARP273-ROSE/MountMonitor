@@ -136,6 +136,10 @@ TX = {
         "en": "Read from the mount every 30 s: outside temperature and pressure (those used by the refraction correction, pushed by a weather station or a script), temperature of the mount's internal sensor 1 (:GTMP1#, in its electronics, so warmer than the air), time to the meridian flip. The arrow shows the direction of the last change.",
         "fr": "Lu sur la monture toutes les 30 s : température et pression extérieures (celles qu'utilise la correction de réfraction, poussées par une station météo ou un script), température du capteur interne n° 1 de la monture (:GTMP1#, dans son électronique, donc plus chaude que l'air), temps avant le retournement. La flèche indique le sens du dernier changement.",
         "nl": "Elke 30 s van de montering gelezen: buitentemperatuur en luchtdruk (die de refractiecorrectie gebruikt, aangeleverd door een weerstation of een script), temperatuur van interne sensor 1 van de montering (:GTMP1#, in de elektronica, dus warmer dan de lucht), tijd tot de meridiaanomslag. De pijl toont de richting van de laatste verandering."},
+    "tt_dev_not_tracking": {
+        "en": "The mount is not tracking (parked, idle or slewing): its right ascension drifts with the sky, so the deviation is not judged against the tolerance.",
+        "fr": "La monture ne suit pas (parquée, à l'arrêt ou en pointage) : son ascension droite défile avec le ciel, l'écart n'est donc pas comparé à la tolérance.",
+        "nl": "De montering volgt niet (geparkeerd, stil of draaiend): de rechte klimming schuift met de hemel mee, dus de afwijking wordt niet aan de tolerantie getoetst."},
     "chk_speed_follow": {
         "en": "Tracking speed Custom, set by Follow object (r.a. {ra}, dec. {dec})",
         "fr": "Vitesse de suivi Custom, fixée par le suivi d'objet (a.d. {ra}, déc. {dec})",

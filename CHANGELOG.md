@@ -6,6 +6,15 @@ behaviour changes, the patch number when only a defect is fixed.
 
 Figures quoted below were measured on real sessions, not estimated.
 
+## 4.4.11 — 2026-11-22
+
+### Fixed
+- **No "RA tolerance exceeded" on a parked mount**: parked, idle or
+  slewing, the mount does not follow the sky and its RA drifts by 15" a
+  second, so every connection to a parked mount logged a tolerance alarm.
+  Tolerances are now judged only while tracking; meanwhile the deviations
+  are shown greyed, with a tooltip saying why.
+
 ## 4.4.10 — 2026-11-22
 
 ### Changed

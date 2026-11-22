@@ -42,6 +42,7 @@ class StatusPanel(QWidget):
         self._style_ra_exceeded = f"color: {Colors.ACCENT_RED.name()};"
         self._style_dec_normal = f"color: {Colors.TEXT_PRIMARY.name()};"
         self._style_dec_exceeded = f"color: {Colors.ACCENT_RED.name()};"
+        self._style_muted = f"color: {Colors.TEXT_MUTED.name()};"
         self._last_ra_exceeded = False
         self._last_dec_exceeded = False
 
@@ -187,6 +188,20 @@ class StatusPanel(QWidget):
         else:
             self._ra_dev.setText(f"\u0394 {ra_dev / 15.0:+.3f}s")
         self._dec_dev.setText(f"\u0394 {sample.dec_deviation_arcsec:+.2f}\"")
+
+        # Not tracking (parked, idle, slewing): the RA drifts with the sky and
+        # the deviation means nothing; it is shown greyed, never red.
+        if sample.status in (MountStatus.PARKED, MountStatus.IDLE, MountStatus.SLEWING):
+            if self._last_ra_exceeded is not None:
+                self._ra_dev.setStyleSheet(self._style_muted)
+                self._dec_dev.setStyleSheet(self._style_muted)
+                self._ra_dev.setToolTip(T("tt_dev_not_tracking"))
+                self._dec_dev.setToolTip(T("tt_dev_not_tracking"))
+                self._last_ra_exceeded = self._last_dec_exceeded = None
+            return
+        if self._last_ra_exceeded is None:
+            self._ra_dev.setToolTip("")
+            self._dec_dev.setToolTip("")
 
         # Color deviation text based on tolerance — only update if changed
         ra_exceeded = abs(ra_dev) > self._tolerance_ra_arcsec

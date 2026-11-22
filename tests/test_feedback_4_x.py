@@ -763,3 +763,20 @@ def test_air_gauge_and_history_only_on_change(window):
     text = w._status_panel._env_label.text()
     assert "6.0 °C ↘" in text and "1001.9 hPa ↘" in text and "339 min" in text
     assert len([m for m in msgs if m.startswith("Temp")]) == 3   # 5.6, 6.2 (+0.6), 6.0/1001.9 (-1.5 hPa)
+
+
+def test_no_tolerance_alarm_on_a_parked_mount():
+    """Seen at every start on the observatory PC: "RA tolerance exceeded"
+    on a parked mount, whose RA simply drifts with the sky."""
+    from datetime import datetime
+    from src.core.data_processor import DataProcessor
+    from src.models.mount_data import MountSample, MountStatus
+    dp = DataProcessor()
+    s = MountSample(timestamp=datetime.now(), ra_hours=4.0, dec_degrees=88.0,
+                    status=MountStatus.PARKED)
+    s.ra_deviation_arcsec, s.dec_deviation_arcsec = 30.0, 0.0
+    dp._check_tolerances(s)
+    assert not dp.tolerance_state.ra_exceeded
+    s.status = MountStatus.TRACKING
+    dp._check_tolerances(s)
+    assert dp.tolerance_state.ra_exceeded

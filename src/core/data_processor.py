@@ -97,6 +97,7 @@ class DataProcessor:
 
         # Tolerance state
         self.tolerance_state = ToleranceState()
+        self._tolerances_paused = False
         self._tolerance_ra_arcsec: float = 1.5
         self._tolerance_dec_arcsec: float = 1.5
         self._tolerance_seismic_percent: float = 5.0
@@ -306,6 +307,20 @@ class DataProcessor:
         - STDEV: running standard deviation exceeds tolerance
         """
         now = sample.timestamp
+
+        # Parked, idle or slewing: the mount does not follow the sky, its RA
+        # drifts by 15" a second and the "tolerance exceeded" that followed
+        # every connection to a parked mount said nothing about the
+        # tracking. Tolerances are only judged while tracking.
+        if sample.status in (MountStatus.PARKED, MountStatus.IDLE, MountStatus.SLEWING):
+            if not self._tolerances_paused:
+                self._tolerances_paused = True
+                logger.info("Mount not tracking: tolerances not checked")
+            state = self.tolerance_state
+            state.ra_exceeded = state.dec_exceeded = False
+            state.ra_stdev_exceeded = state.dec_stdev_exceeded = False
+            return
+        self._tolerances_paused = False
 
         # RA value tolerance
         # The RA tolerance is in arcseconds of RA (MountMonitor 3, and what
