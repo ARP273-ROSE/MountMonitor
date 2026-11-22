@@ -102,7 +102,7 @@ class EnvironmentSample:
     tracking_rate: Optional[float] = None         # Tracking rate multiplier from :GT#
     meridian_flip_minutes: Optional[float] = None  # Minutes until meridian flip from :Gmte#
     pier_side: PierSide = PierSide.UNKNOWN
-    alignment_stars: Optional[int] = None         # Number of alignment stars from :getain#
+    alignment_stars: Optional[int] = None         # Number of model TERMS from :getain# (not stars)
     alignment_rms: Optional[float] = None         # Model RMS error (arcsec) from :getain#
     polar_error_deg: Optional[float] = None       # Polar alignment error (deg) from :getain#
 

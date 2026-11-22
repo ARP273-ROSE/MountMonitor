@@ -404,7 +404,7 @@ TR = {
         "fr": "(pointage, reconnexion, problème réseau)",
         "nl": "(zwenken, opnieuw verbinden, netwerkprobleem)"},
     "etoiles_modele": {
-        "en": "Alignment stars", "fr": "Étoiles d'alignement", "nl": "Uitlijnsterren"},
+        "en": "Model terms", "fr": "Termes du modèle", "nl": "Modeltermen"},
     "erreur_polaire": {
         "en": "Polar error", "fr": "Erreur polaire", "nl": "Poolfout"},
     "alignement_excellent": {

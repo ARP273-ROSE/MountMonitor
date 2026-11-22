@@ -757,18 +757,7 @@ class ASCOMConnection(MountConnection):
                 sample.pier_side = PierSide.WEST
 
         # Alignment model info from :getain#
-        result = self.send_raw_command(":getain#")
-        if result is not None:
-            try:
-                # Format: "NN,RR.R,PPPP.PP#"
-                # NN = number of stars, RR.R = RMS arcsec, PPPP.PP = polar error deg
-                val = result.strip().rstrip("#")
-                parts = val.split(",")
-                if len(parts) >= 3:
-                    sample.alignment_stars = int(parts[0])
-                    sample.alignment_rms = float(parts[1])
-                    sample.polar_error_deg = float(parts[2])
-            except (ValueError, IndexError):
-                pass
+        from .lx200_protocol import apply_getain
+        apply_getain(self.send_raw_command(":getain#"), sample)
 
         return sample

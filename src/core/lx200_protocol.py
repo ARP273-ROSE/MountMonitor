@@ -59,6 +59,39 @@ def summarise_preferences(prefs: dict) -> dict:
     return result
 
 
+
+def parse_getain(reply) -> dict:
+    """The alignment model from :getain# (10Micron protocol 3.2.5, p. 9):
+
+        ZZZ.ZZZZ,+AA.AAAA,EE.EEEE,PPP.PP,+OO.OOOO,+aa.aa,+bb.bb,NN,RRRRR.R#
+
+    azimuth and altitude of the RA axis, polar align error (deg), position
+    angle, orthogonality error (deg), knob turns (az, alt), NUMBER OF MODEL
+    TERMS, expected RMS (arcsec). "E#" below two stars; any field may be "E"
+    when not computed (RMS and terms below 4 stars, polar error on alt-az).
+    The old reading took the azimuth as the star count, so it always failed.
+    """
+    val = (reply or '').strip().rstrip('#')
+    parts = [p.strip() for p in val.split(',')]
+    if len(parts) < 9:
+        return {}
+
+    def num(text, kind=float):
+        try:
+            return kind(float(text)) if text and text.upper() != 'E' else None
+        except ValueError:
+            return None
+    return {'polar_error_deg': num(parts[2]), 'orthogonality_deg': num(parts[4]),
+            'terms': num(parts[7], int), 'rms': num(parts[8])}
+
+
+def apply_getain(reply, sample) -> None:
+    info = parse_getain(reply)
+    if info:
+        sample.alignment_stars = info['terms']       # number of model terms (field kept for the .env column)
+        sample.alignment_rms = info['rms']
+        sample.polar_error_deg = info['polar_error_deg']
+
 class LX200Connection(MountConnection):
     """LX200 protocol connection via TCP/IP."""
 
@@ -561,16 +594,6 @@ class LX200Connection(MountConnection):
                 sample.pier_side = PierSide.WEST
 
         # Alignment model info
-        result = self._send_command(":getain#")
-        if result:
-            try:
-                val = result.strip().rstrip("#")
-                parts = val.split(",")
-                if len(parts) >= 3:
-                    sample.alignment_stars = int(parts[0])
-                    sample.alignment_rms = float(parts[1])
-                    sample.polar_error_deg = float(parts[2])
-            except (ValueError, IndexError):
-                pass
+        apply_getain(self._send_command(":getain#"), sample)
 
         return sample

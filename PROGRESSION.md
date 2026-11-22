@@ -31,6 +31,13 @@ ASCOM through the 10Micron driver 1.7.2 shared with NINA; GUI of 4.4.11 and
 2. After a real night: night report (FFT section now present), air gauge.
 3. (done in the working tree, not released) `env_inside` = "RA driver" in EN/FR/NL, help text
    and the three manuals; screenshots still show the old label -> rerun captures before the release.
+3a. (done, not released) :getain# read as protocol 3.2.5 p. 9 describes it
+   (`parse_getain`, tests/test_getain.py): polar error = field 3, model TERMS = field 8,
+   RMS = field 9, "E" = not computed. The old code took the azimuth as a star count, so the
+   int() failed and the alignment model was never shown. Label "Model terms".
+   Protocol PDF kept privately (10Micron document, not for the public repo):
+   the 10Micron documentation folder (pdf + pdftotext .txt). :PRclr#/:PRlist# are not in it.
+   :Gmte# = time to tracking END (horizon or flip limit), not strictly the flip.
 3b. MM3 author's point on ASCOM: never send non-ASCOM (LX200) commands to an ASCOM driver;
    MM3 keeps an LX200 -> ASCOM table and skips rows without an ASCOM equivalent. Today
    ascom_connection sends raw :GRTMP#, :GaXa#, :PRlist#... to ANY driver. Decision pending.

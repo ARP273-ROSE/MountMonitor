@@ -965,9 +965,9 @@ class MainWindow(QMainWindow):
         # Log alignment data (less frequently visible)
         if sample.alignment_stars is not None and sample.alignment_rms is not None:
             logger.debug(
-                f"Alignment: {sample.alignment_stars} stars, "
+                f"Alignment: {sample.alignment_stars} terms, "
                 f"RMS {sample.alignment_rms:.1f}\", "
-                f"polar error {sample.polar_error_deg:.4f}\u00b0"
+                f"polar error {sample.polar_error_deg if sample.polar_error_deg is not None else float('nan'):.4f}\u00b0"
             )
 
         # Log to event file
