@@ -130,13 +130,20 @@
     coltitle=white,fonttitle=\bfseries\sffamily\small,boxrule=0.9pt,arc=2.5pt,
     left=2.5mm,right=2.5mm,top=1.5mm,bottom=1.5mm,
     title={\faCalculator~~\TITREFORM}}
-\BeforeBeginEnvironment{warning}{\par\needspace{9\baselineskip}}
-\BeforeBeginEnvironment{tip}{\par\needspace{9\baselineskip}}
-\BeforeBeginEnvironment{info}{\par\needspace{9\baselineskip}}
-\BeforeBeginEnvironment{formula}{\par\needspace{9\baselineskip}}
+% Room reserved before a box or a screenshot -- but NOT right after a
+% heading: there the reservation itself was a legal page break, and the
+% heading stayed alone at the foot of the page. Right after a heading LaTeX
+% already forbids the break, so heading and box move on together.
+\makeatletter
+\newcommand{\roomfor}[1]{\par\if@nobreak\else\needspace{#1}\fi}
+\makeatother
+\BeforeBeginEnvironment{warning}{\roomfor{9\baselineskip}}
+\BeforeBeginEnvironment{tip}{\roomfor{9\baselineskip}}
+\BeforeBeginEnvironment{info}{\roomfor{9\baselineskip}}
+\BeforeBeginEnvironment{formula}{\roomfor{9\baselineskip}}
 
 % A real screenshot of the application, framed, never split from its line
-\newcommand{\capture}[2][1]{\par\needspace{14\baselineskip}\begin{center}\setlength{\fboxsep}{0pt}\setlength{\fboxrule}{0.6pt}%
+\newcommand{\capture}[2][1]{\roomfor{14\baselineskip}\begin{center}\setlength{\fboxsep}{0pt}\setlength{\fboxrule}{0.6pt}%
   \fcolorbox{summit!50}{white}{\includegraphics[width=\dimexpr#1\linewidth-1.3pt\relax]{#2}}\end{center}}
 
 % Les encadres et les tableaux laissent parfois une page presque vide si
