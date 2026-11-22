@@ -948,7 +948,7 @@ class MainWindow(QMainWindow):
         if sample.pressure is not None:
             parts.append(f"Press: {sample.pressure:.0f}mbar")
         if sample.temperature_int is not None:
-            parts.append(f"Int: {sample.temperature_int:.1f}\u00b0C")
+            parts.append(f"{T('env_inside')}: {sample.temperature_int:.1f}\u00b0C")
         if sample.meridian_flip_minutes is not None:
             parts.append(f"Flip: {sample.meridian_flip_minutes:.0f}min")
         if parts and changed:

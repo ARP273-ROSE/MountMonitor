@@ -6,6 +6,14 @@ behaviour changes, the patch number when only a defect is fixed.
 
 Figures quoted below were measured on real sessions, not estimated.
 
+## 4.4.10 — 2026-11-22
+
+### Changed
+- The third value of the air gauge was labelled "inside", as if it were the
+  air: it is the mount's internal sensor 1 (:GTMP1#), in its electronics,
+  hence some 20 °C above the air. Now labelled "mount elec." and explained
+  in the tooltip, in the three languages.
+
 ## 4.4.9 — 2026-11-22
 
 ### Added
