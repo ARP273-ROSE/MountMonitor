@@ -6,6 +6,14 @@ behaviour changes, the patch number when only a defect is fixed.
 
 Figures quoted below were measured on real sessions, not estimated.
 
+## 4.4.15 — 2026-11-22
+
+### Fixed
+- Manual (EN/FR/NL): no heading left alone at the foot of a page. The room
+  reserved before a box or a screenshot was itself a page break when it came
+  right after a heading; it is now skipped there, and the preference
+  screenshots are smaller so that heading and screenshot fit together.
+
 ## 4.4.14 — 2026-11-22
 
 ### Changed
