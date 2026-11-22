@@ -6,6 +6,15 @@ behaviour changes, the patch number when only a defect is fixed.
 
 Figures quoted below were measured on real sessions, not estimated.
 
+## 4.4.8 — 2026-11-22
+
+### Fixed
+- **Check results in the user's language**: the refraction mode, GPS and
+  dual-tracking values appeared as raw English keys inside translated
+  sentences ("La réfraction est « not updating »", "Le GPS est not
+  synchronising"). They now use the same words as the preferences, quoted
+  the same way in every check.
+
 ## 4.4.7 — 2026-11-22
 
 4.4.6 run on the observatory PC through the 10Micron ASCOM driver, with

@@ -2295,32 +2295,42 @@ class MainWindow(QMainWindow):
             expected = self._settings.get("check_refraction_value")
             mode = r.get("mode")
             if mode is not None:
-                mode_display = mode.replace('_', ' ')
+                # Shown in the user's language, with the words of the
+                # preferences (the raw keys "not updating" appeared in
+                # English inside French sentences).
+                names = {"not_updating": "refraction_not_updating",
+                         "not_updating_tracking": "refraction_not_tracking",
+                         "continuously_updating": "refraction_continuous"}
+
+                def shown(m):
+                    return T(names[m]) if m in names else str(m).replace('_', ' ')
                 if mode == expected:
-                    ok_checks.append(T("chk_refraction_ok").format(v=mode_display) + " \u2713")
+                    ok_checks.append(T("chk_refraction_ok").format(v=shown(mode)) + " \u2713")
                 else:
-                    expected_display = expected.replace('_', ' ')
                     warnings.append(
-                        T("chk_refraction_ko").format(a=mode_display, e=expected_display)
+                        T("chk_refraction_ko").format(a=shown(mode), e=shown(expected))
                     )
 
         # Check GPS sync
         if self._settings.get("check_gps_sync") and r.get("gps") is not None:
             expected_val = self._settings.get("check_gps_sync_value")
             actual = "synchronising" if r["gps"] else "not synchronising"
+            gps_names = {"synchronising": T("val_sync"), "not synchronising": T("val_nosync")}
             if actual == expected_val:
-                ok_checks.append(T("chk_gps_ok").format(v=actual) + " \u2713")
+                ok_checks.append(T("chk_gps_ok").format(v=gps_names[actual]) + " \u2713")
             else:
-                warnings.append(T("chk_gps_ko").format(a=actual, e=expected_val))
+                warnings.append(T("chk_gps_ko").format(
+                    a=gps_names[actual], e=gps_names.get(expected_val, expected_val)))
 
         # Check dual tracking
         if self._settings.get("check_dual_tracking") and r.get("dual") is not None:
             expected_val = self._settings.get("check_dual_tracking_value")
             actual = "enabled" if r["dual"] else "disabled"
             if actual == expected_val:
-                ok_checks.append(T("chk_dual_ok").format(v=actual) + " \u2713")
+                ok_checks.append(T("chk_dual_ok").format(v=T(f"val_{actual}")) + " \u2713")
             else:
-                warnings.append(T("chk_dual_ko").format(a=actual, e=expected_val))
+                warnings.append(T("chk_dual_ko").format(
+                    a=T(f"val_{actual}"), e=T(f"val_{expected_val}")))
 
         # Follow object on, and allowed (expected rate not sidereal): the
         # mount then tracks at the object's own rate, shown as speed

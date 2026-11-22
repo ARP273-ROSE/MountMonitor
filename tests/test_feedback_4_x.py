@@ -727,3 +727,24 @@ def test_ascom_cache_repeats_are_dropped():
     p.status_changed = type("S", (), {"emit": lambda self, m: None})()
     kept = [p._poll_sequence() for _ in range(12)]
     assert sum(s is not None for s in kept) == 4 and len(notes) == 1
+
+
+def test_check_values_in_the_users_language(window, monkeypatch):
+    """Seen on the observatory PC: « La réfraction est « not updating » »
+    and « Le GPS est not synchronising », English keys in French."""
+    from src.utils.i18n import T
+    w = window
+    vals = {"check_tracking_rate": False, "check_refraction_status": False,
+            "check_refraction_enabled": True, "check_refraction_value": "continuously_updating",
+            "check_gps_sync": True, "check_gps_sync_value": "synchronising",
+            "check_dual_tracking": True, "check_dual_tracking_value": "enabled",
+            "mount_alert_popup": False}
+    orig = w._settings.get
+    monkeypatch.setattr(w._settings, "get", lambda k: vals.get(k, orig(k)))
+    msgs = []
+    w._status_panel.add_message = lambda m, c=None: msgs.append(m)
+    w._judge_checks({"mode": "not_updating", "gps": False, "dual": False}, False)
+    text = "\n".join(msgs)
+    assert T("refraction_not_updating") in text and T("refraction_continuous") in text
+    assert T("val_nosync") in text and T("val_disabled") in text
+    assert "not_updating" not in text and "continuously_updating" not in text
