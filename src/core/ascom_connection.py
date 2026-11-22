@@ -467,10 +467,7 @@ class ASCOMConnection(MountConnection):
         """
         # ASCOM doesn't have a standard refraction property
         # Try 10Micron-specific raw command if CommandString is available
-        result = self.send_raw_command(":GREF#")
-        if result is not None:
-            return result.strip().rstrip("#") == "1"
-        return None
+        return self.send_raw_bool(":GREF#")
 
     def get_refraction_mode(self) -> Optional[str]:
         """Refraction update type via raw command :WSG# (10Micron specific).
@@ -490,10 +487,7 @@ class ASCOMConnection(MountConnection):
 
     def is_dual_tracking_enabled(self) -> Optional[bool]:
         """Check dual tracking via raw command (10Micron specific)."""
-        result = self.send_raw_command(":Gdat#")
-        if result is None:
-            return None
-        return result.strip().rstrip("#") == "1"
+        return self.send_raw_bool(":Gdat#")
 
     def get_tracking_rate(self) -> Optional[str]:
         """Get current tracking rate from ASCOM TrackingRate property.
@@ -582,32 +576,87 @@ class ASCOMConnection(MountConnection):
             return None
 
     def send_raw_command(self, command: str) -> Optional[str]:
-        """Send a raw command via ASCOM CommandString method.
+        """Send a raw LX200 command through the driver's CommandString.
 
-        This is driver-specific and may not be supported by all ASCOM drivers.
-        Commonly used for 10Micron-specific LX200 commands.
+        Sent RAW (raw=True, the full ":...#" command): the 10Micron driver
+        1.7.2 adds ':' and '#' itself when raw=False, so ":GREF#" went out
+        as "::GREF##", failed its validation and EVERY 10Micron command
+        returned nothing in ASCOM mode (measured on a GM1000HPS fw 3.4,
+        22/11/2026). raw=False with the bare command is kept as a fallback
+        for drivers that only accept that form.
 
-        Args:
-            command: The raw command string (e.g. ":GR#", ":GREF#")
-
-        Returns:
-            Response string or None if not supported/failed.
+        Returns the reply (trailing '#' kept, callers strip it), or None
+        when the driver has no CommandString or refuses the command. A
+        refusal is not a lost connection.
         """
         if self._telescope is None or not self._connected:
             return None
+        bare = command.strip().lstrip(':').rstrip('#')
+        last_error = None
+        for cmd, raw in ((command, True), (bare, False)):
+            try:
+                result = self._telescope.CommandString(cmd, raw)
+                return str(result) if result is not None else None
+            except AttributeError:
+                logger.debug("ASCOM driver does not support CommandString")
+                return None
+            except Exception as e:
+                last_error = e
+        self._note_refused(command, last_error)
+        return None
+
+    def send_raw_bool(self, command: str) -> Optional[bool]:
+        """A command whose reply is ONE character without '#' (:GREF#,
+        :Gdat#). The 10Micron driver only accepts those through
+        CommandBool; CommandString rejects them."""
+        if self._telescope is None or not self._connected:
+            return None
         try:
-            # ASCOM CommandString(command, raw=False)
-            # raw=False means the driver handles termination
-            result = self._telescope.CommandString(command, False)
-            if result is not None:
-                return str(result)
-            return None
+            return bool(self._telescope.CommandBool(command, True))
         except AttributeError:
-            logger.debug("ASCOM driver does not support CommandString")
-            return None
+            pass
         except Exception as e:
-            logger.debug(f"ASCOM CommandString error for '{command}': {e}")
+            logger.debug(f"ASCOM CommandBool refused '{command}': {e}")
+        result = self.send_raw_command(command)
+        if result is None:
             return None
+        return result.strip().rstrip('#') == '1'
+
+    def _note_refused(self, command: str, error) -> None:
+        """Log a refused command once, not at every poll."""
+        refused = self.__dict__.setdefault('_refused_commands', set())
+        if command not in refused:
+            refused.add(command)
+            logger.info(f"ASCOM driver refused '{command}': {error}")
+
+    def read_mount_preferences(self) -> Optional[dict]:
+        """The 10Micron preference list through the driver, when it lets
+        it through. The 10Micron driver 1.7.2 rejects :PRclr# and :PRlist#
+        unless "unchecked raw commands" is allowed in its setup dialog;
+        `preferences_refused` then tells the window why nothing came back."""
+        self.preferences_refused = False
+        from .lx200_protocol import LX200Connection, parse_prlist_chunk
+        cleared = self.send_raw_bool(':PRclr#')
+        prefs: dict = {}
+        for _ in range(LX200Connection.PRLIST_MAX_CHUNKS):
+            chunk = self.send_raw_command(':PRlist#')
+            if chunk is None:
+                break
+            done, empty = parse_prlist_chunk(chunk, prefs)
+            if done or empty:
+                break
+        if not prefs:
+            self.preferences_refused = (cleared is None and ':PRlist#' in
+                                        self.__dict__.get('_refused_commands', ()))
+            return None
+        return prefs
+
+    def check_mount_settings(self) -> Optional[dict]:
+        prefs = self.read_mount_preferences()
+        if prefs is None:
+            return None
+        from .lx200_protocol import summarise_preferences
+        return summarise_preferences(prefs)
 
     def set_high_precision(self) -> bool:
         """Set high precision mode.
@@ -621,20 +670,29 @@ class ASCOMConnection(MountConnection):
         return True
 
     def is_gps_synced(self) -> Optional[bool]:
-        """Check if GPS is synced.
-
-        Not a standard ASCOM property. Try 10Micron command :gps#.
-        """
-        result = self.send_raw_command(":gps#")
-        if result is not None:
-            return result.strip().rstrip("#") == "1"
+        """GPS time synchronisation, as in LX200Connection.is_gps_synced:
+        :gtgpps# from firmware 3.2.5, :gtg# before. The old ":gps#" is not
+        a 10Micron command (the mount answers an empty "#")."""
+        firmware = self.send_raw_command(":GVN#")
+        import re
+        nums = re.findall(r'\d+', firmware or '')
+        try:
+            recent = tuple(int(n) for n in nums[:3]) >= (3, 2, 5)
+        except ValueError:
+            recent = False
+        for cmd in ((":gtgpps#", ":gtg#") if recent else (":gtg#",)):
+            result = self.send_raw_command(cmd)
+            value = (result or '').strip().rstrip('#')
+            if value in ('0', '1'):
+                return value == '1'
         return None
 
     def get_environment(self) -> EnvironmentSample:
         """Get environmental and diagnostic data via ASCOM/LX200 commands.
 
         Uses 10Micron-specific LX200 commands via ASCOM CommandString.
-        All commands confirmed working on 10Micron GM1000HPS with ASCOM driver v1.7.
+        Sent raw (see send_raw_command): with raw=False the 10Micron driver
+        1.7.2 rejected every one of them.
         """
         sample = EnvironmentSample()
 

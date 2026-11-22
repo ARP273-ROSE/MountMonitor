@@ -388,6 +388,15 @@ ASCOM & Alleen Windows, via het stuurprogramma van de fabrikant. \\
 \end{tabularx}
 \end{center}
 
+Als NINA (of een ander programma) de montering al via de seriële kabel
+bestuurt, kies dan \textbf{ASCOM} met hetzelfde stuurprogramma: het
+10Micron-stuurprogramma deelt die ene verbinding tussen al zijn clients,
+terwijl LX200 serieel de poort voor zichzelf zou moeten opeisen. Het
+10Micron-stuurprogramma 1.7 weigert de voorkeurenlijst (\texttt{:PRlist\#})
+zolang \emph{unchecked raw commands} niet zijn toegestaan in zijn
+instellingen; tot dan worden Object volgen, volgcorrectie en -snelheid niet
+gecontroleerd, en de geschiedenis meldt dat.
+
 \section{De waarnemingslocatie}
 
 \begin{warning}

@@ -2265,6 +2265,7 @@ class MainWindow(QMainWindow):
                 # Follow object, tracking correction and speed from the
                 # mount's preference list, as MountMonitor 3 does.
                 r["prefs"] = c.check_mount_settings()
+                r["prefs_refused"] = bool(getattr(c, "preferences_refused", False))
             if cfg["check_gps_sync"]:
                 r["gps"] = c.is_gps_synced()
             if cfg["check_dual_tracking"]:
@@ -2348,6 +2349,9 @@ class MainWindow(QMainWindow):
 
         # Mount preference list (:PRlist#): follow object off, tracking
         # correction 0.000 %, tracking speed Sidereal.
+        if not prefs and r.get("prefs_refused") and tracking_now:
+            # Said once per check, as information: not a wrong setting.
+            ok_checks.append(T("chk_prefs_refused"))
         if prefs and self._settings.get("check_tracking_rate"):
             if "follow_object" in prefs:
                 if not prefs["follow_object"]:

@@ -619,3 +619,73 @@ def test_fft_seismic_on_its_own_scale_and_reset(qtbot=None):
     w._reset_view()
     assert np.allclose(main_vb.viewRange()[0], full)
     w.deleteLater()
+
+
+# ── 22/11/2026: ASCOM path measured on the observatory PC ────────────────
+
+class _Driver1072:
+    """Behaviour of the 10Micron ASCOM driver 1.7.2 measured on a GM1000HPS:
+    raw=False wraps the command in ':' and '#' itself; one-character
+    replies only through CommandBool; :PRclr#/:PRlist# refused unless
+    "unchecked raw commands" is allowed."""
+    REPLIES = {":WSG#": "0#", ":GT#": "60.2#", ":gtgpps#": "1#", ":gtg#": "0#",
+               ":GVN#": "3.4#", ":gps#": "#"}
+
+    def __init__(self, unchecked=False):
+        self.unchecked = unchecked
+        self.chunks = iter(["Follow object,1,W,0;x#",
+                            "Tracking speed,2,W,1,5,Sidereal,Solar,Lunar,Custom,Stop;c#"])
+
+    def CommandString(self, cmd, raw):
+        if not raw:
+            cmd = ":" + cmd + "#"
+        if cmd == ":PRlist#" and self.unchecked:
+            return next(self.chunks, "c#")
+        if cmd not in self.REPLIES:
+            raise RuntimeError(f'Command "{cmd}" did not pass validation in CommandString')
+        return self.REPLIES[cmd]
+
+    def CommandBool(self, cmd, raw):
+        if cmd == ":PRclr#" and self.unchecked:
+            return True
+        if cmd in (":GREF#", ":Gdat#"):
+            return True
+        raise RuntimeError(f'Command "{cmd}" did not pass validation in CommandBool')
+
+
+def _ascom(driver):
+    from src.core.ascom_connection import ASCOMConnection
+    c = ASCOMConnection.__new__(ASCOMConnection)
+    c._telescope, c._connected = driver, True
+    return c
+
+
+def test_ascom_commands_sent_raw_as_the_10micron_driver_wants():
+    c = _ascom(_Driver1072())
+    assert c.is_refraction_enabled() is True          # via CommandBool
+    assert c.is_dual_tracking_enabled() is True
+    assert c.get_refraction_mode() == "not_updating"   # :WSG# sent raw
+    assert c.is_gps_synced() is True                   # :gtgpps# (fw 3.4), not :gps#
+
+
+def test_ascom_preference_list_refused_or_read():
+    c = _ascom(_Driver1072())
+    assert c.check_mount_settings() is None and c.preferences_refused
+    c = _ascom(_Driver1072(unchecked=True))
+    assert c.check_mount_settings() == {"follow_object": False, "tracking_speed": "Solar"}
+    assert not c.preferences_refused
+
+
+def test_refused_list_is_said_once_not_alarmed(window, monkeypatch):
+    from src.utils.i18n import T
+    w = window
+    vals = {"check_tracking_rate": True, "check_tracking_rate_value": "sidereal",
+            "check_refraction_status": False, "check_refraction_enabled": False,
+            "check_gps_sync": False, "check_dual_tracking": False, "mount_alert_popup": True}
+    orig = w._settings.get
+    monkeypatch.setattr(w._settings, "get", lambda k: vals.get(k, orig(k)))
+    msgs = []
+    w._status_panel.add_message = lambda m, c=None: msgs.append(m)
+    w._judge_checks({"rate": "60.2", "prefs": None, "prefs_refused": True}, True)
+    assert any(T("chk_prefs_refused") == m for m in msgs)
+    assert not any("⚠" in m for m in msgs)

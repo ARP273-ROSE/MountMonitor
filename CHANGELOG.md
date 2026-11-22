@@ -6,6 +6,27 @@ behaviour changes, the patch number when only a defect is fixed.
 
 Figures quoted below were measured on real sessions, not estimated.
 
+## 4.4.6 — 2026-11-22
+
+Tested on a GM1000HPS (firmware 3.4) through the 10Micron ASCOM driver
+1.7.2, shared with NINA over the RS-232 link.
+
+### Fixed
+- **No 10Micron check worked in ASCOM mode**: commands were sent with
+  raw=False, so the driver wrapped them a second time ("::GREF##"), they
+  failed its validation and refraction, refraction mode, dual tracking, GPS
+  and the environment readings all came back empty. They are now sent raw;
+  the one-character replies (:GREF#, :Gdat#) go through CommandBool as the
+  driver requires.
+- **GPS check in ASCOM mode** used ":gps#", which is not a 10Micron command;
+  it now uses :gtgpps# (firmware 3.2.5 and later) or :gtg#, as in LX200 mode.
+
+### Added
+- **Preference list in ASCOM mode** (Follow object, tracking correction,
+  speed) when the driver lets :PRlist# through. The 10Micron driver refuses
+  it unless "unchecked raw commands" is allowed in its setup; the history
+  then says why these three checks are skipped, without raising an alarm.
+
 ## 4.4.5 — 2026-11-21
 
 Nicolàs de Hilster's remarks on the preferences and the FFT window, and the

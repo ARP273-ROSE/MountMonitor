@@ -389,6 +389,14 @@ ASCOM & Windows uniquement, via le pilote du constructeur. \\
 \end{tabularx}
 \end{center}
 
+Quand NINA (ou un autre logiciel) pilote déjà la monture par son câble série,
+choisissez \textbf{ASCOM} avec le même pilote : le pilote 10Micron partage
+l'unique liaison entre tous ses clients, alors que le mode LX200 série devrait
+prendre le port pour lui seul. Le pilote 10Micron 1.7 refuse la liste des
+préférences (\texttt{:PRlist\#}) tant que les \emph{unchecked raw commands}
+ne sont pas autorisées dans sa configuration ; d'ici là, suivi d'objet,
+correction et vitesse de suivi ne sont pas vérifiés, et l'historique le dit.
+
 \section{Le site d'observation}
 
 \begin{warning}

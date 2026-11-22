@@ -120,6 +120,10 @@ TX = {
                      "nl": "Horizontale schaal en positie herstellen"},
     "fft_seismic_axis": {"en": "Seismic (ADC counts)", "fr": "Sismique (coups ADC)",
                          "nl": "Seismisch (ADC-tellingen)"},
+    "chk_prefs_refused": {
+        "en": "Follow object, tracking correction and speed not checked: the ASCOM driver refuses :PRlist# (allow \"unchecked raw commands\" in the 10Micron driver setup, or connect in LX200 TCP/IP)",
+        "fr": "Suivi d'objet, correction et vitesse de suivi non vérifiés : le pilote ASCOM refuse :PRlist# (autoriser les « unchecked raw commands » dans la configuration du pilote 10Micron, ou se connecter en LX200 TCP/IP)",
+        "nl": "Object volgen, volgcorrectie en -snelheid niet gecontroleerd: de ASCOM-driver weigert :PRlist# (sta \"unchecked raw commands\" toe in de instellingen van de 10Micron-driver, of verbind via LX200 TCP/IP)"},
     "chk_speed_follow": {
         "en": "Tracking speed Custom, set by Follow object (r.a. {ra}, dec. {dec})",
         "fr": "Vitesse de suivi Custom, fixée par le suivi d'objet (a.d. {ra}, déc. {dec})",

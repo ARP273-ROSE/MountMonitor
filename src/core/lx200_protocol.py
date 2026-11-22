@@ -16,6 +16,49 @@ from ..models.mount_data import MountStatus, PierSide, ConnectionProtocol, Envir
 logger = logging.getLogger(__name__)
 
 
+
+def parse_prlist_chunk(chunk: str, prefs: dict) -> tuple:
+    """Add one :PRlist# chunk to `prefs`; return (complete, empty).
+
+    "Name,type,W,value,...;" entries; a last entry "x" means more follows,
+    "c" that the list is complete."""
+    entries = [e for e in str(chunk).strip().rstrip('#').split(';') if e != '']
+    done = False
+    for entry in entries:
+        if entry in ('c', 'x'):
+            done = entry == 'c'
+            continue
+        fields = entry.split(',')
+        prefs[fields[0].strip()] = [f.strip() for f in fields[1:]]
+    return done, not entries
+
+
+def summarise_preferences(prefs: dict) -> dict:
+    """What MountMonitor checks in the preference list (see
+    LX200Connection.check_mount_settings)."""
+    result = {}
+    for name, f in prefs.items():
+        if len(f) < 3:
+            continue
+        value = f[2]                    # Name,type,W,VALUE,...
+        low = name.lower()
+        if low.startswith('follow object'):
+            result["follow_object"] = value != '0'
+        elif low.startswith('tracking correction'):
+            result["tracking_correction"] = value
+        elif low.startswith('custom tracking rate r.a'):
+            result["custom_rate_ra"] = value
+        elif low.startswith('custom tracking rate dec'):
+            result["custom_rate_dec"] = value
+        elif low.startswith('tracking speed'):
+            try:
+                choices = f[4:]        # count, then the names
+                result["tracking_speed"] = choices[int(value)]
+            except (ValueError, IndexError):
+                result["tracking_speed"] = value
+    return result
+
+
 class LX200Connection(MountConnection):
     """LX200 protocol connection via TCP/IP."""
 
@@ -411,15 +454,8 @@ class LX200Connection(MountConnection):
             chunk = self._send_command(':PRlist#')
             if chunk is None:
                 return prefs or None
-            entries = [e for e in chunk.strip().split(';') if e != '']
-            done = False
-            for entry in entries:
-                if entry in ('c', 'x'):
-                    done = entry == 'c'
-                    continue
-                fields = entry.split(',')
-                prefs[fields[0].strip()] = [f.strip() for f in fields[1:]]
-            if done or not entries:
+            done, empty = parse_prlist_chunk(chunk, prefs)
+            if done or empty:
                 break
         return prefs
 
@@ -434,27 +470,7 @@ class LX200Connection(MountConnection):
         prefs = self.read_mount_preferences()
         if prefs is None:
             return None
-        result = {}
-        for name, f in prefs.items():
-            if len(f) < 3:
-                continue
-            value = f[2]                    # Name,type,W,VALUE,...
-            low = name.lower()
-            if low.startswith('follow object'):
-                result["follow_object"] = value != '0'
-            elif low.startswith('tracking correction'):
-                result["tracking_correction"] = value
-            elif low.startswith('custom tracking rate r.a'):
-                result["custom_rate_ra"] = value
-            elif low.startswith('custom tracking rate dec'):
-                result["custom_rate_dec"] = value
-            elif low.startswith('tracking speed'):
-                try:
-                    choices = f[4:]        # count, then the names
-                    result["tracking_speed"] = choices[int(value)]
-                except (ValueError, IndexError):
-                    result["tracking_speed"] = value
-        return result
+        return summarise_preferences(prefs)
 
     def set_high_precision(self) -> bool:
         """Ultra-precision output (10Micron :U2#), sent WITHOUT reading a reply.
