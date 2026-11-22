@@ -256,8 +256,9 @@ sont écartées du rapport.
 \section{La note}
 
 Elle est fondée sur le jitter combiné, avec des seuils adaptés au type de
-monture. Une 10Micron non guidée est jugée sur des seuils plus larges qu'une
-monture guidée, parce que ce ne sont pas les mêmes ordres de grandeur.
+monture. Au-delà du dernier seuil, la note est MAUVAIS. Les seuils portent sur
+le jitter seul : la dérive et les mouvements commandés n'y entrent pas, ce qui
+explique qu'ils soient serrés même pour une monture non guidée.
 
 \begin{center}
 \rowcolors{2}{rowalt}{white}
@@ -265,9 +266,9 @@ monture guidée, parce que ce ne sont pas les mêmes ordres de grandeur.
 \toprule
 \textbf{Note} & \textbf{Monture guidée} & \textbf{Non guidée de précision} \\
 \midrule
-Excellent & $< 0{,}5\arcsec$ & $< 2{,}0\arcsec$ \\
-Bon       & $< 1{,}5\arcsec$ & $< 4{,}0\arcsec$ \\
-Correct   & $< 3{,}0\arcsec$ & $< 8{,}0\arcsec$ \\
+Excellent & $< 0{,}4\arcsec$ & $< 0{,}5\arcsec$ \\
+Bon       & $< 1{,}0\arcsec$ & $< 1{,}0\arcsec$ \\
+Moyen     & $< 2{,}0\arcsec$ & $< 2{,}0\arcsec$ \\
 \bottomrule
 \end{tabularx}
 \end{center}
@@ -308,12 +309,62 @@ Un pic net à une période stable désigne une erreur périodique. Un spectre pl
 signifie qu'il n'y en a pas de décelable --- le cas des 10Micron après
 correction. Des pics larges et mouvants sont du bruit, du vent le plus souvent.
 
-Dans la fenêtre, AD et DÉC partagent l'échelle de gauche, en secondes d'arc ;
-le sismomètre a sa propre échelle à droite, en coups ADC. Les boutons zooment
-et décalent horizontalement, et le dernier, la flèche circulaire, revient à la vue complète.
+La fenêtre FFT est décrite au chapitre~\ref{ch:fftwin}.
 
 % ═══════════════════════════════════════════════════════════════════
 \part{Utiliser}
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{À quoi sert MountMonitor}
+\label{ch:purpose}
+
+MountMonitor surveille une monture équatoriale pendant la nuit, pendant que
+d'autres logiciels (NINA, un séquenceur, un logiciel d'autoguidage) la
+pilotent. Il ne la commande jamais : il \emph{lit}. Deux fois par seconde, il
+demande à la monture sa position et son heure, et il en tire quatre choses.
+
+\begin{enumerate}
+  \item \textbf{La qualité du suivi.} De combien la position bouge pendant
+  que la monture est censée tenir une étoile : c'est ce qui étale l'étoile sur
+  le capteur (chapitre~\ref{ch:stats}).
+  \item \textbf{Les réglages de la monture.} Réfraction, suivi deux axes,
+  vitesse de suivi, suivi d'objet, correction de suivi, GPS : un réglage oublié
+  la veille gâche une nuit entière sans rien montrer à l'écran. MountMonitor
+  les relit à la connexion, après chaque pointage et toutes les cinq minutes, et
+  ouvre une fenêtre d'alerte quand l'un d'eux n'est pas celui attendu.
+  \item \textbf{L'heure.} L'écart entre l'horloge du PC, celle de la monture
+  et un serveur de temps (NTP). Une horloge qui dérive fausse le pointage et
+  l'horodatage des poses.
+  \item \textbf{Les vibrations}, si un sismomètre est branché, et \textbf{l'air}
+  (température et pression) que la monture utilise pour corriger la réfraction.
+\end{enumerate}
+
+Tout est enregistré, et un \textbf{rapport de nuit} est écrit tout seul à la
+fin de la session, dans les trois langues (section~\ref{sec:report}).
+
+\section{Lecture en dix secondes}
+
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{lXX}
+\toprule
+\textbf{Où regarder} & \textbf{Tout va bien} & \textbf{Quelque chose ne va pas} \\
+\midrule
+Point d'état (en haut à droite) & Vert, « La monture est en suivi » & Gris
+(parquée, à l'arrêt), orange (pointage) ou rouge (erreur) \\
+Courbes AD et DÉC & Une bande étroite entre les lignes vertes de tolérance &
+Des sorties répétées hors des lignes vertes, une rampe, des oscillations
+régulières \\
+Courbe bleue $\sigma$ & Basse et plate & Qui monte et reste haute \\
+Fenêtre d'alerte & Aucune & Une fenêtre « Alerte monture » au premier plan \\
+Historique & Des lignes « \checkmark » après « \#\#\# CONTRÔLE DES RÉGLAGES DE LA
+MONTURE \#\#\# » & Des lignes précédées d'un triangle d'alerte \\
+Rapport de nuit & Note EXCELLENT ou BON & MOYEN ou MAUVAIS, recommandations \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+Le chapitre~\ref{ch:night} dit quoi faire dans chaque cas.
 
 % ─────────────────────────────────────────────────────────────────
 \chapter{Installation}
@@ -352,195 +403,461 @@ Sur Windows, l'installeur s'occupe de tout. Sur macOS, glissez l'application
 dans le dossier Applications. Sur Linux, \texttt{installer.sh} l'installe dans
 le profil de l'utilisateur, sans \texttt{sudo} ni gestionnaire de paquets.
 
-Les mises à jour sont ensuite vérifiées discrètement à chaque démarrage et
-proposées quand il y en a.
+Les mises à jour sont vérifiées discrètement à chaque démarrage et proposées
+quand il y en a ; elles sont signées, et une archive dont la signature ne
+correspond pas est refusée.
 
 \section{Premier essai sans monture}
 
-Le mode simulation permet de tout parcourir sans matériel :
+Le mode simulation permet de tout parcourir sans matériel ; c'est lui qui a
+servi aux captures de ce manuel :
 
 \begin{lstlisting}[language=bash]
 MountMonitor --sim-all
 \end{lstlisting}
 
-Voici la fenêtre au bout d'une demi-minute de simulation : en haut les écarts
-en ascension droite et en déclinaison avec leurs tolérances, puis la
-différence d'horloge PC--monture et le sismomètre ; à droite l'état de la
-monture, les coordonnées et le journal de la session.
-
-\capture{fr-principal.png}
-
 % ─────────────────────────────────────────────────────────────────
-\chapter{Réglages}
-\label{ch:config}
+\chapter{La fenêtre principale}
+\label{ch:window}
 
-\section{Connexion}
+\capture{fr-principal-annote.png}
+
+De gauche à droite : les \textbf{graphes} qui défilent (le présent est à
+droite, à 0~s), puis le \textbf{panneau d'état} et l'\textbf{historique}.
+Les numéros renvoient aux sections qui suivent.
+
+\begin{multicols}{2}
+\begin{enumerate}
+  \item Boutons et menus (\ref{sec:menus})
+  \item Bande de chiffres (\ref{sec:strip})
+  \item Écart en ascension droite (\ref{sec:radec})
+  \item Échelle du $\sigma$, courbe bleue (\ref{sec:radec})
+  \item Écart en déclinaison (\ref{sec:radec})
+  \item Graphe TEMPS (\ref{sec:time})
+  \item Graphe SISMIQUE (\ref{sec:seismic})
+  \item État de la monture (\ref{sec:panel})
+  \item Position, écart $\Delta$ et $\sigma$ (\ref{sec:panel})
+  \item Cadence et échantillons (\ref{sec:panel})
+  \item Ligne d'air (\ref{sec:panel})
+  \item Historique (\ref{sec:panel})
+\end{enumerate}
+\end{multicols}
+
+\section{Menus et boutons}
+\label{sec:menus}
 
 \begin{center}
 \rowcolors{2}{rowalt}{white}
 \begin{tabularx}{\textwidth}{lX}
 \toprule
-\textbf{Protocole} & \textbf{Quand l'employer} \\
+\textbf{Élément} & \textbf{Rôle} \\
 \midrule
-LX200 TCP/IP & 10Micron en réseau. Port 3492 par défaut. \\
-LX200 série & Liaison RS-232, 9600 8N1 d'origine sur les 10Micron. \\
-ASCOM & Windows uniquement, via le pilote du constructeur. \\
+\emph{Connecter / Déconnecter} & Ouvre ou ferme la liaison avec la monture,
+selon le protocole choisi dans les Préférences. \\
+\emph{Démarrer log / Arrêter log} & Arme l'enregistreur (il démarre quand la
+monture suit) ou l'arrête. Un clic droit donne les réglages de
+fonctionnement sans surveillance. \\
+\emph{FFT} & Ouvre la fenêtre d'analyse de Fourier
+(chapitre~\ref{ch:fftwin}). \\
+\emph{Préférences} & Tous les réglages (chapitre~\ref{ch:config}). \\
+Fichier & Connecter, déconnecter ; \emph{Ouvrir un log} relit une session
+enregistrée et refait son rapport ; \emph{Analyser logs monture (.log10m)} lit
+les journaux internes d'une 10Micron ; Quitter. \\
+Affichage & \emph{Durée affichée} (30~s à 1~h), \emph{Échelle verticale}
+(voir plus bas), fenêtre FFT. Aussi au clic droit sur un graphe. \\
+Réinitialiser & Remet à zéro les min/max, les tampons des graphes, les deux ;
+\emph{Nouveaux fichiers} ferme la session et en ouvre une autre ;
+\emph{Exporter graphes} enregistre les graphes en images PNG. \\
+Langue, Aide & Langue de l'interface ; aide, manuel, mises à jour, signaler un
+problème. \\
 \bottomrule
 \end{tabularx}
 \end{center}
 
-Quand NINA (ou un autre logiciel) pilote déjà la monture par son câble série,
-choisissez \textbf{ASCOM} avec le même pilote : le pilote 10Micron partage
-l'unique liaison entre tous ses clients, alors que le mode LX200 série devrait
-prendre le port pour lui seul. Le pilote 10Micron 1.7 refuse la liste des
-préférences (\texttt{:PRlist\#}) tant que les \emph{unchecked raw commands}
-ne sont pas autorisées dans sa configuration ; d'ici là, suivi d'objet,
-correction et vitesse de suivi ne sont pas vérifiés, et l'historique le dit.
-Le pilote sert aussi les positions depuis un cache rafraîchi environ toutes les
-deux secondes ; MountMonitor ignore les répétitions, la vraie cadence en ASCOM
-est donc celle du pilote.
+\section{La bande de chiffres au-dessus des graphes}
+\label{sec:strip}
 
-Sous les coordonnées, une ligne montre l'air lu sur la monture toutes les
-30~s : température et pression extérieures (celles qu'utilise la correction de
-réfraction, quelle que soit leur source), température du capteur interne de
-la monture (dans son électronique, donc plus chaude que l'air) et temps
-avant le retournement, avec une flèche pour le sens du dernier changement.
-
-\section{Le site d'observation}
-
-\begin{warning}
-Le site est lu sur la monture à chaque connexion (\texttt{:Gt\#},
-\texttt{:Gg\#}, \texttt{:Gev\#}) et conservé dans les préférences, où il
-apparaît grisé tant que la monture est connectée : une nuit relue plus tard a
-ainsi encore ses crépuscules. N'y saisissez \textbf{latitude, longitude et
-altitude} que si la monture ou son pilote ne donne pas de site. Sans site, les
-éphémérides de la nuit ne peuvent pas être calculées.
-
-La longitude se saisit \textbf{positive vers l'est}. Le protocole LX200 la
-compte à l'envers ; la conversion est faite pour vous quand la monture répond.
-\end{warning}
-
-\section{Tolérances et fenêtre glissante}
-
-La tolérance est un seuil d'alerte que vous fixez. Une règle simple : prenez
-votre échantillonnage en secondes d'arc par pixel. Une tolérance égale à
-l'échantillonnage est stricte, le double est confortable.
-
-La fenêtre de l'écart-type glissant se règle de 60 à 900 secondes. Soixante
-secondes réagissent vite, neuf cents lissent une longue session.
-
-\section{Connexion automatique au lancement}
-
-Pour un PC d'observatoire qui démarre seul, MountMonitor peut se connecter à la
-monture dès l'ouverture, sans clic. Deux façons, équivalentes :
+Au-dessus de chaque graphe, une ligne donne ses chiffres du moment, chacun dans
+la couleur de ce qu'il décrit. Elle ne recouvre jamais les courbes.
 
 \begin{itemize}
-  \item cocher \textbf{Se connecter à la monture à l'ouverture de MountMonitor}
-        dans les Préférences (onglet de l'enregistrement) ;
-  \item lancer le programme avec l'option \texttt{--connect}, par exemple depuis
-        une tâche planifiée.
+  \item \textbf{AD et DÉC} : l'écart actuel, son écart-type $\sigma$ sur ce qui est
+  affiché, en vert la tolérance (« tol.~±0,100~s »), le minimum et le maximum
+  de la session, en bleu le plus grand $\sigma$ glissant.
+  \item \textbf{TEMPS} : en blanc l'écart PC~--~monture et sa dérive par heure,
+  en vert la boucle PC, en rouge la boucle monture, en gris leur moyenne, en bleu
+  l'écart PC~--~NTP. Ces couleurs sont aussi celles des courbes.
 \end{itemize}
 
-Au démarrage du PC, le boîtier de commande de la monture n'a souvent pas fini de
-démarrer : si la monture ne répond pas, MountMonitor réessaie toutes les
-30~secondes (réglage \texttt{connect\_retry\_s}, 5~s au minimum) jusqu'à la
-première connexion réussie, en l'indiquant dans le journal de la session. Un clic
-sur \emph{Connecter} ou \emph{Déconnecter} arrête les essais. Aucune fenêtre ne
-s'ouvre pendant ces essais : avec ASCOM, le pilote doit déjà être choisi ; en
-liaison série, le port doit déjà être réglé. Avec \texttt{--connect}, l'offre de
-signaler un plantage précédent est gardée pour le lancement suivant, pour ne pas
-bloquer la fenêtre.
+\section{Les graphes ASCENSION DROITE et DÉCLINAISON}
+\label{sec:radec}
 
-Une fois connecté, l'enregistrement suit les réglages ci-dessous : il est armé et
-démarre quand la monture se met à suivre.
+Chaque point est l'écart entre la position lue et la position de référence
+(par défaut la médiane de ce qui est affiché). En ascension droite, l'unité est
+la seconde de temps (s) ou la seconde d'arc (\arcsec) selon le réglage
+\emph{ascension droite en degrés} ; en déclinaison, la seconde d'arc.
 
-\section{L'armement de l'enregistreur}
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Trait} & \textbf{Ce qu'il représente} \\
+\midrule
+Courbe magenta (AD) ou rouge (DÉC) & L'écart mesuré. Arrondie sans jamais
+dépasser les mesures ; sur une durée courte, des points marquent les vraies
+mesures. Grise quand la monture ne suit pas. \\
+Courbe bleue, échelle de droite & L'écart-type glissant $\sigma$, calculé sur la
+fenêtre glissante (60~s par défaut). Elle dit si la monture \emph{tient} sa
+position, indépendamment de l'endroit où elle la tient. \\
+Lignes vertes & La tolérance, de part et d'autre de la médiane. \\
+Lignes tiretées de la couleur de la courbe & Le minimum et le maximum de la
+session. \\
+Ligne tiretée bleue & Le plus grand $\sigma$ glissant de la session. \\
+Ligne grise pointillée-tiretée & La médiane, référence des écarts. \\
+Traits verticaux gris pointillés & Toutes les 30~s, avec l'heure de la
+monture : repères de temps. \\
+\bottomrule
+\end{tabularx}
+\end{center}
 
-Ces réglages sont réunis dans \textbf{Préférences > Général > Fonctionnement
-sans surveillance}, et au clic droit sur le bouton d'enregistrement. Pour un PC
-d'observatoire qui lance tout au démarrage, lancer MountMonitor avec
-\texttt{--connect} (ou cocher \emph{Se connecter à la monture à l'ouverture}) :
-il réessaie jusqu'à ce que la monture réponde, puis s'arme seul. Les fichiers
-sont forcés sur le disque au moins toutes les 5~s : une coupure de courant ne
-coûte que quelques secondes.
+\textbf{Échelle verticale} (menu Affichage ou clic droit) : \emph{Données
+seules} cadre la courbe et laisse sortir les lignes de tolérance quand le
+suivi est bien meilleur qu'elles ; \emph{Tolérance} cadre sur la tolérance ;
+\emph{Maximum} montre données et tolérance ; \emph{Lignes min/max} cadre sur
+le minimum et le maximum. L'échelle du $\sigma$ part toujours de zéro et monte à la
+puissance de dix au-dessus de 3,3 fois le plus grand $\sigma$, comme dans
+MountMonitor~3.
 
-\textbf{Démarrer l'enregistrement quand la monture se met à suivre}, actif par
-défaut. Le bouton \emph{arme} alors l'enregistreur au lieu de le démarrer : rien n'est écrit tant
-que la monture ne suit pas. Une monture connectée à midi pour une nuit qui
-commence à 19~h n'enregistre plus sept heures de rien. Un second clic désarme.
-Le bouton dit ce qu'il attend : \emph{Armé : démarre quand la monture suit},
-ou, quand la monture suit déjà en plein jour, \emph{Armé : démarre à la nuit}.
+\begin{tip}
+Monture parquée, l'ascension droite défile avec le ciel (15\arcsec{} par
+seconde) : la courbe AD devient une rampe. Elle est alors grisée, et l'écart
+n'est plus comparé à la tolérance : ce n'est pas une erreur.
+\end{tip}
 
-\textbf{Suspendre quand la monture cesse de suivre}, actif par défaut, avec un
-délai de grâce de deux minutes. Le délai existe pour une raison : un arrêt peut être
-passager --- retournement au méridien, autofocus, slew entre deux cibles ---
-et couper au premier échantillon percerait un trou à chaque dither.
+\section{Le graphe TEMPS}
+\label{sec:time}
 
-\textbf{La nuit seulement : enregistrer après le coucher du Soleil, clore la nuit
-à son lever}, actif par défaut. Décoché, pour les séances de jour (observation
-solaire), l'enregistrement démarre dès que la monture suit et dure jusqu'à ce
-qu'on l'arrête. Coché, une nuit est un
-tout : si la
-monture se parque à 2~h et repart à 3~h, l'enregistrement se suspend puis
-reprend \emph{dans le même fichier}. Seul le jour clôt la session et déclenche
-le rapport --- et seulement si le Soleil est réellement passé sous l'horizon
-pendant la session, pour qu'un essai de jour ne se referme pas sur lui-même.
+Il compare trois horloges. L'axe de gauche est en millisecondes ; l'axe de
+droite, en vert, sert aux temps de boucle.
 
-\section{Ce que montrent les graphes}
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Courbe} & \textbf{Ce qu'elle représente} \\
+\midrule
+Blanche, PC -- monture & Heure du PC moins heure de la monture. Une ligne
+plate est saine ; une pente est une dérive d'horloge, donnée en ms/h dans la
+bande au-dessus. \\
+Verte, boucle PC & Temps entre deux réponses horaires de la monture, vu du
+PC. \\
+Rouge, boucle monture & Le même intervalle, vu de l'horloge de la monture. \\
+Bleue, PC -- NTP & Heure du PC moins celle du serveur de temps, quand NTP est
+activé. \\
+Ligne grise tiretée & Le zéro. \\
+\bottomrule
+\end{tabularx}
+\end{center}
 
-\textbf{Affichage > Durée affichée}, ou un clic droit sur un graphe, règle la
-durée que montrent les graphes défilants : de 30~s à une heure. Le choix est
-retenu. \textbf{Affichage > Échelle verticale} (aussi au clic droit des graphes
-AD et Déc.) : \emph{Données seules} cadre la courbe et laisse sortir les
-lignes de tolérance quand le suivi est bien meilleur qu'elles ;
-\emph{Tolérance}, \emph{Maximum} (données et tolérance visibles) et
-\emph{Lignes min/max}. La dérive d'horloge sous le graphe du temps est une
-droite ajustée sur la dernière demi-heure, pics exclus, en ms par heure.
+Les deux boucles sont tracées centrées sur leur moyenne, comme dans
+MountMonitor~3 : on lit leur régularité, pas leur valeur. Une boucle qui
+s'allonge et devient irrégulière signale un PC surchargé ou une liaison lente.
+En ASCOM, l'écart PC~--~monture n'a pas de sens précis : le pilote répond
+depuis sa mémoire, pas depuis l'horloge de la monture.
 
-L'\textbf{écart-type} (en bleu) a sa propre échelle, à droite, qui part de zéro :
-il reste lisible même quand la position dérive (Soleil, planètes, comètes). Son
-haut est la puissance de dix juste au-dessus de 3,3 fois le plus grand sigma,
-comme dans MountMonitor~3. Les courbes AD et Déc. sont centrées sur la
-\textbf{médiane des données visibles}, recalculée à chaque rafraîchissement, et
-les lignes de tolérance valent cette médiane $\pm$ la tolérance.
-\textbf{Ascension droite en heures} (par défaut) : AD en h:m:s, ses écarts, son
-sigma et sa tolérance en secondes de temps (s) ; \textbf{en degrés} : tout en
-secondes d'arc d'AD, 15 fois plus. Le rapport de nuit garde les vraies secondes
-d'arc sur le ciel.
+\section{Le graphe SISMIQUE}
+\label{sec:seismic}
 
-\textbf{Contrôles de la monture} (Préférences > Divers) : réfraction activée,
-mode de mise à jour de la réfraction, GPS, suivi dual et vitesse de suivi sont
-lus à la connexion, après chaque pointage et toutes les 5~minutes (réglable). Un
-réglage faux ouvre une seule fenêtre d'alerte, gardée au-dessus des autres
-programmes et clignotant dans la barre des tâches ; elle est mise à jour plutôt
-qu'empilée, et se ferme seule une fois la monture corrigée.
+Visible quand un sismomètre est activé (Préférences, Auxiliaire). Courbe
+blanche : le signal du capteur en coups ADC, recentré par le décalage réglé ;
+courbe bleue : son écart-type glissant ; lignes vertes : la tolérance sismique.
+Une salve au même instant que des sorties de tolérance en AD ou en DÉC désigne
+une vibration (un pas, une porte, le vent sur l'abri), pas la monture.
 
-Dans le \textbf{graphe du temps}, les écarts PC--monture et PC--NTP se lisent sur
-l'axe de gauche ; les deux temps de boucle sont tracés centrés sur leur moyenne et
-se lisent sur l'axe de droite (moyenne $\pm$ écart), comme dans MountMonitor~3.
-La boucle PC est l'heure du PC à la réponse horaire de la monture moins la
-précédente.
+\section{Le graphe axial}
+
+Optionnel (Préférences, Traitement, \emph{Mode axial}). Il montre la vitesse
+ou le déplacement des axes de la monture eux-mêmes, lus par
+\texttt{:GaXa\#} et \texttt{:GaXb\#} sur une 10Micron : en gris la vitesse
+brute, en blanc la vitesse moyennée, en blanc vif la droite de régression.
+
+\section{Le panneau d'état et l'historique}
+\label{sec:panel}
+
+\begin{itemize}
+  \item \textbf{Point et état} : vert en suivi, orange en pointage, gris
+  parquée ou à l'arrêt, rouge en erreur.
+  \item \textbf{AD et DÉC} : la position lue, l'écart~$\Delta$ (rouge quand il
+  dépasse la tolérance, gris quand la monture ne suit pas) et le $\sigma$ glissant.
+  \item \textbf{Hz et échantillons} : la cadence réelle et le nombre de
+  mesures. En ASCOM, la cadence réelle est celle du pilote, environ 0,5~Hz
+  (voir section~\ref{sec:conn}).
+  \item \textbf{Air} : température et pression extérieures lues sur la monture
+  toutes les 30~s --- celles qu'elle utilise pour la réfraction, quelle que soit
+  leur source (station météo, script) ---, température de son électronique
+  (plus chaude que l'air) et temps avant le retournement au méridien. Une
+  flèche indique le sens du dernier changement.
+\end{itemize}
+
+L'\textbf{historique}, en dessous, a la ligne la plus récente en haut. On y
+trouve la connexion, la monture et son micrologiciel, le site et les
+éphémérides de la nuit, les contrôles des réglages, les débuts et fins
+d'enregistrement, et une ligne d'air chaque fois que la température change d'au
+moins 0,5~°C ou la pression d'au moins 1~hPa.
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{La fenêtre FFT}
+\label{ch:fftwin}
+
+\capture{fr-fft.png}
+
+Elle montre le spectre des écarts AD (magenta) et DÉC (rouge) sur ce qui est
+en mémoire, recalculé toutes les deux secondes, en haut en fréquence, en bas en
+période. Le sismomètre (blanc) a sa propre échelle à droite, en coups ADC.
+L'amplitude est en secondes d'arc \emph{crête}. Les boutons \emph{+} et
+\emph{-} zooment horizontalement, \emph{<} et \emph{>} décalent, et la flèche
+circulaire revient à la vue complète ; l'échelle verticale suit le zoom.
+
+Ce qu'il faut y chercher est expliqué au chapitre~\ref{ch:fft} : un pic net et
+stable entre 2 et 15 minutes est une erreur périodique de vis ; rien de net,
+c'est bien.
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{Réglages}
+\label{ch:config}
+
+\textbf{Édition > Préférences} (\texttt{Ctrl+,}) ouvre quatre onglets. Rien
+n'est appliqué avant \emph{OK} ; \emph{Annuler} ne change rien. Les champs qui
+ne concernent pas le protocole choisi sont grisés.
+
+\section{Onglet Général}
+\label{sec:conn}
+
+\capture{fr-pref-general.png}
+
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Réglage} & \textbf{À quoi il sert} \\
+\midrule
+Nom de l'observatoire, de la monture & Écrits en tête des fichiers et du
+rapport. \\
+Protocole & LX200 TCP/IP (10Micron en réseau, port 3492), LX200 série
+(RS-232, 9600~bauds d'origine), ASCOM (Windows, par le pilote du
+constructeur), Simulation. \\
+Adresse IP, port & Pour LX200 TCP/IP. \\
+Port série, débit & Pour LX200 série ; le débit doit être celui réglé dans la
+monture. \\
+Pilote ASCOM & Le pilote choisi avec \emph{Sélectionner\ldots} (sélecteur
+ASCOM). \\
+Fonctionnement sans surveillance & Voir la section~\ref{sec:unattended}. \\
+Ratio graphe:texte & Part de la hauteur donnée aux graphes. \\
+Courbes arrondies & Courbes AD et DÉC arrondies sans dépasser les mesures
+(cubique monotone) ; décoché, segments droits. Les statistiques utilisent
+toujours les mesures. \\
+Langue & Français, anglais, néerlandais ou automatique ; prend effet au
+démarrage suivant. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{warning}
+\textbf{Un seul programme peut ouvrir un port série.} Quand NINA (ou un autre
+logiciel) pilote déjà la monture par son câble série, choisissez
+\textbf{ASCOM} avec le \emph{même} pilote : le pilote 10Micron partage l'unique
+liaison entre tous ses clients. En LX200 série, MountMonitor devrait prendre le
+port pour lui seul, et l'un des deux programmes échouerait. En réseau
+(LX200 TCP/IP), une 10Micron accepte plusieurs clients à la fois.
+\end{warning}
+
+Avec le pilote ASCOM 10Micron 1.7, deux particularités. Il refuse la liste des
+préférences de la monture (\texttt{:PRlist\#}) tant que les \emph{unchecked
+raw commands} ne sont pas autorisées dans sa configuration : d'ici là, suivi
+d'objet, correction et vitesse de suivi ne sont pas vérifiés, et l'historique
+le dit. Il sert aussi les positions depuis une mémoire rafraîchie environ toutes
+les deux secondes : MountMonitor ignore les répétitions, la cadence réelle est
+donc celle du pilote, et l'historique le signale une fois.
+
+\section{Onglet Traitement}
+
+\capture{fr-pref-processing.png}
+
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Réglage} & \textbf{À quoi il sert} \\
+\midrule
+Fréquence d'interrogation & Mesures par seconde (2~Hz par défaut). Plus n'est
+pas utile : la monture ne bouge pas plus vite. \\
+Plage glissante & Fenêtre du $\sigma$ glissant, 60 à 900~s. Soixante secondes
+réagissent vite, neuf cents lissent une longue session. \\
+Recaler les graphes sur la fenêtre glissante & Décale la courbe $\sigma$ de la moitié
+de sa fenêtre, pour qu'elle tombe en face de ce qu'elle décrit. \\
+Référence & \emph{Médiane} (défaut) : les écarts sont pris autour de la médiane
+de ce qui est affiché ; \emph{Coordonnées cible monture} : autour de la cible
+annoncée par la monture. \\
+Ascension droite en degrés & Décoché : AD en h:m:s et ses écarts, $\sigma$ et
+tolérance en secondes de temps ; coché : tout en secondes d'arc d'AD, 15~fois
+plus. Le rapport de nuit reste en secondes d'arc sur le ciel. \\
+Tolérance AD, DÉC & Seuil d'alerte, dans l'unité affichée. Règle simple :
+votre échantillonnage en \arcsec/pixel est strict, le double est confortable.
+\\
+Tolérance sismique & En pourcentage de la plage du sismomètre. \\
+Journalisation, mode & \emph{Tout}, ou seulement les mesures en suivi. \\
+Site d'observation & Lu sur la monture à chaque connexion et conservé ; grisé
+quand la monture le donne. À saisir seulement si elle ne le donne pas ;
+longitude \textbf{positive vers l'est}. Sans site, pas d'éphémérides. \\
+Délai après pointage & Secondes ignorées après un pointage, le temps que la
+monture se stabilise. \\
+Mode axial & Graphe axial : désactivé, vitesse ou déplacement. \\
+Mode réinitialisation & Quand remettre les graphes à zéro : à la main, ou à
+chaque pointage. \\
+Export graphes & Quand enregistrer les graphes en images : à la main, à chaque
+pointage, au parcage, ou quand le graphe est plein. \\
+Fermer fichiers & Quand clore la session et en ouvrir une nouvelle : à la main,
+à chaque pointage ou au parcage. \\
+Lignes d'historique & Taille de l'historique à l'écran. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Onglet Auxiliaire}
+
+\capture{fr-pref-auxiliary.png}
+
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Réglage} & \textbf{À quoi il sert} \\
+\midrule
+Serveur NTP, intervalle & Compare l'heure du PC à un serveur de temps (courbe
+bleue du graphe TEMPS). \\
+Sismomètre & Activer, port série, débit, fréquence d'échantillonnage. \\
+Décalage & Ajouté à chaque mesure pour centrer le signal sur zéro : un capteur
+au repos vers $-300$ demande 300. \\
+Plage & Hauteur du graphe sismique, en coups ADC. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Onglet Divers : les contrôles de la monture}
+
+\capture{fr-pref-misc.png}
+
+Chaque ligne coche un contrôle et donne la valeur attendue. Ils sont détaillés
+au chapitre suivant. En bas : \emph{Afficher une fenêtre d'alerte quand un
+réglage de la monture est faux}, et l'intervalle de revérification (5~minutes
+par défaut).
+
+\section{Fonctionnement sans surveillance}
+\label{sec:unattended}
+
+Pour un PC d'observatoire qui lance tout au démarrage. Ces réglages sont dans
+l'onglet Général et au clic droit sur le bouton d'enregistrement.
+
+\begin{itemize}
+  \item \textbf{Se connecter à la monture à l'ouverture}, ou lancer le
+  programme avec \texttt{--connect}. Au démarrage du PC, le boîtier de la
+  monture n'a souvent pas fini de démarrer : MountMonitor réessaie toutes les
+  30~s jusqu'à la première connexion, sans ouvrir de fenêtre.
+  \item \textbf{Démarrer l'enregistrement quand la monture se met à suivre}
+  (défaut). Le bouton \emph{arme} l'enregistreur : rien n'est écrit tant que la
+  monture ne suit pas. Le bouton dit ce qu'il attend.
+  \item \textbf{Suspendre quand la monture cesse de suivre} (défaut), après un
+  délai de grâce de deux minutes : un retournement, un autofocus ou un pointage
+  entre deux cibles ne coupent pas la session. Le fichier reste le même.
+  \item \textbf{La nuit seulement} (défaut) : enregistrer après le coucher du
+  Soleil, clore la nuit et écrire le rapport à son lever. Une monture qui parque
+  à 2~h et repart à 3~h reste une seule nuit, un seul fichier, un seul rapport.
+  Décoché, pour les séances de jour (Soleil), l'enregistrement dure jusqu'à ce
+  qu'on l'arrête.
+\end{itemize}
+
+Les fichiers sont forcés sur le disque au moins toutes les 5~s : une coupure de
+courant ne coûte que quelques secondes.
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{Les contrôles de la monture}
+\label{ch:checks}
+
+Ils sont faits à la connexion, après chaque pointage, à la validation des
+Préférences et toutes les 5~minutes. Les résultats s'écrivent dans l'historique
+sous la ligne « \#\#\# CONTRÔLE DES RÉGLAGES DE LA MONTURE \#\#\# » ; le
+contrôle périodique n'écrit que ce qui a changé. Les contrôles liés à la vitesse
+ne sont faits que si la monture suit.
+
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{p{3.3cm}Xp{4.2cm}}
+\toprule
+\textbf{Contrôle} & \textbf{Ce qu'il vérifie} & \textbf{Si c'est faux} \\
+\midrule
+Correction de réfraction (\texttt{:GREF\#}) & Que la monture corrige la
+réfraction atmosphérique. Presque toujours voulue activée. & L'activer dans la
+monture (clavier ou logiciel de la monture). \\
+Mise à jour de la réfraction (\texttt{:WSG\#}) & D'où viennent température et
+pression : pas de mise à jour (valeurs poussées par un script ou saisies), pas
+de mise à jour en suivi, ou mise à jour continue (station météo). & Mettre la
+valeur attendue en accord avec votre installation, ou corriger la monture. \\
+GPS (\texttt{:gtgpps\#}, \texttt{:gtg\#}) & Que l'heure de la monture est
+synchronisée sur le GPS. & Brancher ou vérifier le GPS ; sans GPS, décocher ce
+contrôle. \\
+Suivi deux axes (\texttt{:Gdat\#}) & Que la monture corrige les deux axes à la
+fois (suivi de la réfraction et du modèle en déclinaison aussi). & L'activer
+dans la monture. \\
+Vitesse de suivi (\texttt{:GT\#}) & Sidérale, solaire ou lunaire, selon ce qui
+est attendu. & Remettre la vitesse voulue. \\
+Suivi d'objet (liste \texttt{:PRlist\#}) & Désactivé en sidéral. Avec une
+vitesse attendue solaire ou lunaire, il est permis : la monture suit alors
+l'objet à sa propre vitesse, affichée « Custom ». & Le désactiver pour les
+étoiles. \\
+Correction de suivi (\texttt{:PRlist\#}) & Qu'elle vaut 0,000~\%. & La remettre
+à zéro. \\
+Vitesse dans les préférences (\texttt{:PRlist\#}) & Qu'elle est celle
+attendue. & La corriger. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+Quand un réglage est faux, une seule \textbf{fenêtre d'alerte} s'ouvre au
+premier plan, sur le bureau que vous regardez, et clignote dans la barre des
+tâches. Elle est mise à jour plutôt qu'empilée, et se ferme seule une fois la
+monture corrigée.
+
+\capture[0.6]{fr-alerte.png}
+
+\begin{tip}
+Une alerte n'est pas toujours une erreur de la monture : elle dit que la
+monture ne correspond pas à \emph{vos} valeurs attendues. Si la monture a
+raison (par exemple « pas de mise à jour » parce qu'un script pousse la météo),
+c'est la valeur attendue qu'il faut changer, dans l'onglet Divers.
+\end{tip}
 
 % ─────────────────────────────────────────────────────────────────
 \chapter{Une nuit d'observation}
-\label{ch:usage}
+\label{ch:night}
 
 \section{Déroulement}
 
 \begin{enumerate}
-  \item Connecter la monture, vérifier que l'état passe en suivi.
-  \item Armer l'enregistreur --- ou le démarrer, si l'armement est désactivé.
-  \item Laisser tourner. Le rapport s'écrira tout seul à la fin.
+  \item Connecter la monture ; vérifier dans l'historique le bloc des contrôles
+  (que des \checkmark, ou une alerte à traiter).
+  \item Armer l'enregistreur --- ou laisser l'armement automatique le faire.
+  \item Laisser tourner. L'enregistrement démarre au premier suivi, se suspend
+  aux parcages, et le rapport s'écrit tout seul au lever du jour.
 \end{enumerate}
 
 \section{Ce qu'il faut surveiller en direct}
 
 \begin{itemize}
-  \item \textbf{L'écart-type glissant}, plus que la déviation instantanée : il
+  \item \textbf{Le $\sigma$ glissant} (courbe bleue), plus que l'écart instantané : il
   dit si la monture tient sa position.
-  \item \textbf{Les alertes de tolérance}, qui signalent un dépassement.
-  \item \textbf{La marge au point de rosée}, si un capteur d'environnement est
-  branché.
+  \item \textbf{Les sorties de tolérance} : l'écart~$\Delta$ passe au rouge.
+  \item \textbf{Une fenêtre d'alerte} : un réglage de la monture a changé.
+  \item \textbf{La courbe blanche du graphe TEMPS} : elle doit rester plate.
 \end{itemize}
 
 \begin{tip}
@@ -548,16 +865,46 @@ Un pic isolé n'est presque jamais la monture : c'est un coup de vent, un câble
 un pas trop près du pied. Ce qui compte est le niveau \emph{entre} les pics.
 \end{tip}
 
-\section{Les éphémérides de la nuit}
+\section{Quand quelque chose ne va pas}
 
-Calculées depuis le site, elles donnent le coucher, le crépuscule nautique, la
-nuit noire, le lever --- et surtout la part de nuit noire que la session a
-réellement couverte. Une nuit commencée une heure trop tard perd une heure
-qu'on ne rattrape pas, et c'est plus utile de le lire à côté des chiffres de
-suivi qu'après coup.
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{p{4cm}X}
+\toprule
+\textbf{Ce que vous voyez} & \textbf{Ce que c'est, ce qu'il faut faire} \\
+\midrule
+Pas de connexion réseau & Vérifier l'adresse IP et le port (3492), et que le
+câble et le boîtier de la monture répondent (ping). \\
+Liaison série muette & Les deux bouts doivent avoir la même vitesse (9600 bauds
+d'origine). Si un autre logiciel tient le port, passer en ASCOM avec le même
+pilote. \\
+Fenêtre d'alerte & Lire ses lignes et le chapitre~\ref{ch:checks} : corriger
+la monture, ou la valeur attendue si c'est la monture qui a raison. \\
+Courbe AD ou DÉC en rampe, en suivi & Une dérive. Sur une monture à modèle de
+pointage, ajouter des points de modèle près de la cible ; la vis d'azimut n'est
+pas la réponse. \\
+Oscillation régulière de quelques minutes & Une erreur périodique de vis : la
+voir dans la fenêtre FFT, la corriger avec l'outil du constructeur. \\
+$\sigma$ qui monte d'un coup puis redescend & Normal juste après un pointage ou un
+dither : la fenêtre glissante enjambe le mouvement. \\
+Salves en même temps sur AD, DÉC et le sismomètre & Une vibration : vent, pas,
+porte, câble qui tire. \\
+Courbe blanche du graphe TEMPS en pente & L'horloge du PC ou de la monture
+dérive : synchroniser le PC (NTP), vérifier le GPS de la monture. \\
+Boucles longues et irrégulières & PC surchargé ou liaison lente : fermer ce qui
+tourne inutilement, préférer le réseau. \\
+Cadence 0,5~Hz en ASCOM & Normal : c'est le rafraîchissement du pilote. \\
+Courbes grises & La monture ne suit pas (parquée, à l'arrêt, pointage). \\
+Pas d'éphémérides & Le site n'est pas connu : la monture ne le donne pas et
+les Préférences sont vides. \\
+Note du rapport médiocre, monture calme & Lire le chapitre~\ref{ch:stats} :
+c'est souvent la lecture qui est fausse, pas la monture. \\
+\bottomrule
+\end{tabularx}
+\end{center}
 
 % ─────────────────────────────────────────────────────────────────
-\chapter{Les fichiers}
+\chapter{Les fichiers et le rapport de nuit}
 \label{ch:files}
 
 \section{Ce qu'une session écrit}
@@ -568,57 +915,91 @@ suivi qu'après coup.
 \toprule
 \textbf{Extension} & \textbf{Contenu} \\
 \midrule
-\texttt{.dat} & Les échantillons : heure, AD, DÉC, écarts-types, état. \\
-\texttt{.dti} & Les mesures de synchronisation PC / monture. \\
+\texttt{.dat} & Les échantillons : heure, AD, DÉC, écarts-types, état. Même
+format que MountMonitor~3. \\
+\texttt{.dti} & Les mesures d'horloge PC / monture / NTP. \\
 \texttt{.fft} & Les spectres enregistrés en cours de session. \\
-\texttt{.env} & Température, pression, humidité, quand la monture les donne. \\
-\texttt{.log} & Les événements : connexions, slews, alertes, suspensions. \\
+\texttt{.env} & Température, pression, température de l'électronique. \\
+\texttt{.log} & Les événements : connexions, pointages, alertes,
+suspensions. \\
+\texttt{-rapport-fr.txt} (en, nl) & Le rapport de nuit, une version par
+langue. \\
 \bottomrule
 \end{tabularx}
 \end{center}
 
-L'en-tête du \texttt{.dat} porte le site et le décalage horaire. C'est ce qui
-permet de recalculer les crépuscules en relecture, longtemps après que la
-monture a été débranchée.
+L'en-tête du \texttt{.dat} porte le site et le décalage horaire : les
+crépuscules se recalculent en relecture, longtemps après. \textbf{Fichier >
+Ouvrir un log} relit une session et refait toute l'analyse ; les onglets de
+langue montrent le même rapport dans les trois langues.
 
-\section{Le rapport de nuit}
+\section{Le rapport de nuit, section par section}
+\label{sec:report}
 
-Il est écrit automatiquement en fin de session, à côté du \texttt{.dat}, en
-\textbf{un fichier par langue}. On n'a rien à demander.
+\capture{fr-rapport.png}
 
-\section{La relecture}
+\begin{description}
+  \item[Aperçu de la session] Date, observatoire, monture, durée, nombre
+  d'échantillons (en tout et en suivi), cadence, nombre de cibles, fichier.
 
-\textbf{Fichier $\rightarrow$ Ouvrir un log} relit une session terminée et
-reconstruit toute l'analyse : statistiques par cible, mouvements commandés,
-dérive, spectres, éphémérides. Les onglets de langue permettent de lire le même
-rapport dans les trois langues.
+  \item[Qualité globale] La \textbf{note}, fondée sur le seul \textbf{jitter
+  combiné} (voir chapitre~\ref{ch:stats}), puis ses trois composantes :
+  \begin{enumerate}
+    \item \emph{Jitter de suivi} : la dispersion pendant que la monture tient
+    une position, en AD, en DÉC et combinée. C'est ce qui étale l'étoile.
+    \item \emph{Repositionnements commandés} : nombre de dithers et recentrages,
+    amplitude médiane. Sans effet pendant une pose.
+    \item \emph{Dérive lente} : en \arcsec/h, et le déplacement de l'étoile
+    qu'elle produit sur une pose de 180~s.
+  \end{enumerate}
+  \emph{Pour mémoire} donne le RMS brut (tout mélangé) et sans la dérive : ils
+  sont là pour montrer pourquoi ils ne servent pas à noter. Suivent le type de
+  monture et les seuils de la note, et une phrase de synthèse.
 
-% ─────────────────────────────────────────────────────────────────
-\chapter{Quand quelque chose ne va pas}
-\label{ch:trouble}
+  \item[Cible n°] Pour chaque cible : ses coordonnées et son nombre de mesures ;
+  pour AD puis DÉC, le jitter, le RMS brut, la \emph{résolution de lecture} (le
+  plus petit pas que la monture rapporte ; un jitter proche de cette limite peut
+  être plus faible en réalité), le $\sigma$ glissant médian, la dérive en \arcsec/min
+  et \arcsec/h avec son effet sur une pose et un verdict : sans dérive
+  significative (moins de 1\arcsec/h), légère (moins de 5), présente mais sans
+  effet sur une pose (moins de 15), significative au-delà. Puis le tableau
+  \emph{FFT} des pics dominants (fréquence, période, amplitude crête) et le
+  verdict d'erreur périodique : détectée si le pic principal tombe entre 2 et
+  15~minutes, très faible sous 0,5\arcsec, acceptable sous 1,5\arcsec, élevée
+  au-delà.
 
-\begin{center}
-\rowcolors{2}{rowalt}{white}
-\begin{tabularx}{\textwidth}{lX}
-\toprule
-\textbf{Symptôme} & \textbf{Piste} \\
-\midrule
-Pas de connexion réseau & Vérifier l'adresse et le port 3492, et que rien
-d'autre ne tient déjà la session --- une 10Micron n'en accepte qu'une. \\
-Liaison série muette & Les deux bouts doivent s'accorder sur la vitesse. Les
-10Micron sortent d'usine en 9600 bauds, et le menu de la monture permet d'en
-changer. \\
-Dérive en déclinaison & Sur une monture à modèle, ajouter des points près de la
-cible. La vis d'azimut n'est pas la réponse. \\
-Note médiocre, monture calme & Lire le chapitre~\ref{ch:stats} : c'est souvent
-la lecture qui est fausse, pas la monture. \\
-Écart-type glissant absurde & Il est normal juste après un slew ou un
-repositionnement : sa fenêtre enjambe le mouvement. Le rapport écarte ces
-valeurs. \\
-Pas d'éphémérides & Le site n'est pas renseigné. Préférences, section site. \\
-\bottomrule
-\end{tabularx}
-\end{center}
+  \item[Temps] (si un \texttt{.dti} existe) L'écart PC~--~monture, sa dérive
+  en ms/min (stable sous 1~ms/min), les boucles PC et monture (moyenne,
+  maximum ; une boucle PC au-delà d'une seconde signale un PC qui peine) et
+  l'écart PC~--~NTP (au-delà d'une seconde, synchroniser l'horloge).
+
+  \item[Statut de suivi] Part des échantillons en suivi, parquée, à l'arrêt, en
+  pointage. Moins de 90~\% en suivi mérite un regard.
+
+  \item[Mouvements commandés] Dithers, recentrages et mouvements \emph{non
+  stabilisés} (après lesquels la dispersion reste plusieurs fois sa valeur
+  habituelle : ceux-là méritent un coup d'œil), amplitude médiane, plus grand
+  mouvement, durée et intervalle médians.
+
+  \item[Éphémérides de la nuit] Coucher, crépuscule nautique, nuit noire,
+  lever, et la part de nuit noire réellement couverte par la session.
+
+  \item[Analyse de tolérance] Pour des seuils de 0,5 à 5\arcsec, la part des
+  échantillons dont le jitter dépasse le seuil, sur la même base que la note :
+  entre repositionnements, dérive retirée.
+
+  \item[Continuité des données] Coupures d'acquisition (plus de cinq fois
+  l'intervalle normal), la plus longue, le temps total perdu.
+
+  \item[Recommandations] Ce qu'il y a à faire, cible par cible, quand quelque
+  chose le mérite.
+\end{description}
+
+\begin{tip}
+Une bonne nuit se lit ainsi : note EXCELLENT ou BON, jitter de quelques
+dixièmes de seconde d'arc, dérive « sans effet sur une pose », pas d'erreur
+périodique typique, plus de 90~\% en suivi, pas de recommandation.
+\end{tip}
 
 % ─────────────────────────────────────────────────────────────────
 \chapter{Référence}

@@ -74,18 +74,31 @@ _CHECK_SVG = (
     'stroke-linecap="round" stroke-linejoin="round"/></svg>')
 
 
+_ARROW_SVG = (
+    '<svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 9 9">'
+    '<path d="{d}" fill="#c8c8d2"/></svg>')
+
+
 def _style_sheet() -> str:
-    """The style sheet with a tick in checked boxes. A plain blue square
-    was hard to tell from an empty one (seen on a 4K screen at 200 %)."""
+    """The style sheet with its small images: a tick in checked boxes (a
+    plain blue square was hard to tell from an empty one) and real arrows
+    on the spin boxes (tiny dots on a 4K screen at 200 %)."""
+    images = {"%CHECK%": ("mountmonitor_check.svg", _CHECK_SVG),
+              "%UP%": ("mountmonitor_up.svg", _ARROW_SVG.format(d="M0.5 7 L4.5 2 L8.5 7 Z")),
+              "%DOWN%": ("mountmonitor_down.svg", _ARROW_SVG.format(d="M0.5 2 L4.5 7 L8.5 2 Z"))}
+    sheet = STYLESHEET
     try:
         import tempfile
         from pathlib import Path
-        path = Path(tempfile.gettempdir()) / "mountmonitor_check.svg"
-        if not path.exists() or path.read_text(encoding="utf-8") != _CHECK_SVG:
-            path.write_text(_CHECK_SVG, encoding="utf-8")
-        return STYLESHEET.replace("%CHECK%", path.as_posix())
+        for key, (name, svg) in images.items():
+            path = Path(tempfile.gettempdir()) / name
+            if not path.exists() or path.read_text(encoding="utf-8") != svg:
+                path.write_text(svg, encoding="utf-8")
+            sheet = sheet.replace(key, path.as_posix())
+        return sheet
     except Exception:
-        return STYLESHEET.replace("            image: url(%CHECK%);\n", "")
+        import re
+        return re.sub(r"\n\s*image: url\(%[A-Z]+%\);[^\n]*", "", sheet)
 
 
 def apply_dark_theme(app: QApplication):
@@ -204,6 +217,27 @@ STYLESHEET = """
             border: 1px solid #3c3c4b;
             border-radius: 4px;
             padding: 4px 8px;
+        }
+        QSpinBox, QDoubleSpinBox {
+            padding-right: 20px;
+        }
+        QSpinBox::up-button, QDoubleSpinBox::up-button {
+            subcontrol-origin: border; subcontrol-position: top right;
+            width: 18px; border-left: 1px solid #3c3c4b;
+        }
+        QSpinBox::down-button, QDoubleSpinBox::down-button {
+            subcontrol-origin: border; subcontrol-position: bottom right;
+            width: 18px; border-left: 1px solid #3c3c4b;
+        }
+        QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover,
+        QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {
+            background-color: #3c3c4b;
+        }
+        QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {
+            image: url(%UP%); width: 9px; height: 9px;
+        }
+        QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {
+            image: url(%DOWN%); width: 9px; height: 9px;
         }
         QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {
             border-color: #5082c8;

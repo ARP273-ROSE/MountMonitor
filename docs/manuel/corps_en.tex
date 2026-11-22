@@ -244,8 +244,9 @@ that rather than the tracking: those values are excluded from the report.
 \section{The rating}
 
 It rests on the combined jitter, with thresholds suited to the type of mount.
-An unguided 10Micron is judged on wider thresholds than a guided mount, because
-the orders of magnitude are not the same.
+Beyond the last threshold the rating is POOR. The thresholds apply to the
+jitter alone: drift and commanded moves do not enter it, which is why they are
+tight even for an unguided mount.
 
 \begin{center}
 \rowcolors{2}{rowalt}{white}
@@ -253,9 +254,9 @@ the orders of magnitude are not the same.
 \toprule
 \textbf{Rating} & \textbf{Guided mount} & \textbf{Unguided precision} \\
 \midrule
-Excellent & $< 0.5\arcsec$ & $< 2.0\arcsec$ \\
-Good      & $< 1.5\arcsec$ & $< 4.0\arcsec$ \\
-Fair      & $< 3.0\arcsec$ & $< 8.0\arcsec$ \\
+Excellent & $< 0.4\arcsec$ & $< 0.5\arcsec$ \\
+Good      & $< 1.0\arcsec$ & $< 1.0\arcsec$ \\
+Fair      & $< 2.0\arcsec$ & $< 2.0\arcsec$ \\
 \bottomrule
 \end{tabularx}
 \end{center}
@@ -296,12 +297,61 @@ A sharp peak at a stable period marks a periodic error. A flat spectrum means
 there is no detectable one --- the case of 10Micron mounts after correction.
 Broad, wandering peaks are noise, usually wind.
 
-In the window, RA and DEC share the left scale, in arcseconds; the
-seismometer has its own scale on the right, in ADC counts. The buttons zoom
-and shift horizontally, and the last one, the circular arrow, brings back the full range.
+The FFT window is described in chapter~\ref{ch:fftwin}.
 
 % ═══════════════════════════════════════════════════════════════════
 \part{Using}
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{What MountMonitor is for}
+\label{ch:purpose}
+
+MountMonitor watches an equatorial mount through the night while other
+software (NINA, a sequencer, a guiding program) drives it. It never commands
+the mount: it \emph{reads}. Twice a second it asks the mount for its position
+and its time, and draws four things from them.
+
+\begin{enumerate}
+  \item \textbf{Tracking quality.} How much the position moves while the mount
+  is meant to hold a star: that is what smears the star on the sensor
+  (chapter~\ref{ch:stats}).
+  \item \textbf{The mount's settings.} Refraction, dual-axis tracking, tracking
+  rate, follow object, tracking correction, GPS: a setting left wrong the day
+  before spoils a whole night without anything showing on screen. MountMonitor
+  reads them again at connection, after every slew and every five minutes, and
+  opens an alert window when one of them is not the expected one.
+  \item \textbf{Time.} The offset between the PC's clock, the mount's and a time
+  server (NTP). A drifting clock spoils pointing and the time stamps of the
+  frames.
+  \item \textbf{Vibration}, if a seismometer is connected, and \textbf{the air}
+  (temperature and pressure) the mount uses to correct refraction.
+\end{enumerate}
+
+Everything is recorded, and a \textbf{night report} is written on its own at
+the end of the session, in the three languages (section~\ref{sec:report}).
+
+\section{Reading it in ten seconds}
+
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{lXX}
+\toprule
+\textbf{Where to look} & \textbf{All is well} & \textbf{Something is wrong} \\
+\midrule
+Status dot (top right) & Green, ``The mount is tracking'' & Grey (parked, idle),
+orange (slewing) or red (error) \\
+RA and DEC curves & A narrow band between the green tolerance lines & Repeated
+excursions beyond the green lines, a ramp, regular oscillations \\
+Blue $\sigma$ curve & Low and flat & Rising and staying high \\
+Alert window & None & A ``Mount alert'' window in front \\
+History & Lines with \checkmark{} after ``\#\#\# MOUNT SETTINGS CHECK \#\#\#'' &
+Lines preceded by a warning triangle \\
+Night report & Rating EXCELLENT or GOOD & FAIR or POOR, recommendations \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+Chapter~\ref{ch:night} says what to do in each case.
 
 % ─────────────────────────────────────────────────────────────────
 \chapter{Installation}
@@ -310,8 +360,8 @@ and shift horizontally, and the last one, the circular arrow, brings back the fu
 \section{Supported systems}
 
 The published packages carry their own Python and their own Qt: nothing else
-needs installing. What they do require is a recent enough system, because the
-Qt binaries inside them require it.
+needs installing. They do, however, require a fairly recent system, because the
+Qt binaries they contain require it.
 
 \begin{center}
 \rowcolors{2}{rowalt}{white}
@@ -328,214 +378,500 @@ Linux ARM & glibc 2.39 --- Ubuntu 24.04 & arm64 \\
 \end{center}
 
 \begin{warning}
-Pick the macOS package that matches your machine:
-\texttt{-macos-arm64.dmg} for an Apple Silicon Mac, \texttt{-macos-x86\_64.dmg}
-for an Intel one. The bundled Python is architecture-specific even though Qt
-itself is universal: the wrong package will not start at all.
+Pick the macOS package that matches your machine: \texttt{-macos-arm64.dmg}
+for an Apple Silicon Mac, \texttt{-macos-x86\_64.dmg} for an Intel Mac. The
+bundled Python is tied to one architecture even though Qt is universal: the
+wrong package will not start at all.
 \end{warning}
 
 \section{Installing}
 
-On Windows the installer handles everything. On macOS, drag the application
-into the Applications folder. On Linux, \texttt{installer.sh} installs it into
-the user profile, with neither \texttt{sudo} nor a package manager.
+On Windows the installer does everything. On macOS, drag the application into
+the Applications folder. On Linux, \texttt{installer.sh} installs it in the
+user's profile, without \texttt{sudo} or a package manager.
 
-Updates are then checked quietly at every start and offered when there are any.
+Updates are checked quietly at every start and offered when there are any;
+they are signed, and an archive whose signature does not match is refused.
 
 \section{A first run without a mount}
 
-Simulation mode lets you walk through everything with no hardware:
+Simulation mode lets you go through everything without hardware; it made the
+screenshots of this manual:
 
 \begin{lstlisting}[language=bash]
 MountMonitor --sim-all
 \end{lstlisting}
 
-Here is the window after half a minute of simulation: at the top the right
-ascension and declination deviations with their tolerances, then the
-PC--mount clock difference and the seismometer; on the right the mount's
-state, its coordinates and the session log.
-
-\capture{en-principal.png}
-
 % ─────────────────────────────────────────────────────────────────
-\chapter{Settings}
-\label{ch:config}
+\chapter{The main window}
+\label{ch:window}
 
-\section{Connection}
+\capture{en-principal-annote.png}
+
+From left to right: the scrolling \textbf{graphs} (the present is on the
+right, at 0~s), then the \textbf{status panel} and the \textbf{history}.
+The numbers refer to the sections that follow.
+
+\begin{multicols}{2}
+\begin{enumerate}
+  \item Buttons and menus (\ref{sec:menus})
+  \item Strip of figures (\ref{sec:strip})
+  \item Right ascension deviation (\ref{sec:radec})
+  \item $\sigma$ scale, blue curve (\ref{sec:radec})
+  \item Declination deviation (\ref{sec:radec})
+  \item TIME graph (\ref{sec:time})
+  \item SEISMIC graph (\ref{sec:seismic})
+  \item Mount status (\ref{sec:panel})
+  \item Position, deviation $\Delta$ and $\sigma$ (\ref{sec:panel})
+  \item Sampling rate and samples (\ref{sec:panel})
+  \item Air line (\ref{sec:panel})
+  \item History (\ref{sec:panel})
+\end{enumerate}
+\end{multicols}
+
+\section{Menus and buttons}
+\label{sec:menus}
 
 \begin{center}
 \rowcolors{2}{rowalt}{white}
 \begin{tabularx}{\textwidth}{lX}
 \toprule
-\textbf{Protocol} & \textbf{When to use it} \\
+\textbf{Item} & \textbf{Purpose} \\
 \midrule
-LX200 TCP/IP & A 10Micron on the network. Port 3492 by default. \\
-LX200 serial & RS-232 link, 9600 8N1 as shipped on 10Micron mounts. \\
-ASCOM & Windows only, through the manufacturer's driver. \\
+\emph{Connect / Disconnect} & Opens or closes the link to the mount, with the
+protocol chosen in Preferences. \\
+\emph{Start log / Stop log} & Arms the logger (it starts when the mount tracks)
+or stops it. A right click gives the unattended-operation settings. \\
+\emph{FFT} & Opens the Fourier analysis window (chapter~\ref{ch:fftwin}). \\
+\emph{Preferences} & All settings (chapter~\ref{ch:config}). \\
+File & Connect, disconnect; \emph{Open log} replays a recorded session and
+rebuilds its report; \emph{Analyse mount logs (.log10m)} reads a 10Micron's
+internal logs; Quit. \\
+View & \emph{Time span} (30~s to 1~h), \emph{Vertical scale} (see below), FFT
+window. Also on a right click on a graph. \\
+Reset & Resets the min/max, the graph buffers, or both; \emph{New files}
+closes the session and opens another; \emph{Export graphs} saves the graphs as
+PNG images. \\
+Language, Help & Interface language; help, manual, updates, reporting a
+problem. \\
 \bottomrule
 \end{tabularx}
 \end{center}
 
-When NINA (or any other program) already drives the mount over its serial
-cable, choose \textbf{ASCOM} with the same driver: the 10Micron driver shares
-the one link between all its clients, whereas LX200 serial would have to take
-the port for itself. The 10Micron driver 1.7 refuses the preference list
-(\texttt{:PRlist\#}) unless \emph{unchecked raw commands} are allowed in its
-setup dialog; until then Follow object, tracking correction and speed are not
-checked, and the history says so. The driver also serves positions from a cache
-refreshed about every two seconds; MountMonitor skips the repeats, so the
-real sampling rate in ASCOM is the driver's.
+\section{The strip of figures above the graphs}
+\label{sec:strip}
 
-Under the coordinates, a line shows the air read from the mount every
-30~s: outside temperature and pressure (those the refraction correction uses,
-whatever pushes them), temperature of the mount's internal sensor
-(in its electronics, so warmer than the air) and time to the meridian flip, with
-an arrow for the direction of the last change.
-
-\section{The observing site}
-
-\begin{warning}
-The site is read from the mount at each connection (\texttt{:Gt\#},
-\texttt{:Gg\#}, \texttt{:Gev\#}) and kept in the preferences, where it shows
-greyed out while the mount is connected: a night replayed later then still
-has its twilights. Type \textbf{latitude, longitude and elevation} there only
-when the mount or its driver does not report a site. Without a site the night
-ephemeris cannot be computed.
-
-Longitude is entered \textbf{positive east}. The LX200 protocol counts the
-other way; the conversion is done for you when the mount answers.
-\end{warning}
-
-\section{Tolerances and running window}
-
-The tolerance is an alert threshold you set yourself. A simple rule: take your
-sampling in arcseconds per pixel. A tolerance equal to the sampling is strict,
-twice that is comfortable.
-
-The running standard deviation window is set between 60 and 900 seconds. Sixty
-reacts fast, nine hundred smooths a long session.
-
-\section{Connecting automatically at launch}
-
-On an observatory PC that starts on its own, MountMonitor can connect to the mount
-as soon as it opens, without a click. Two equivalent ways:
+Above each graph a line gives its current figures, each in the colour of what
+it describes. It never covers the curves.
 
 \begin{itemize}
-  \item tick \textbf{Connect to the mount when MountMonitor opens} in the
-        Preferences (recording tab);
-  \item start the program with the \texttt{--connect} option, for instance from
-        a scheduled task.
+  \item \textbf{RA and DEC}: the current deviation, its standard deviation
+  $\sigma$ over what is shown, in green the tolerance (``tol.~±0.100~s''), the
+  session's minimum and maximum, in blue the largest running $\sigma$.
+  \item \textbf{TIME}: in white the PC~--~mount offset and its drift per hour,
+  in green the PC loop, in red the mount loop, in grey their mean, in blue the
+  PC~--~NTP offset. These colours are also those of the curves.
 \end{itemize}
 
-When the PC starts, the mount's control box has often not finished booting: while
-the mount does not answer, MountMonitor tries again every 30~seconds (setting
-\texttt{connect\_retry\_s}, 5~s minimum) until the first successful connection,
-and says so in the session log. A click on \emph{Connect} or \emph{Disconnect}
-stops the attempts. No dialog opens during these attempts: with ASCOM the driver
-must already be chosen; on a serial link the port must already be set. With
-\texttt{--connect}, the offer to report a previous crash is kept for the next
-launch, so that it does not hold the window.
+\section{The RIGHT ASCENSION and DECLINATION graphs}
+\label{sec:radec}
 
-Once connected, recording follows the settings below: it is armed and starts
-when the mount starts tracking.
+Each point is the deviation between the position read and the reference
+position (by default the median of what is shown). In right ascension the unit
+is the second of time (s) or the arcsecond (\arcsec), depending on the
+\emph{right ascension in degrees} setting; in declination, the arcsecond.
 
-\section{Arming the logger}
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Line} & \textbf{What it shows} \\
+\midrule
+Magenta (RA) or red (DEC) curve & The measured deviation. Rounded without ever
+going beyond the samples; on a short span, dots mark the real samples. Grey
+when the mount is not tracking. \\
+Blue curve, right-hand scale & The running standard deviation $\sigma$, over the
+running window (60~s by default). It tells whether the mount \emph{holds} its
+position, wherever it holds it. \\
+Green lines & The tolerance, either side of the median. \\
+Dashed lines in the curve's colour & The session's minimum and maximum. \\
+Dashed blue line & The session's largest running $\sigma$. \\
+Grey dash-dot line & The median, reference of the deviations. \\
+Dotted grey vertical lines & Every 30~s, with the mount's time: time marks. \\
+\bottomrule
+\end{tabularx}
+\end{center}
 
-These settings sit together in \textbf{Preferences > General > Unattended
-operation}, and on a right click of the record button. For an observatory PC
-that starts everything at boot, launch MountMonitor with \texttt{--connect}
-(or tick \emph{Connect to the mount when MountMonitor opens}): it retries until
-the mount answers, then arms itself. The three settings below are \textbf{on
-by default}; the files are forced to the disk at least every 5~s, so a power
-cut costs a few seconds of data.
+\textbf{Vertical scale} (View menu or right click): \emph{Data only} frames
+the curve and lets the tolerance lines go out of view when tracking is much
+better than they are; \emph{Tolerance} frames the tolerance; \emph{Maximum}
+shows data and tolerance; \emph{Min/max lines} frames the minimum and maximum.
+The $\sigma$ scale always starts at zero and rises to the power of ten above
+3.3 times the largest $\sigma$, as in MountMonitor~3.
 
-\textbf{Start recording when the mount starts tracking.} The button then
-\emph{arms} the logger instead of starting it: nothing is written until the
-mount tracks. A mount connected at noon for a night beginning at 19:00 no
-longer records seven hours of nothing. A second click disarms. The button says
-what it waits for: \emph{Armed: starts when the mount tracks}, or, when the
-mount already tracks in daylight, \emph{Armed: starts at nightfall}.
+\begin{tip}
+With the mount parked, right ascension drifts with the sky (15\arcsec{} per
+second): the RA curve becomes a ramp. It is then greyed and the deviation is no
+longer compared with the tolerance: this is not an error.
+\end{tip}
 
-\textbf{Suspend when the mount stops tracking}, with a two-minute grace delay.
-The delay exists for a reason: a stop may be transient --- a meridian flip, an
-autofocus run, a slew between targets --- and cutting on the first sample would
-punch a hole at every dither.
+\section{The TIME graph}
+\label{sec:time}
 
-\textbf{Night only: record after sunset, end the night at sunrise.} Untick it
-for day-time sessions (solar observing): recording then starts whenever the
-mount tracks and lasts until you stop it. Ticked, a night is one unit: if the mount parks at
-02:00 and resumes at 03:00, recording suspends and resumes \emph{in the same
-file}. Only daylight closes the session and triggers the report --- and only
-once the Sun has actually been below the horizon during the session, so that a
-daytime trial does not close itself.
+It compares three clocks. The left axis is in milliseconds; the right axis, in
+green, is for the loop times.
 
-\section{What the graphs show}
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Curve} & \textbf{What it shows} \\
+\midrule
+White, PC -- mount & PC time minus mount time. A flat line is healthy; a slope
+is a clock drift, given in ms/h in the strip above. \\
+Green, PC loop & Time between two time answers from the mount, seen from the
+PC. \\
+Red, mount loop & The same interval, seen from the mount's clock. \\
+Blue, PC -- NTP & PC time minus the time server's, when NTP is enabled. \\
+Dashed grey line & Zero. \\
+\bottomrule
+\end{tabularx}
+\end{center}
 
-\textbf{View > Time span}, or a right click on any graph, sets how much time
-the scrolling graphs show: from 30~s to one hour. The choice is kept.
-\textbf{View > Vertical scale} (also on the right click of the RA and DEC
-graphs): \emph{Data only} fits the curve and lets the tolerance lines leave
-the frame when tracking is much better than them; \emph{Tolerance},
-\emph{Maximum} (data and tolerance both visible) and \emph{Min/Max lines}.
-The clock drift under the time graph is a straight-line fit over the last
-half hour, spikes excluded, in ms per hour.
+Both loops are drawn centred on their mean, as in MountMonitor~3: what you read
+is their regularity, not their value. A loop that grows longer and irregular
+points to an overloaded PC or a slow link. With ASCOM the PC~--~mount offset
+has no precise meaning: the driver answers from its cache, not from the
+mount's clock.
 
-The \textbf{standard deviation} (blue) has its own scale on the right, starting
-at zero, so that it stays readable even when the position drifts (Sun, planets,
-comets). Its top is the power of ten just above 3.3 times the largest sigma,
-as in MountMonitor~3. The RA and DEC curves are centred on the \textbf{median of
-the visible data}, recomputed at each refresh, and the tolerance lines are that
-median $\pm$ the tolerance. \textbf{Right ascension in hours} (default): RA in
-h:m:s and its deviations, sigma and tolerance in seconds of time (s);
-\textbf{in degrees}: everything in arcseconds of RA, 15 times larger. The night
-report keeps true arcseconds on the sky.
+\section{The SEISMIC graph}
+\label{sec:seismic}
 
-\textbf{Mount checks} (Preferences > Miscellaneous): refraction on, refraction
-update mode, GPS, dual tracking and tracking rate are read at connection, after
-each slew and every 5~minutes (adjustable). A wrong setting opens one alert
-window, kept on top of the other programs and flashing in the taskbar; it is
-updated rather than stacked, and closes by itself once the mount is put right.
+Shown when a seismometer is enabled (Preferences, Auxiliary). White curve: the
+sensor's signal in ADC counts, re-centred by the offset setting; blue curve:
+its running standard deviation; green lines: the seismic tolerance. A burst at
+the same moment as RA or DEC excursions points to a vibration (a step, a door,
+wind on the shelter), not to the mount.
 
-In the \textbf{time graph}, the PC--mount and PC--NTP differences are read on
-the left axis; the two loop times are drawn centred on their average and read on
-the right axis (average $\pm$ range), as in MountMonitor~3. The PC loop is the
-PC time at the mount's time answer minus the previous one.
+\section{The axial graph}
+
+Optional (Preferences, Processing, \emph{Axial mode}). It shows the speed or
+the displacement of the mount's axes themselves, read with \texttt{:GaXa\#}
+and \texttt{:GaXb\#} on a 10Micron: grey the raw speed, white the averaged
+speed, bright white the regression line.
+
+\section{The status panel and the history}
+\label{sec:panel}
+
+\begin{itemize}
+  \item \textbf{Dot and status}: green tracking, orange slewing, grey parked or
+  idle, red error.
+  \item \textbf{RA and DEC}: the position read, the deviation~$\Delta$ (red
+  when beyond the tolerance, grey when the mount is not tracking) and the
+  running $\sigma$.
+  \item \textbf{Hz and samples}: the real sampling rate and the number of
+  samples. With ASCOM the real rate is the driver's, about 0.5~Hz (see
+  section~\ref{sec:conn}).
+  \item \textbf{Air}: outside temperature and pressure read from the mount every
+  30~s --- those it uses for refraction, whatever their source (weather station,
+  script) ---, the temperature of its electronics (warmer than the air) and the
+  time to the meridian flip. An arrow shows the direction of the last change.
+\end{itemize}
+
+The \textbf{history}, below, has the latest line at the top. It holds the
+connection, the mount and its firmware, the site and the night's ephemeris, the
+settings checks, the starts and ends of recording, and an air line whenever the
+temperature changes by at least 0.5~°C or the pressure by at least 1~hPa.
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{The FFT window}
+\label{ch:fftwin}
+
+\capture{en-fft.png}
+
+It shows the spectrum of the RA (magenta) and DEC (red) deviations held in
+memory, recomputed every two seconds, by frequency at the top and by period at
+the bottom. The seismometer (white) has its own scale on the right, in ADC
+counts. Amplitudes are \emph{peak} arcseconds. The \emph{+} and \emph{-}
+buttons zoom horizontally, \emph{<} and \emph{>} shift, and the circular
+arrow brings back the full range; the vertical scale follows the zoom.
+
+What to look for is explained in chapter~\ref{ch:fft}: a sharp, stable peak
+between 2 and 15 minutes is a worm periodic error; nothing sharp is good.
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{Settings}
+\label{ch:config}
+
+\textbf{Edit > Preferences} (\texttt{Ctrl+,}) opens four tabs. Nothing is
+applied before \emph{OK}; \emph{Cancel} changes nothing. Fields that do not
+apply to the chosen protocol are greyed out.
+
+\section{General tab}
+\label{sec:conn}
+
+\capture{en-pref-general.png}
+
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Setting} & \textbf{What it is for} \\
+\midrule
+Observatory name, mount name & Written at the head of the files and of the
+report. \\
+Protocol & LX200 TCP/IP (networked 10Micron, port 3492), LX200 serial
+(RS-232, 9600~baud as shipped), ASCOM (Windows, through the manufacturer's
+driver), Simulation. \\
+IP address, port & For LX200 TCP/IP. \\
+Serial port, baud rate & For LX200 serial; the rate must be the one set in the
+mount. \\
+ASCOM driver & The driver picked with \emph{Select\ldots} (ASCOM Chooser). \\
+Unattended operation & See section~\ref{sec:unattended}. \\
+Graph:textbox ratio & Share of the height given to the graphs. \\
+Rounded curves & RA and DEC curves rounded without going beyond the samples
+(monotone cubic); unticked, straight segments. Statistics always use the
+samples. \\
+Language & French, English, Dutch or automatic; takes effect at the next
+start. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{warning}
+\textbf{Only one program can open a serial port.} When NINA (or other
+software) already drives the mount over its serial cable, choose
+\textbf{ASCOM} with the \emph{same} driver: the 10Micron driver shares the one
+link between all its clients. In LX200 serial MountMonitor would have to take
+the port for itself, and one of the two programs would fail. Over the network
+(LX200 TCP/IP) a 10Micron accepts several clients at once.
+\end{warning}
+
+The 10Micron ASCOM driver 1.7 has two particularities. It refuses the mount's
+preference list (\texttt{:PRlist\#}) unless \emph{unchecked raw commands} are
+allowed in its setup: until then follow object, tracking correction and
+tracking speed are not checked, and the history says so. It also serves
+positions from a cache refreshed about every two seconds: MountMonitor skips
+the repeats, so the real rate is the driver's, and the history says so once.
+
+\section{Processing tab}
+
+\capture{en-pref-processing.png}
+
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Setting} & \textbf{What it is for} \\
+\midrule
+Polling frequency & Readings per second (2~Hz by default). More is of no use:
+the mount does not move faster. \\
+Running range & Window of the running $\sigma$, 60 to 900~s. Sixty seconds react
+fast, nine hundred smooth a long session. \\
+Align graphs on the running window & Shifts the $\sigma$ curve back by half its window,
+so that it lines up with what it describes. \\
+Reference & \emph{Median} (default): deviations around the median of what is
+shown; \emph{Mount target coordinates}: around the target the mount
+announces. \\
+Right ascension in degrees & Unticked: RA in h:m:s and its deviations,
+$\sigma$ and tolerance in seconds of time; ticked: all in arcseconds of RA, 15
+times larger. The night report stays in arcseconds on the sky. \\
+RA, DEC tolerance & Alert threshold, in the unit shown. Simple rule: your
+image scale in \arcsec/pixel is strict, twice that is comfortable. \\
+Seismic tolerance & As a percentage of the seismometer's range. \\
+Logging, mode & \emph{All}, or only the samples while tracking. \\
+Observing site & Read from the mount at each connection and kept; greyed when
+the mount reports it. Type it only if the mount does not; longitude
+\textbf{positive east}. Without a site, no ephemeris. \\
+Delay after slew & Seconds ignored after a slew, while the mount settles. \\
+Axial mode & Axial graph: off, speed or displacement. \\
+Reset mode & When to clear the graphs: by hand, or at every slew. \\
+Dump graphs & When to save the graphs as images: by hand, at every slew, at
+parking, or when the graph is full. \\
+Close files & When to close the session and open a new one: by hand, at every
+slew or at parking. \\
+History lines & Size of the history on screen. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Auxiliary tab}
+
+\capture{en-pref-auxiliary.png}
+
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Setting} & \textbf{What it is for} \\
+\midrule
+NTP server, interval & Compares the PC's time with a time server (blue curve
+of the TIME graph). \\
+Seismometer & Enable, serial port, baud rate, sampling frequency. \\
+Offset & Added to every reading to centre the signal on zero: a sensor resting
+around $-300$ needs 300. \\
+Range & Height of the seismic graph, in ADC counts. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Miscellaneous tab: the mount checks}
+
+\capture{en-pref-misc.png}
+
+Each line ticks a check and gives the expected value. They are detailed in the
+next chapter. At the bottom: \emph{Show an alert window when a mount setting is
+wrong}, and the interval between checks (5~minutes by default).
+
+\section{Unattended operation}
+\label{sec:unattended}
+
+For an observatory PC that starts everything at boot. These settings are in the
+General tab and on a right click on the log button.
+
+\begin{itemize}
+  \item \textbf{Connect to the mount when MountMonitor opens}, or start the
+  program with \texttt{--connect}. At boot the mount's control box has often not
+  finished starting: MountMonitor tries again every 30~s until the first
+  connection, without opening any window.
+  \item \textbf{Start recording when the mount starts tracking} (default). The
+  button \emph{arms} the logger: nothing is written while the mount is not
+  tracking. The button says what it is waiting for.
+  \item \textbf{Suspend recording when the mount stops tracking} (default),
+  after a two-minute grace delay: a meridian flip, an autofocus or a slew
+  between targets does not cut the session. The file stays the same.
+  \item \textbf{Night only} (default): record after sunset, end the night and
+  write the report at sunrise. A mount that parks at 02:00 and resumes at 03:00
+  stays one night, one file, one report. Unticked, for day-time sessions (the
+  Sun), recording lasts until you stop it.
+\end{itemize}
+
+Files are forced to disk at least every 5~s: a power cut costs only a few
+seconds.
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{The mount checks}
+\label{ch:checks}
+
+They run at connection, after every slew, when the Preferences are accepted and
+every 5~minutes. The results go into the history under the line ``\#\#\# MOUNT
+SETTINGS CHECK \#\#\#''; the periodic check only writes what changed. The
+rate-related checks only run while the mount is tracking.
+
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{p{3.3cm}Xp{4.2cm}}
+\toprule
+\textbf{Check} & \textbf{What it verifies} & \textbf{If it is wrong} \\
+\midrule
+Refraction correction (\texttt{:GREF\#}) & That the mount corrects atmospheric
+refraction. Nearly always wanted on. & Turn it on in the mount (keypad or the
+mount's software). \\
+Refraction update (\texttt{:WSG\#}) & Where temperature and pressure come
+from: not updating (values pushed by a script or typed in), not updating while
+tracking, or continuously updating (weather station). & Match the expected
+value to your setup, or correct the mount. \\
+GPS (\texttt{:gtgpps\#}, \texttt{:gtg\#}) & That the mount's time is
+synchronised to GPS. & Connect or check the GPS; without one, untick this
+check. \\
+Dual-axis tracking (\texttt{:Gdat\#}) & That the mount corrects both axes at
+once (refraction and model tracking in declination too). & Turn it on in the
+mount. \\
+Tracking rate (\texttt{:GT\#}) & Sidereal, solar or lunar, as expected. & Set
+the wanted rate back. \\
+Follow object (\texttt{:PRlist\#} list) & Off for sidereal. With a solar or
+lunar rate expected it is allowed: the mount then follows the object at its
+own rate, shown as ``Custom''. & Turn it off for stars. \\
+Tracking correction (\texttt{:PRlist\#}) & That it is 0.000~\%. & Set it back
+to zero. \\
+Rate in the preferences (\texttt{:PRlist\#}) & That it is the expected one. &
+Correct it. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+When a setting is wrong, a single \textbf{alert window} opens in front, on the
+desktop you are looking at, and flashes in the taskbar. It is updated rather
+than stacked, and closes by itself once the mount is put right.
+
+\capture[0.6]{en-alerte.png}
+
+\begin{tip}
+An alert is not always a mount error: it says the mount does not match
+\emph{your} expected values. If the mount is right (for instance ``not
+updating'' because a script pushes the weather), it is the expected value that
+must change, in the Miscellaneous tab.
+\end{tip}
 
 % ─────────────────────────────────────────────────────────────────
 \chapter{A night out}
-\label{ch:usage}
+\label{ch:night}
 
 \section{How it goes}
 
 \begin{enumerate}
-  \item Connect the mount and check the status turns to tracking.
-  \item Arm the logger --- or start it, if arming is switched off.
-  \item Leave it running. The report will write itself at the end.
+  \item Connect the mount; check the block of checks in the history (only
+  \checkmark{} marks, or an alert to deal with).
+  \item Arm the logger --- or let automatic arming do it.
+  \item Let it run. Recording starts at the first tracking sample, pauses when
+  the mount parks, and the report writes itself at daybreak.
 \end{enumerate}
 
 \section{What to watch live}
 
 \begin{itemize}
-  \item \textbf{The running standard deviation}, rather than the instantaneous
-  deviation: it says whether the mount is holding its position.
-  \item \textbf{Tolerance alerts}, which flag an overshoot.
-  \item \textbf{The dew-point margin}, if an environment sensor is connected.
+  \item \textbf{The running $\sigma$} (blue curve), more than the instantaneous
+  deviation: it tells whether the mount holds its position.
+  \item \textbf{Tolerance excursions}: the deviation~$\Delta$ turns red.
+  \item \textbf{An alert window}: a mount setting has changed.
+  \item \textbf{The white curve of the TIME graph}: it must stay flat.
 \end{itemize}
 
 \begin{tip}
-An isolated spike is almost never the mount: it is a gust, a cable, a footstep
-too close to the pier. What matters is the level \emph{between} the spikes.
+An isolated spike is almost never the mount: it is a gust of wind, a cable, a
+step too close to the pier. What matters is the level \emph{between} the
+spikes.
 \end{tip}
 
-\section{Night ephemeris}
+\section{When something is wrong}
 
-Computed from the site, it gives sunset, nautical twilight, astronomical night
-and sunrise --- and above all how much of the dark night the session actually
-covered. A night started an hour late loses an hour that cannot be recovered,
-and that is more useful read beside the tracking figures than after the fact.
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{p{4cm}X}
+\toprule
+\textbf{What you see} & \textbf{What it is, what to do} \\
+\midrule
+No network connection & Check the IP address and the port (3492), and that the
+cable and the mount's control box answer (ping). \\
+Silent serial link & Both ends must use the same speed (9600 baud as shipped).
+If other software holds the port, switch to ASCOM with the same driver. \\
+Alert window & Read its lines and chapter~\ref{ch:checks}: correct the mount,
+or the expected value if the mount is right. \\
+RA or DEC curve ramping while tracking & A drift. On a mount with a pointing
+model, add model points near the target; the azimuth screw is not the
+answer. \\
+Regular oscillation of a few minutes & A worm periodic error: see it in the
+FFT window, correct it with the manufacturer's tool. \\
+$\sigma$ jumping up then down again & Normal right after a slew or a dither: the
+running window straddles the move. \\
+Bursts at once on RA, DEC and the seismometer & A vibration: wind, a step, a
+door, a cable pulling. \\
+White TIME curve sloping & The PC's or the mount's clock drifts: synchronise
+the PC (NTP), check the mount's GPS. \\
+Long, irregular loops & Overloaded PC or slow link: close what runs needlessly,
+prefer the network. \\
+0.5~Hz rate with ASCOM & Normal: it is the driver's refresh rate. \\
+Grey curves & The mount is not tracking (parked, idle, slewing). \\
+No ephemeris & The site is unknown: the mount does not report it and the
+Preferences are empty. \\
+Poor rating, quiet mount & Read chapter~\ref{ch:stats}: the reading is often
+wrong, not the mount. \\
+\bottomrule
+\end{tabularx}
+\end{center}
 
 % ─────────────────────────────────────────────────────────────────
-\chapter{The files}
+\chapter{The files and the night report}
 \label{ch:files}
 
 \section{What a session writes}
@@ -544,56 +880,90 @@ and that is more useful read beside the tracking figures than after the fact.
 \rowcolors{2}{rowalt}{white}
 \begin{tabularx}{\textwidth}{lX}
 \toprule
-\textbf{Extension} & \textbf{Contents} \\
+\textbf{Extension} & \textbf{Content} \\
 \midrule
-\texttt{.dat} & The samples: time, RA, DEC, standard deviations, status. \\
-\texttt{.dti} & PC / mount synchronisation measurements. \\
+\texttt{.dat} & The samples: time, RA, DEC, standard deviations, status. Same
+format as MountMonitor~3. \\
+\texttt{.dti} & The PC / mount / NTP clock readings. \\
 \texttt{.fft} & Spectra recorded during the session. \\
-\texttt{.env} & Temperature, pressure, humidity, when the mount reports them. \\
-\texttt{.log} & Events: connections, slews, alerts, suspensions. \\
+\texttt{.env} & Temperature, pressure, temperature of the electronics. \\
+\texttt{.log} & Events: connections, slews, alerts, pauses. \\
+\texttt{-rapport-en.txt} (fr, nl) & The night report, one version per
+language. \\
 \bottomrule
 \end{tabularx}
 \end{center}
 
-The \texttt{.dat} header carries the site and the time offset. That is what
-allows twilights to be recomputed on replay, long after the mount has been
-unplugged.
+The \texttt{.dat} header carries the site and the time offset: twilights are
+recomputed on replay, long afterwards. \textbf{File > Open log} replays a
+session and rebuilds the whole analysis; the language tabs show the same report
+in the three languages.
 
-\section{The night report}
+\section{The night report, section by section}
+\label{sec:report}
 
-It is written automatically at the end of a session, next to the
-\texttt{.dat}, as \textbf{one file per language}. Nothing has to be asked for.
+\capture{en-rapport.png}
 
-\section{Replay}
+\begin{description}
+  \item[Session overview] Date, observatory, mount, duration, number of samples
+  (in all and while tracking), sampling rate, number of targets, file.
 
-\textbf{File $\rightarrow$ Open log} reads a finished session and rebuilds the
-whole analysis: per-target statistics, commanded moves, drift, spectra,
-ephemeris. The language tabs show the same report in all three languages.
+  \item[Overall quality] The \textbf{rating}, based on the \textbf{combined
+  jitter} alone (see chapter~\ref{ch:stats}), then its three components:
+  \begin{enumerate}
+    \item \emph{Tracking jitter}: the spread while the mount holds a position,
+    in RA, in DEC and combined. That is what smears the star.
+    \item \emph{Commanded repositioning}: number of dithers and re-centerings,
+    median size. No effect during an exposure.
+    \item \emph{Slow drift}: in \arcsec/h, and the star motion it causes over a
+    180~s exposure.
+  \end{enumerate}
+  \emph{For reference} gives the raw RMS (everything mixed) and with the drift
+  removed: they are there to show why they are not used for the rating. Then
+  the mount type, the rating thresholds and a one-line summary.
 
-% ─────────────────────────────────────────────────────────────────
-\chapter{When something is wrong}
-\label{ch:trouble}
+  \item[Target \#] For each target: its coordinates and number of samples; for
+  RA then DEC, the jitter, the raw RMS, the \emph{reading resolution} (the
+  smallest step the mount reports; a jitter close to this limit may be smaller in
+  reality), the median running $\sigma$, the drift in \arcsec/min and \arcsec/h
+  with its effect on one exposure and a verdict: no significant drift (under
+  1\arcsec/h), slight (under 5), present but without effect on an exposure
+  (under 15), significant beyond. Then the \emph{FFT} table of the dominant peaks
+  (frequency, period, peak amplitude) and the periodic error verdict: detected if
+  the main peak falls between 2 and 15~minutes, very low under 0.5\arcsec,
+  acceptable under 1.5\arcsec, high beyond.
 
-\begin{center}
-\rowcolors{2}{rowalt}{white}
-\begin{tabularx}{\textwidth}{lX}
-\toprule
-\textbf{Symptom} & \textbf{Where to look} \\
-\midrule
-No network connection & Check the address and port 3492, and that nothing else
-already holds the session --- a 10Micron accepts only one. \\
-Serial link silent & Both ends must agree on the speed. 10Micron mounts ship at
-9600 baud, and the mount's own menu can change it. \\
-Declination drift & On a modelled mount, add model points near the target. The
-azimuth screw is not the answer. \\
-Poor rating, quiet mount & Read chapter~\ref{ch:stats}: it is often the reading
-that is wrong, not the mount. \\
-Absurd running STDEV & Normal just after a slew or a repositioning: its window
-straddles the move. The report excludes those values. \\
-No ephemeris & The site is not set. Preferences, site section. \\
-\bottomrule
-\end{tabularx}
-\end{center}
+  \item[Time] (when a \texttt{.dti} exists) The PC~--~mount offset, its drift
+  in ms/min (stable under 1~ms/min), the PC and mount loops (mean, maximum; a PC
+  loop over one second means a struggling PC) and the PC~--~NTP offset (over
+  one second, synchronise the clock).
+
+  \item[Tracking status] Share of samples tracking, parked, idle, slewing. Under
+  90~\% tracking deserves a look.
+
+  \item[Commanded moves] Dithers, re-centerings and \emph{unsettled} moves
+  (after which the spread stays several times its usual value: those deserve a
+  look), median size, largest move, median duration and interval.
+
+  \item[Night ephemeris] Sunset, nautical twilight, astronomical night,
+  sunrise, and the share of the dark night the session actually covered.
+
+  \item[Tolerance analysis] For thresholds from 0.5 to 5\arcsec, the share of
+  samples whose jitter exceeds the threshold, on the same basis as the rating:
+  between repositionings, drift removed.
+
+  \item[Data continuity] Acquisition gaps (over five times the normal
+  interval), the longest one, the total time lost.
+
+  \item[Recommendations] What to do, target by target, when something calls
+  for it.
+\end{description}
+
+\begin{tip}
+A good night reads like this: rating EXCELLENT or GOOD, a jitter of a few
+tenths of an arcsecond, drift ``without effect on an exposure'', no typical
+periodic error, over 90~\% tracking, no recommendation.
+\end{tip}
 
 % ─────────────────────────────────────────────────────────────────
 \chapter{Reference}

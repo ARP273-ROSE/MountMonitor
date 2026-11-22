@@ -8,6 +8,7 @@ language runs in its own process; settings live in a throwaway folder
 
 Written for each language (prefix en-, fr-, nl-):
     principal.png            main window after a few minutes of simulation
+    principal-annote.png     the same with numbered markers (legend in the manual)
     pref-general.png, pref-processing.png, pref-auxiliary.png, pref-misc.png
     fft.png                  FFT window
     alerte.png               the mount-settings alert window
@@ -30,6 +31,52 @@ def wait_for(app, delay):
     while time.time() < end:
         app.processEvents()
         time.sleep(0.02)
+
+
+def annotate(w, path):
+    """The main window with numbered markers; the manual's legend uses the
+    same numbers. Each marker sits on the widget it names, wherever the
+    layout puts it."""
+    from PyQt6.QtCore import QPoint, QRectF, Qt
+    from PyQt6.QtGui import QPainter, QColor, QFont, QPen
+    sp = w._status_panel
+    g_ra, g_dec = w._ra_graph, w._dec_graph
+
+    def at(widget, fx, fy, dx=0, dy=0):
+        r = widget.rect()
+        return widget.mapTo(w, QPoint(int(r.width() * fx) + dx, int(r.height() * fy) + dy))
+    # (widget, x fraction, y fraction, x offset, y offset): beside what is
+    # named, in an empty spot, never on the text it explains
+    marks = [
+        (w._btn_logging, 1.0, 0.5, 190, 0),     # 1 buttons
+        (g_ra._header, 0.3, 0.5, 0, 0),           # 2 strip of figures
+        (g_ra._plot, 0.2, 0.4, 0, 0),             # 3 RA curve
+        (g_ra._plot, 1.0, 0.72, -14, 0),          # 4 sigma scale (right axis)
+        (g_dec._plot, 0.2, 0.4, 0, 0),            # 5 DEC graph
+        (w._time_graph, 0.2, 0.45, 0, 0),         # 6 TIME graph
+        (w._seismic_graph, 0.2, 0.45, 0, 0),      # 7 SEISMIC graph
+        (sp._status_indicator, 0.0, 0.5, 34, 0),  # 8 status
+        (sp._ra_value, 0.0, 1.0, -22, 2),          # 9 RA/DEC, delta, sigma
+        (sp._freq_label, 0.62, 0.5, 0, 0),        # 10 rate and samples
+        (sp._env_label, 0.5, 0.78, 0, 0),         # 11 air
+        (sp._log_text, 0.9, 0.7, 0, 0),           # 12 history
+    ]
+    pix = w.grab()
+    painter = QPainter(pix)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.setFont(QFont("Source Sans 3", 11, QFont.Weight.Bold))
+    for n, (widget, fx, fy, dx, dy) in enumerate(marks, 1):
+        if not widget.isVisible():
+            continue
+        c = at(widget, fx, fy, dx, dy)
+        box = QRectF(c.x() - 13, c.y() - 13, 26, 26)
+        painter.setPen(QPen(QColor(0, 0, 0), 2))
+        painter.setBrush(QColor(255, 176, 0))
+        painter.drawEllipse(box)
+        painter.setPen(QColor(0, 0, 0))
+        painter.drawText(box, Qt.AlignmentFlag.AlignCenter, str(n))
+    painter.end()
+    pix.save(str(path))
 
 
 def one_language(language: str):
@@ -68,6 +115,7 @@ def one_language(language: str):
     w._start_logging()
     wait_for(app, RUN_S)              # simulated mount: data flows by itself
     shot(w, "principal")
+    annotate(w, OUTPUT_DIR / f"{language}-principal-annote.png")
 
     w._show_fft()
     wait_for(app, 5.0)

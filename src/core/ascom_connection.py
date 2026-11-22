@@ -368,7 +368,7 @@ class ASCOMConnection(MountConnection):
         mount_fw = self.send_raw_command(":GVN#")
         mount_fw = (mount_fw or '').strip().rstrip('#')
         if mount_fw:
-            return f"{mount_fw} (ASCOM driver {driver})" if driver else mount_fw
+            return f"{mount_fw} (ASCOM {driver})" if driver else mount_fw
         if driver:
             return str(driver)
         info = self._safe_read("DriverInfo")

@@ -6,6 +6,30 @@ behaviour changes, the patch number when only a defect is fixed.
 
 Figures quoted below were measured on real sessions, not estimated.
 
+## 4.4.13 — 2026-11-22
+
+Checked again on the observatory PC (4K screen at 200 %), and the manual
+rewritten.
+
+### Changed
+- **Thicker curves on high-density screens**: line widths are now in
+  logical pixels (Qt draws them in physical pixels: at 200 % the curves came
+  out half as thick as intended); RA/DEC curves 2.5 px.
+- The sigma curves are greyed too while the mount is parked; the faint
+  titles behind the curves are gone (the coloured title above says it).
+- Spin boxes have real arrows (tiny dots at 200 %).
+- **Manual** (EN/FR/NL): what MountMonitor is for, an annotated screenshot
+  of the main window, every setting, graph, curve and colour, the mount
+  checks and what to do when one fails, a normal and a bad night, the night
+  report section by section; the rating thresholds corrected (0.4/1.0/2.0"
+  guided, 0.5/1.0/2.0" unguided precision). Screenshots made by
+  `docs/manuel/captures.py` in simulation, in the three languages.
+
+### Fixed
+- The DEC strip did not show its tolerance (only shown after a change).
+- "σ max" had one decimal more than the other figures.
+- Firmware shown as "3.4 (ASCOM 1.7)", no English left in the French line.
+
 ## 4.4.12 — 2026-11-22
 
 Night report reviewed in its three languages; window checked on a 4K

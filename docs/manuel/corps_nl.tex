@@ -252,8 +252,9 @@ waarden blijven buiten het rapport.
 \section{Het oordeel}
 
 Het berust op de gecombineerde jitter, met drempels die bij het type montering
-passen. Een ongegidste 10Micron wordt op ruimere drempels beoordeeld dan een
-gegidste montering, want het zijn niet dezelfde ordes van grootte.
+passen. Voorbij de laatste drempel is het oordeel ONVOLDOENDE. De drempels
+gelden voor de jitter alleen: drift en opgedragen bewegingen tellen niet mee,
+daarom zijn ze ook voor een ongegidste montering streng.
 
 \begin{center}
 \rowcolors{2}{rowalt}{white}
@@ -261,9 +262,9 @@ gegidste montering, want het zijn niet dezelfde ordes van grootte.
 \toprule
 \textbf{Oordeel} & \textbf{Gegidste montering} & \textbf{Ongegidst, precisie} \\
 \midrule
-Uitstekend & $< 0{,}5\arcsec$ & $< 2{,}0\arcsec$ \\
-Goed       & $< 1{,}5\arcsec$ & $< 4{,}0\arcsec$ \\
-Redelijk   & $< 3{,}0\arcsec$ & $< 8{,}0\arcsec$ \\
+Uitstekend & $< 0{,}4\arcsec$ & $< 0{,}5\arcsec$ \\
+Goed       & $< 1{,}0\arcsec$ & $< 1{,}0\arcsec$ \\
+Matig      & $< 2{,}0\arcsec$ & $< 2{,}0\arcsec$ \\
 \bottomrule
 \end{tabularx}
 \end{center}
@@ -305,13 +306,65 @@ spectrum betekent dat er geen aantoonbare is --- het geval van de
 10Micron-monteringen na correctie. Brede, zwervende pieken zijn ruis, meestal
 wind.
 
-In het venster delen RK en DECL de linkerschaal, in boogseconden; de
-seismometer heeft een eigen schaal rechts, in ADC-tellingen. De knoppen
-zoomen en verschuiven horizontaal; de laatste, de ronde pijl, herstelt het volledige
-bereik.
+Het FFT-venster wordt beschreven in hoofdstuk~\ref{ch:fftwin}.
 
 % ═══════════════════════════════════════════════════════════════════
 \part{Gebruiken}
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{Waarvoor MountMonitor dient}
+\label{ch:purpose}
+
+MountMonitor bewaakt een equatoriale montering tijdens de nacht, terwijl andere
+software (NINA, een sequencer, een guidingprogramma) haar bestuurt. Het stuurt
+de montering nooit aan: het \emph{leest}. Twee keer per seconde vraagt het de
+montering naar haar positie en haar tijd, en haalt daar vier dingen uit.
+
+\begin{enumerate}
+  \item \textbf{De kwaliteit van het volgen.} Hoeveel de positie beweegt terwijl
+  de montering een ster hoort vast te houden: dat smeert de ster uit over de
+  sensor (hoofdstuk~\ref{ch:stats}).
+  \item \textbf{De instellingen van de montering.} Refractie, volgen op twee
+  assen, volgsnelheid, object volgen, volgcorrectie, gps: een instelling die de
+  dag ervoor verkeerd bleef staan, bederft een hele nacht zonder dat er iets op
+  het scherm te zien is. MountMonitor leest ze opnieuw bij het verbinden, na
+  elke zwenking en elke vijf minuten, en opent een waarschuwingsvenster als er
+  één niet de verwachte waarde heeft.
+  \item \textbf{De tijd.} Het verschil tussen de klok van de pc, die van de
+  montering en een tijdserver (NTP). Een verlopende klok bederft het richten en
+  de tijdstempels van de opnames.
+  \item \textbf{Trillingen}, als er een seismometer is aangesloten, en
+  \textbf{de lucht} (temperatuur en luchtdruk) die de montering gebruikt om de
+  refractie te corrigeren.
+\end{enumerate}
+
+Alles wordt opgeslagen, en aan het eind van de sessie wordt vanzelf een
+\textbf{nachtrapport} geschreven, in de drie talen (paragraaf~\ref{sec:report}).
+
+\section{In tien seconden gelezen}
+
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{lXX}
+\toprule
+\textbf{Waar kijken} & \textbf{Alles in orde} & \textbf{Er is iets mis} \\
+\midrule
+Statuspunt (rechtsboven) & Groen, ,,De montering volgt'' & Grijs (geparkeerd,
+stil), oranje (zwenken) of rood (fout) \\
+RK- en DEC-curven & Een smalle band tussen de groene tolerantielijnen &
+Herhaalde uitschieters voorbij de groene lijnen, een helling, regelmatige
+schommelingen \\
+Blauwe $\sigma$-curve & Laag en vlak & Stijgt en blijft hoog \\
+Waarschuwingsvenster & Geen & Een venster ,,Waarschuwing montering'' vooraan \\
+Historie & Regels met \checkmark{} na ,,\#\#\# CONTROLE INSTELLINGEN MONTERING
+\#\#\#'' & Regels met een waarschuwingsdriehoek \\
+Nachtrapport & Oordeel UITSTEKEND of GOED & MATIG of ONVOLDOENDE,
+aanbevelingen \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+Hoofdstuk~\ref{ch:night} zegt wat er in elk geval te doen is.
 
 % ─────────────────────────────────────────────────────────────────
 \chapter{Installatie}
@@ -319,15 +372,15 @@ bereik.
 
 \section{Ondersteunde systemen}
 
-De uitgegeven pakketten dragen hun eigen Python en hun eigen Qt mee: verder
-hoeft er niets geïnstalleerd te worden. Wat zij wél vragen is een voldoende
-recent systeem, omdat de Qt-binaries erin dat vragen.
+De gepubliceerde pakketten bevatten hun eigen Python en hun eigen Qt: er hoeft
+niets anders geïnstalleerd te worden. Ze vragen wel een vrij recent systeem,
+omdat de Qt-binaries die ze bevatten dat vragen.
 
 \begin{center}
 \rowcolors{2}{rowalt}{white}
 \begin{tabularx}{\textwidth}{lXl}
 \toprule
-\textbf{Systeem} & \textbf{Minimaal} & \textbf{Architectuur} \\
+\textbf{Systeem} & \textbf{Minimum} & \textbf{Architectuur} \\
 \midrule
 Windows & Windows 10 (1809) & x64 \\
 macOS & macOS 11 Big Sur & Apple Silicon \emph{en} Intel \\
@@ -340,228 +393,524 @@ Linux ARM & glibc 2.39 --- Ubuntu 24.04 & arm64 \\
 \begin{warning}
 Kies het macOS-pakket dat bij uw machine past: \texttt{-macos-arm64.dmg} voor
 een Mac met Apple Silicon, \texttt{-macos-x86\_64.dmg} voor een Intel-Mac. De
-meegeleverde Python is architectuurgebonden, ook al is Qt zelf universeel: het
-verkeerde pakket start in het geheel niet.
+meegeleverde Python hoort bij één architectuur, ook al is Qt universeel: het
+verkeerde pakket start helemaal niet.
 \end{warning}
 
-\section{Het programma plaatsen}
+\section{Installeren}
 
-Onder Windows regelt het installatieprogramma alles. Onder macOS sleept u de
-toepassing naar de map Programma's. Onder Linux installeert
-\texttt{installer.sh} haar in het gebruikersprofiel, zonder \texttt{sudo} en
-zonder pakketbeheerder.
+Op Windows doet het installatieprogramma alles. Op macOS sleept u de toepassing
+naar de map Programma's. Op Linux installeert \texttt{installer.sh} haar in het
+profiel van de gebruiker, zonder \texttt{sudo} of pakketbeheerder.
 
-Updates worden daarna bij elke start stil gecontroleerd en aangeboden zodra er
-zijn.
+Updates worden bij elke start onopvallend gecontroleerd en aangeboden als die er
+zijn; ze zijn ondertekend, en een archief waarvan de handtekening niet klopt,
+wordt geweigerd.
 
 \section{Een eerste proef zonder montering}
 
-Met de simulatiemodus loopt u alles door zonder apparatuur:
+Met de simulatiemodus loopt u alles door zonder apparatuur; de schermafbeeldingen
+in deze handleiding zijn ermee gemaakt:
 
 \begin{lstlisting}[language=bash]
 MountMonitor --sim-all
 \end{lstlisting}
 
-Zo ziet het venster eruit na een halve minuut simulatie: bovenaan de
-afwijkingen in rechte klimming en declinatie met hun toleranties, daarna het
-klokverschil tussen pc en montering en de seismometer; rechts de toestand van
-de montering, de coördinaten en het logboek van de sessie.
-
-\capture{nl-principal.png}
-
 % ─────────────────────────────────────────────────────────────────
-\chapter{Instellingen}
-\label{ch:config}
+\chapter{Het hoofdvenster}
+\label{ch:window}
 
-\section{Verbinding}
+\capture{nl-principal-annote.png}
+
+Van links naar rechts: de schuivende \textbf{grafieken} (het heden staat
+rechts, op 0~s), dan het \textbf{statuspaneel} en de \textbf{historie}. De
+nummers verwijzen naar de paragrafen hieronder.
+
+\begin{multicols}{2}
+\begin{enumerate}
+  \item Knoppen en menu's (\ref{sec:menus})
+  \item Strook met cijfers (\ref{sec:strip})
+  \item Afwijking in rechte klimming (\ref{sec:radec})
+  \item Schaal van de $\sigma$, blauwe curve (\ref{sec:radec})
+  \item Afwijking in declinatie (\ref{sec:radec})
+  \item Grafiek TIJD (\ref{sec:time})
+  \item Grafiek SEISMISCH (\ref{sec:seismic})
+  \item Status van de montering (\ref{sec:panel})
+  \item Positie, afwijking $\Delta$ en $\sigma$ (\ref{sec:panel})
+  \item Meetfrequentie en meetpunten (\ref{sec:panel})
+  \item Luchtregel (\ref{sec:panel})
+  \item Historie (\ref{sec:panel})
+\end{enumerate}
+\end{multicols}
+
+\section{Menu's en knoppen}
+\label{sec:menus}
 
 \begin{center}
 \rowcolors{2}{rowalt}{white}
 \begin{tabularx}{\textwidth}{lX}
 \toprule
-\textbf{Protocol} & \textbf{Wanneer te gebruiken} \\
+\textbf{Onderdeel} & \textbf{Functie} \\
 \midrule
-LX200 TCP/IP & Een 10Micron op het netwerk. Standaard poort 3492. \\
-LX200 serieel & RS-232-verbinding, af fabriek 9600 8N1 bij 10Micron. \\
-ASCOM & Alleen Windows, via het stuurprogramma van de fabrikant. \\
+\emph{Verbinden / Verbinding verbreken} & Opent of sluit de verbinding met de
+montering, met het protocol uit de Voorkeuren. \\
+\emph{Log starten / Log stoppen} & Zet de logger gereed (hij start zodra de
+montering volgt) of stopt hem. Een rechtsklik geeft de instellingen voor
+onbemande werking. \\
+\emph{FFT} & Opent het venster voor Fourier-analyse
+(hoofdstuk~\ref{ch:fftwin}). \\
+\emph{Voorkeuren} & Alle instellingen (hoofdstuk~\ref{ch:config}). \\
+Bestand & Verbinden, verbreken; \emph{Log openen} speelt een opgeslagen sessie
+af en maakt het rapport opnieuw; \emph{Monteringlogs analyseren (.log10m)}
+leest de interne logboeken van een 10Micron; Afsluiten. \\
+Beeld & \emph{Getoonde tijdspanne} (30~s tot 1~u), \emph{Verticale schaal}
+(zie hieronder), FFT-venster. Ook met een rechtsklik op een grafiek. \\
+Resetten & Zet min/max, de buffers van de grafieken of beide terug;
+\emph{Nieuwe bestanden} sluit de sessie en opent een nieuwe;
+\emph{Grafieken exporteren} slaat de grafieken op als PNG-afbeeldingen. \\
+Taal, Help & Taal van de interface; help, handleiding, updates, een probleem
+melden. \\
 \bottomrule
 \end{tabularx}
 \end{center}
 
-Als NINA (of een ander programma) de montering al via de seriële kabel
-bestuurt, kies dan \textbf{ASCOM} met hetzelfde stuurprogramma: het
-10Micron-stuurprogramma deelt die ene verbinding tussen al zijn clients,
-terwijl LX200 serieel de poort voor zichzelf zou moeten opeisen. Het
-10Micron-stuurprogramma 1.7 weigert de voorkeurenlijst (\texttt{:PRlist\#})
-zolang \emph{unchecked raw commands} niet zijn toegestaan in zijn
-instellingen; tot dan worden Object volgen, volgcorrectie en -snelheid niet
-gecontroleerd, en de geschiedenis meldt dat. Het stuurprogramma levert de
-posities ook uit een cache die ongeveer elke twee seconden wordt ververst;
-MountMonitor slaat de herhalingen over, dus de echte bemonstering in ASCOM is
-die van het stuurprogramma.
+\section{De strook met cijfers boven de grafieken}
+\label{sec:strip}
 
-Onder de coördinaten toont een regel de lucht die elke 30~s van de montering
-wordt gelezen: buitentemperatuur en luchtdruk (die de refractiecorrectie
-gebruikt, ongeacht de bron), temperatuur van de interne sensor
-van de montering (in de elektronica, dus warmer dan de lucht) en tijd tot de
-meridiaanomslag, met een pijl voor de richting van de laatste verandering.
-
-\section{De waarnemingslocatie}
-
-\begin{warning}
-De locatie wordt bij elke verbinding van de montering gelezen (\texttt{:Gt\#},
-\texttt{:Gg\#}, \texttt{:Gev\#}) en in de voorkeuren bewaard, waar zij grijs
-verschijnt zolang de montering verbonden is: een later afgespeelde nacht heeft
-zo nog zijn schemeringen. Vul \textbf{breedtegraad, lengtegraad en hoogte}
-daar alleen in als de montering of de driver geen locatie doorgeeft. Zonder
-locatie kunnen de efemeriden van de nacht niet worden berekend.
-
-De lengtegraad voert u \textbf{positief naar het oosten} in. Het
-LX200-protocol telt andersom; de omrekening gebeurt voor u zodra de montering
-antwoordt.
-\end{warning}
-
-\section{Toleranties en lopend venster}
-
-De tolerantie is een alarmdrempel die u zelf bepaalt. Een eenvoudige regel:
-neem uw bemonstering in boogseconden per pixel. Een tolerantie gelijk aan de
-bemonstering is streng, het dubbele is comfortabel.
-
-Het venster van de lopende standaardafwijking stelt u in tussen 60 en 900
-seconden. Zestig reageert snel, negenhonderd vlakt een lange sessie af.
-
-\section{Automatisch verbinden bij het openen}
-
-Op een observatorium-pc die vanzelf opstart, kan MountMonitor met de montering
-verbinden zodra het venster opent, zonder klik. Twee gelijkwaardige manieren:
+Boven elke grafiek geeft een regel de cijfers van het moment, elk in de kleur
+van wat het beschrijft. Hij bedekt de curven nooit.
 
 \begin{itemize}
-  \item vink \textbf{Met de montering verbinden zodra MountMonitor opent} aan in
-        de Voorkeuren (tabblad registratie);
-  \item start het programma met de optie \texttt{--connect}, bijvoorbeeld vanuit
-        een geplande taak.
+  \item \textbf{RK en DEC}: de huidige afwijking, haar standaardafwijking
+  $\sigma$ over wat getoond wordt, in het groen de tolerantie (,,tol.~±0,100~s''),
+  het minimum en maximum van de sessie, in het blauw de grootste lopende
+  $\sigma$.
+  \item \textbf{TIJD}: in het wit het verschil pc~--~montering en de drift
+  per uur, in het groen de pc-lus, in het rood de monteringslus, in het grijs hun
+  gemiddelde, in het blauw het verschil pc~--~NTP. Dat zijn ook de kleuren van
+  de curven.
 \end{itemize}
 
-Bij het opstarten van de pc is de besturingskast van de montering vaak nog niet
-klaar: zolang de montering niet antwoordt, probeert MountMonitor het elke
-30~seconden opnieuw (instelling \texttt{connect\_retry\_s}, minimaal 5~s) tot de
-eerste geslaagde verbinding, en meldt dat in het logboek van de sessie. Een klik
-op \emph{Verbinden} of \emph{Verbreken} stopt de pogingen. Tijdens deze pogingen
-opent geen enkel venster: met ASCOM moet het stuurprogramma al gekozen zijn, bij
-een seriële verbinding de poort al ingesteld. Met \texttt{--connect} wordt het
-aanbod om een eerdere crash te melden bewaard voor de volgende start, zodat het
-venster niet blokkeert.
+\section{De grafieken RECHTE KLIMMING en DECLINATIE}
+\label{sec:radec}
 
-Eenmaal verbonden volgt de registratie de instellingen hieronder: ze wordt
-gereedgezet en start zodra de montering begint te volgen.
+Elk punt is de afwijking tussen de gelezen positie en de referentiepositie
+(standaard de mediaan van wat getoond wordt). In rechte klimming is de eenheid
+de tijdseconde (s) of de boogseconde (\arcsec), afhankelijk van de instelling
+\emph{rechte klimming in graden}; in declinatie de boogseconde.
 
-\section{De logger gereedzetten}
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Lijn} & \textbf{Wat ze toont} \\
+\midrule
+Magenta (RK) of rode (DEC) curve & De gemeten afwijking. Afgerond zonder ooit
+voorbij de metingen te gaan; bij een korte tijdspanne markeren punten de echte
+metingen. Grijs als de montering niet volgt. \\
+Blauwe curve, rechterschaal & De lopende standaardafwijking $\sigma$, over het
+lopende venster (standaard 60~s). Ze zegt of de montering haar positie
+\emph{vasthoudt}, waar die ook ligt. \\
+Groene lijnen & De tolerantie, aan weerszijden van de mediaan. \\
+Gestippelde lijnen in de kleur van de curve & Het minimum en maximum van de
+sessie. \\
+Gestippelde blauwe lijn & De grootste lopende $\sigma$ van de sessie. \\
+Grijze streep-punt-lijn & De mediaan, referentie van de afwijkingen. \\
+Grijze gestippelde verticale lijnen & Elke 30~s, met de tijd van de montering:
+tijdmerken. \\
+\bottomrule
+\end{tabularx}
+\end{center}
 
-Deze instellingen staan samen in \textbf{Voorkeuren > Algemeen > Onbemande
-werking}, en onder een rechtsklik op de opnameknop. Voor een observatorium-pc die
-alles bij het opstarten start: MountMonitor starten met \texttt{--connect} (of
-\emph{Met de montering verbinden zodra MountMonitor opent} aanvinken); het
-probeert opnieuw tot de montering antwoordt en zet zichzelf gereed. De drie
-instellingen hieronder staan \textbf{standaard aan}. De bestanden worden
-minstens elke 5~s naar de schijf geschreven: een stroomonderbreking kost
-hooguit enkele seconden.
+\textbf{Verticale schaal} (menu Beeld of rechtsklik): \emph{Alleen gegevens}
+kadert de curve en laat de tolerantielijnen buiten beeld gaan als het volgen
+veel beter is dan zij; \emph{Tolerantie} kadert op de tolerantie;
+\emph{Maximum} toont gegevens en tolerantie; \emph{Min/max-lijnen} kadert op het
+minimum en maximum. De schaal van de $\sigma$ begint altijd bij nul en loopt tot
+de macht van tien boven 3,3 keer de grootste $\sigma$, zoals in MountMonitor~3.
 
-\textbf{Registratie starten zodra de montering begint te volgen.} De knop zet
-de logger dan \emph{gereed} in plaats van hem te starten: er wordt niets
-geschreven zolang de montering niet volgt. Een montering die om twaalf uur
-'s middags wordt aangesloten voor een nacht die om 19~u begint, registreert
-niet langer zeven uur niets. Een tweede klik schakelt uit. De knop zegt waarop
-hij wacht: \emph{Gereed: start zodra de montering volgt}, of, als de montering
-al bij daglicht volgt, \emph{Gereed: start bij het invallen van de nacht}.
+\begin{tip}
+Met een geparkeerde montering schuift de rechte klimming met de hemel mee
+(15\arcsec{} per seconde): de RK-curve wordt een helling. Ze is dan grijs en de
+afwijking wordt niet meer aan de tolerantie getoetst: dat is geen fout.
+\end{tip}
 
-\textbf{Onderbreken zodra de montering stopt met volgen}, met een respijttijd
-van twee minuten. Die respijttijd bestaat met reden: een onderbreking kan van
-voorbijgaande aard zijn --- een meridiaanommekeer, een autofocus, een zwenking
-tussen twee doelen --- en afbreken bij het eerste meetpunt zou bij elke dither
-een gat slaan.
+\section{De grafiek TIJD}
+\label{sec:time}
 
-\textbf{Alleen 's nachts: opnemen na zonsondergang, de nacht afsluiten bij
-zonsopkomst.} Uitgevinkt, voor sessies overdag (zonnewaarnemingen), start de
-registratie zodra de montering volgt en loopt ze tot u haar stopt. Aangevinkt
-is een nacht één geheel:
-parkeert de montering om 02~u en gaat zij om 03~u verder, dan wordt de
-registratie onderbroken en hervat \emph{in hetzelfde bestand}. Alleen het
-daglicht sluit de sessie af en zet het rapport in gang --- en alleen wanneer de
-zon tijdens de sessie werkelijk onder de horizon is geweest, zodat een proef
-overdag zichzelf niet afsluit.
+Ze vergelijkt drie klokken. De linkeras is in milliseconden; de rechteras, in
+het groen, dient voor de lustijden.
 
-\section{Wat de grafieken tonen}
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Curve} & \textbf{Wat ze toont} \\
+\midrule
+Wit, pc -- montering & Pc-tijd min monteringstijd. Een vlakke lijn is gezond;
+een helling is een klokdrift, in ms/u gegeven in de strook erboven. \\
+Groen, pc-lus & Tijd tussen twee tijdantwoorden van de montering, gezien vanaf
+de pc. \\
+Rood, monteringslus & Hetzelfde interval, gezien vanaf de klok van de
+montering. \\
+Blauw, pc -- NTP & Pc-tijd min die van de tijdserver, als NTP aan staat. \\
+Grijze streeplijn & Nul. \\
+\bottomrule
+\end{tabularx}
+\end{center}
 
-\textbf{Beeld > Getoonde tijdspanne}, of een klik met de rechtermuisknop op een
-grafiek, bepaalt hoeveel tijd de schuivende grafieken tonen: van 30~s tot een
-uur. De keuze wordt onthouden. \textbf{Beeld > Verticale schaal} (ook via de
-rechtermuisknop op de RA- en DEC-grafiek): \emph{Alleen gegevens} past de
-schaal aan de curve aan en laat de tolerantielijnen buiten beeld vallen als het
-volgen veel beter is; \emph{Tolerantie}, \emph{Maximum} (gegevens en
-tolerantie beide zichtbaar) en \emph{Min/Max-lijnen}. De klokdrift onder de
-tijdgrafiek is een rechte lijn over het laatste halfuur, pieken uitgesloten, in
-ms per uur.
+Beide lussen worden rond hun gemiddelde getekend, zoals in MountMonitor~3: u
+leest hun regelmaat, niet hun waarde. Een lus die langer en onregelmatig wordt,
+wijst op een overbelaste pc of een trage verbinding. Met ASCOM heeft het
+verschil pc~--~montering geen precieze betekenis: het stuurprogramma antwoordt
+uit zijn geheugen, niet vanaf de klok van de montering.
 
-De \textbf{standaardafwijking} (blauw) heeft een eigen schaal rechts, vanaf nul,
-zodat ze leesbaar blijft ook als de positie verloopt (zon, planeten, kometen).
-De bovenkant is de macht van tien net boven 3,3 keer de grootste sigma, zoals in
-MountMonitor~3. De RA- en DEC-curven zijn gecentreerd op de \textbf{mediaan van
-de zichtbare gegevens}, bij elke verversing herberekend, en de tolerantielijnen
-liggen op die mediaan $\pm$ de tolerantie. \textbf{Rechte klimming in uren}
-(standaard): RA in u:m:s, afwijkingen, sigma en tolerantie in tijdseconden (s);
-\textbf{in graden}: alles in boogseconden RA, 15 keer groter. Het nachtrapport
-houdt echte boogseconden aan de hemel aan.
+\section{De grafiek SEISMISCH}
+\label{sec:seismic}
 
-\textbf{Controles van de montering} (Voorkeuren > Overig): refractie aan,
-bijwerkmodus van de refractie, GPS, dual tracking en volgsnelheid worden gelezen
-bij het verbinden, na elke zwenking en elke 5~minuten (instelbaar). Een foute
-instelling opent één waarschuwingsvenster, boven de andere programma's en
-knipperend in de taakbalk; het wordt bijgewerkt in plaats van gestapeld en sluit
-vanzelf zodra de montering is gecorrigeerd.
+Zichtbaar als een seismometer is ingeschakeld (Voorkeuren, Hulpapparatuur).
+Witte curve: het signaal van de sensor in ADC-tellingen, rond nul gelegd met de
+ingestelde offset; blauwe curve: de lopende standaardafwijking; groene lijnen:
+de seismische tolerantie. Een uitbarsting op hetzelfde moment als uitschieters in
+RK of DEC wijst op een trilling (een stap, een deur, wind op de koepel), niet op
+de montering.
 
-In de \textbf{tijdgrafiek} worden de verschillen pc--montering en pc--NTP op de
-linkeras gelezen; de twee lustijden zijn gecentreerd op hun gemiddelde en worden
-op de rechteras gelezen (gemiddelde $\pm$ bereik), zoals in MountMonitor~3. De
-pc-lus is de pc-tijd bij het tijdantwoord van de montering min de vorige.
+\section{De axiale grafiek}
+
+Optioneel (Voorkeuren, Verwerking, \emph{Axiale modus}). Ze toont de snelheid of
+de verplaatsing van de assen van de montering zelf, op een 10Micron gelezen met
+\texttt{:GaXa\#} en \texttt{:GaXb\#}: grijs de ruwe snelheid, wit de
+gemiddelde snelheid, helder wit de regressielijn.
+
+\section{Het statuspaneel en de historie}
+\label{sec:panel}
+
+\begin{itemize}
+  \item \textbf{Punt en status}: groen volgend, oranje zwenkend, grijs
+  geparkeerd of stil, rood fout.
+  \item \textbf{RK en DEC}: de gelezen positie, de afwijking~$\Delta$ (rood
+  voorbij de tolerantie, grijs als de montering niet volgt) en de lopende
+  $\sigma$.
+  \item \textbf{Hz en meetpunten}: de werkelijke meetfrequentie en het aantal
+  metingen. Met ASCOM is de werkelijke frequentie die van het stuurprogramma,
+  ongeveer 0,5~Hz (zie paragraaf~\ref{sec:conn}).
+  \item \textbf{Lucht}: buitentemperatuur en luchtdruk, elke 30~s van de
+  montering gelezen --- die welke ze voor de refractie gebruikt, wat hun bron
+  ook is (weerstation, script) ---, de temperatuur van haar elektronica (warmer
+  dan de lucht) en de tijd tot de meridiaanomslag. Een pijl toont de richting
+  van de laatste verandering.
+\end{itemize}
+
+De \textbf{historie}, daaronder, heeft de nieuwste regel bovenaan. U vindt er
+de verbinding, de montering en haar firmware, de locatie en de efemeriden van de
+nacht, de controles van de instellingen, het begin en einde van de registratie,
+en een luchtregel telkens als de temperatuur minstens 0,5~°C of de luchtdruk
+minstens 1~hPa verandert.
 
 % ─────────────────────────────────────────────────────────────────
-\chapter{Een nacht waarnemen}
-\label{ch:usage}
+\chapter{Het FFT-venster}
+\label{ch:fftwin}
+
+\capture{nl-fft.png}
+
+Het toont het spectrum van de afwijkingen in RK (magenta) en DEC (rood) uit het
+geheugen, elke twee seconden herberekend, boven naar frequentie, onder naar
+periode. De seismometer (wit) heeft een eigen schaal rechts, in ADC-tellingen.
+De amplitudes zijn \emph{piek}-boogseconden. De knoppen \emph{+} en \emph{-}
+zoomen horizontaal, \emph{<} en \emph{>} verschuiven, en de ronde pijl herstelt
+het volledige bereik; de verticale schaal volgt de zoom.
+
+Waar u naar zoekt, staat in hoofdstuk~\ref{ch:fft}: een scherpe, stabiele piek
+tussen 2 en 15 minuten is een periodieke fout van de wormschroef; niets scherps
+is goed.
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{Instellingen}
+\label{ch:config}
+
+\textbf{Bewerken > Voorkeuren} (\texttt{Ctrl+,}) opent vier tabbladen. Niets
+wordt toegepast vóór \emph{OK}; \emph{Annuleren} verandert niets. Velden die
+niet bij het gekozen protocol horen, zijn grijs.
+
+\section{Tabblad Algemeen}
+\label{sec:conn}
+
+\capture{nl-pref-general.png}
+
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Instelling} & \textbf{Waarvoor} \\
+\midrule
+Naam sterrenwacht, naam montering & Bovenaan de bestanden en het rapport. \\
+Protocol & LX200 TCP/IP (10Micron in het netwerk, poort 3492), LX200 serieel
+(RS-232, 9600~baud af fabriek), ASCOM (Windows, via het stuurprogramma van de
+fabrikant), Simulatie. \\
+IP-adres, poort & Voor LX200 TCP/IP. \\
+Seriële poort, baudrate & Voor LX200 serieel; de snelheid moet die van de
+montering zijn. \\
+ASCOM-driver & Het stuurprogramma gekozen met \emph{Selecteren\ldots}
+(ASCOM Chooser). \\
+Onbemande werking & Zie paragraaf~\ref{sec:unattended}. \\
+Verhouding grafiek:tekst & Deel van de hoogte voor de grafieken. \\
+Afgeronde curven & RK- en DEC-curven afgerond zonder voorbij de metingen te
+gaan (monotone kubische functie); uitgevinkt: rechte lijnstukken. De
+statistieken gebruiken altijd de metingen. \\
+Taal & Frans, Engels, Nederlands of automatisch; werkt bij de volgende
+start. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{warning}
+\textbf{Slechts één programma kan een seriële poort openen.} Als NINA (of andere
+software) de montering al via haar seriële kabel bestuurt, kies dan
+\textbf{ASCOM} met \emph{hetzelfde} stuurprogramma: het 10Micron-stuurprogramma
+deelt die ene verbinding tussen al zijn clients. In LX200 serieel zou
+MountMonitor de poort voor zichzelf moeten opeisen, en een van beide programma's
+zou falen. Via het netwerk (LX200 TCP/IP) aanvaardt een 10Micron meerdere
+clients tegelijk.
+\end{warning}
+
+Het 10Micron-stuurprogramma 1.7 voor ASCOM heeft twee eigenaardigheden. Het
+weigert de voorkeurenlijst van de montering (\texttt{:PRlist\#}) zolang
+\emph{unchecked raw commands} niet zijn toegestaan in zijn instellingen: tot dan
+worden object volgen, volgcorrectie en volgsnelheid niet gecontroleerd, en de
+historie meldt dat. Het levert de posities ook uit een geheugen dat ongeveer
+elke twee seconden wordt ververst: MountMonitor slaat de herhalingen over, dus de
+werkelijke frequentie is die van het stuurprogramma, en de historie meldt dat
+één keer.
+
+\section{Tabblad Verwerking}
+
+\capture{nl-pref-processing.png}
+
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Instelling} & \textbf{Waarvoor} \\
+\midrule
+Uitleesfrequentie & Metingen per seconde (standaard 2~Hz). Meer heeft geen
+zin: de montering beweegt niet sneller. \\
+Lopend bereik & Venster van de lopende $\sigma$, 60 tot 900~s. Zestig seconden
+reageren snel, negenhonderd egaliseren een lange sessie. \\
+Grafieken uitlijnen op het lopende venster & Schuift de $\sigma$-curve een half
+venster terug, zodat ze tegenover beschrijft wat ze meet. \\
+Referentie & \emph{Mediaan} (standaard): afwijkingen rond de mediaan van wat
+getoond wordt; \emph{Doelcoördinaten montering}: rond het doel dat de montering
+meldt. \\
+Rechte klimming in graden & Uitgevinkt: RK in u:m:s en haar afwijkingen,
+$\sigma$ en tolerantie in tijdseconden; aangevinkt: alles in boogseconden RK,
+15 keer groter. Het nachtrapport blijft in boogseconden aan de hemel. \\
+Tolerantie RK, DEC & Alarmdrempel, in de getoonde eenheid. Eenvoudige regel:
+uw beeldschaal in \arcsec/pixel is streng, het dubbele is comfortabel. \\
+Seismische tolerantie & In procent van het bereik van de seismometer. \\
+Loggen, modus & \emph{Alles}, of alleen de metingen tijdens het volgen. \\
+Waarnemingslocatie & Bij elke verbinding van de montering gelezen en bewaard;
+grijs als de montering haar doorgeeft. Alleen invullen als de montering dat niet
+doet; lengtegraad \textbf{positief naar het oosten}. Zonder locatie geen
+efemeriden. \\
+Wachttijd na zwenken & Seconden die na een zwenking genegeerd worden, terwijl
+de montering tot rust komt. \\
+Axiale modus & Axiale grafiek: uit, snelheid of verplaatsing. \\
+Resetmodus & Wanneer de grafieken leegmaken: met de hand, of bij elke
+zwenking. \\
+Grafieken exporteren & Wanneer de grafieken als afbeelding opslaan: met de hand,
+bij elke zwenking, bij het parkeren, of als de grafiek vol is. \\
+Bestanden sluiten & Wanneer de sessie sluiten en een nieuwe openen: met de hand,
+bij elke zwenking of bij het parkeren. \\
+Regels historie & Grootte van de historie op het scherm. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Tabblad Hulpapparatuur}
+
+\capture{nl-pref-auxiliary.png}
+
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Instelling} & \textbf{Waarvoor} \\
+\midrule
+NTP-server, interval & Vergelijkt de pc-tijd met een tijdserver (blauwe curve
+van de grafiek TIJD). \\
+Seismometer & Inschakelen, seriële poort, baudrate,
+bemonsteringsfrequentie. \\
+Offset & Bij elke meting opgeteld om het signaal rond nul te leggen: een sensor
+die in rust rond $-300$ staat, vraagt 300. \\
+Bereik & Hoogte van de seismische grafiek, in ADC-tellingen. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Tabblad Overig: de controles van de montering}
+
+\capture{nl-pref-misc.png}
+
+Elke regel vinkt een controle aan en geeft de verwachte waarde. Ze worden in het
+volgende hoofdstuk beschreven. Onderaan: \emph{Een waarschuwingsvenster tonen als
+een instelling van de montering fout is}, en het interval tussen de controles
+(standaard 5~minuten).
+
+\section{Onbemande werking}
+\label{sec:unattended}
+
+Voor een sterrenwacht-pc die alles bij het opstarten start. Deze instellingen
+staan in het tabblad Algemeen en onder een rechtsklik op de logknop.
+
+\begin{itemize}
+  \item \textbf{Met de montering verbinden zodra MountMonitor opent}, of het
+  programma starten met \texttt{--connect}. Bij het opstarten is de
+  besturingskast van de montering vaak nog niet klaar: MountMonitor probeert het
+  elke 30~s opnieuw tot de eerste verbinding, zonder een venster te openen.
+  \item \textbf{Registratie starten zodra de montering begint te volgen}
+  (standaard). De knop zet de logger \emph{gereed}: er wordt niets geschreven
+  zolang de montering niet volgt. De knop zegt waarop hij wacht.
+  \item \textbf{Registratie onderbreken zodra de montering stopt met volgen}
+  (standaard), na een wachttijd van twee minuten: een meridiaanomslag, een
+  autofocus of een zwenking tussen doelen breekt de sessie niet af. Het bestand
+  blijft hetzelfde.
+  \item \textbf{Alleen 's nachts} (standaard): opnemen na zonsondergang, de
+  nacht afsluiten en het rapport schrijven bij zonsopkomst. Een montering die om
+  02.00 uur parkeert en om 03.00 uur verdergaat, blijft één nacht, één bestand,
+  één rapport. Uitgevinkt, voor sessies overdag (de zon), loopt de registratie
+  tot u haar stopt.
+\end{itemize}
+
+De bestanden worden minstens elke 5~s naar schijf geschreven: een stroomstoring
+kost maar een paar seconden.
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{De controles van de montering}
+\label{ch:checks}
+
+Ze lopen bij het verbinden, na elke zwenking, bij het bevestigen van de
+Voorkeuren en elke 5~minuten. De resultaten komen in de historie onder de regel
+,,\#\#\# CONTROLE INSTELLINGEN MONTERING \#\#\#''; de periodieke controle
+schrijft alleen wat veranderd is. De controles die met de snelheid te maken
+hebben, lopen alleen als de montering volgt.
+
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{p{3.3cm}Xp{4.2cm}}
+\toprule
+\textbf{Controle} & \textbf{Wat ze nagaat} & \textbf{Als het fout is} \\
+\midrule
+Refractiecorrectie (\texttt{:GREF\#}) & Dat de montering de atmosferische
+refractie corrigeert. Bijna altijd gewenst. & Inschakelen in de montering
+(handbediening of software van de montering). \\
+Bijwerken van de refractie (\texttt{:WSG\#}) & Waar temperatuur en luchtdruk
+vandaan komen: niet bijgewerkt (door een script of met de hand ingevoerd), niet
+bijgewerkt tijdens volgen, of continu bijgewerkt (weerstation). & De verwachte
+waarde op uw opstelling afstemmen, of de montering corrigeren. \\
+Gps (\texttt{:gtgpps\#}, \texttt{:gtg\#}) & Dat de tijd van de montering met
+de gps gesynchroniseerd is. & De gps aansluiten of nakijken; zonder gps deze
+controle uitvinken. \\
+Volgen op twee assen (\texttt{:Gdat\#}) & Dat de montering beide assen tegelijk
+corrigeert (refractie en model ook in declinatie). & Inschakelen in de
+montering. \\
+Volgsnelheid (\texttt{:GT\#}) & Siderisch, zon of maan, zoals verwacht. & De
+gewenste snelheid terugzetten. \\
+Object volgen (lijst \texttt{:PRlist\#}) & Uit bij siderisch. Met een verwachte
+zon- of maansnelheid is het toegestaan: de montering volgt het object dan met
+zijn eigen snelheid, getoond als ,,Custom''. & Uitschakelen voor sterren. \\
+Volgcorrectie (\texttt{:PRlist\#}) & Dat ze 0,000~\% is. & Op nul
+terugzetten. \\
+Snelheid in de voorkeuren (\texttt{:PRlist\#}) & Dat ze de verwachte is. &
+Corrigeren. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+Als een instelling fout is, opent één enkel \textbf{waarschuwingsvenster}
+vooraan, op het bureaublad waarnaar u kijkt, en knippert in de taakbalk. Het
+wordt bijgewerkt in plaats van gestapeld, en sluit vanzelf zodra de montering
+gecorrigeerd is.
+
+\capture[0.6]{nl-alerte.png}
+
+\begin{tip}
+Een waarschuwing is niet altijd een fout van de montering: ze zegt dat de
+montering niet overeenkomt met \emph{uw} verwachte waarden. Heeft de montering
+gelijk (bijvoorbeeld ,,niet bijgewerkt'' omdat een script het weer aanlevert),
+dan moet de verwachte waarde veranderen, in het tabblad Overig.
+\end{tip}
+
+% ─────────────────────────────────────────────────────────────────
+\chapter{Een waarneemnacht}
+\label{ch:night}
 
 \section{Het verloop}
 
 \begin{enumerate}
-  \item De montering verbinden en nagaan of de status op volgen springt.
-  \item De logger gereedzetten --- of starten, als gereedzetten uitstaat.
-  \item Laten lopen. Het rapport schrijft zichzelf aan het eind.
+  \item De montering verbinden; in de historie het blok controles nakijken
+  (alleen \checkmark, of een waarschuwing om af te handelen).
+  \item De logger gereedzetten --- of het automatisch gereedzetten laten werken.
+  \item Laten lopen. De registratie start bij het eerste volgen, pauzeert bij
+  het parkeren, en het rapport schrijft zichzelf bij het aanbreken van de dag.
 \end{enumerate}
 
-\section{Waarop live te letten}
+\section{Waar u live op let}
 
 \begin{itemize}
-  \item \textbf{De lopende standaardafwijking}, eerder dan de momentane
-  afwijking: zij zegt of de montering haar positie vasthoudt.
-  \item \textbf{De tolerantiemeldingen}, die een overschrijding aangeven.
-  \item \textbf{De marge tot het dauwpunt}, als er een omgevingssensor is
-  aangesloten.
+  \item \textbf{De lopende $\sigma$} (blauwe curve), meer dan de
+  ogenblikkelijke afwijking: ze zegt of de montering haar positie vasthoudt.
+  \item \textbf{Tolerantie-overschrijdingen}: de afwijking~$\Delta$ wordt rood.
+  \item \textbf{Een waarschuwingsvenster}: een instelling van de montering is
+  veranderd.
+  \item \textbf{De witte curve van de grafiek TIJD}: die moet vlak blijven.
 \end{itemize}
 
 \begin{tip}
-Een losstaande piek is vrijwel nooit de montering: het is een windvlaag, een
-kabel, een voetstap te dicht bij de zuil. Wat telt is het niveau \emph{tussen}
-de pieken.
+Een losse piek is bijna nooit de montering: het is een windstoot, een kabel, een
+stap te dicht bij de zuil. Wat telt, is het niveau \emph{tussen} de pieken.
 \end{tip}
 
-\section{De efemeriden van de nacht}
+\section{Als er iets mis is}
 
-Berekend vanuit de locatie geven zij zonsondergang, nautische schemering,
-astronomische nacht en zonsopkomst --- en vooral hoeveel van de donkere nacht
-de sessie werkelijk heeft bestreken. Een nacht die een uur te laat begint,
-verliest een uur dat niet in te halen is, en dat leest nuttiger naast de
-volgcijfers dan achteraf.
+\begin{center}
+\rowcolors{2}{rowalt}{white}
+\begin{tabularx}{\textwidth}{p{4cm}X}
+\toprule
+\textbf{Wat u ziet} & \textbf{Wat het is, wat te doen} \\
+\midrule
+Geen netwerkverbinding & IP-adres en poort (3492) nakijken, en of kabel en
+besturingskast van de montering antwoorden (ping). \\
+Seriële verbinding zwijgt & Beide kanten moeten dezelfde snelheid hebben (9600
+baud af fabriek). Houdt andere software de poort bezet, schakel dan over op
+ASCOM met hetzelfde stuurprogramma. \\
+Waarschuwingsvenster & Zijn regels en hoofdstuk~\ref{ch:checks} lezen: de
+montering corrigeren, of de verwachte waarde als de montering gelijk heeft. \\
+RK- of DEC-curve loopt schuin op tijdens het volgen & Een drift. Op een montering
+met richtmodel modelpunten bij het doel toevoegen; de azimutschroef is niet het
+antwoord. \\
+Regelmatige schommeling van enkele minuten & Een periodieke fout van de
+wormschroef: zichtbaar in het FFT-venster, te corrigeren met het hulpmiddel van
+de fabrikant. \\
+$\sigma$ springt op en zakt weer & Normaal vlak na een zwenking of een dither:
+het lopende venster overspant de beweging. \\
+Uitbarstingen tegelijk op RK, DEC en de seismometer & Een trilling: wind, een
+stap, een deur, een kabel die trekt. \\
+Witte TIJD-curve loopt schuin & De klok van de pc of van de montering loopt
+uit: de pc synchroniseren (NTP), de gps van de montering nakijken. \\
+Lange, onregelmatige lussen & Overbelaste pc of trage verbinding: sluit wat
+nodeloos draait, verkies het netwerk. \\
+0,5~Hz met ASCOM & Normaal: dat is de verversing van het stuurprogramma. \\
+Grijze curven & De montering volgt niet (geparkeerd, stil, zwenkend). \\
+Geen efemeriden & De locatie is onbekend: de montering geeft haar niet door en
+de Voorkeuren zijn leeg. \\
+Matig oordeel, rustige montering & Lees hoofdstuk~\ref{ch:stats}: vaak is de
+lezing fout, niet de montering. \\
+\bottomrule
+\end{tabularx}
+\end{center}
 
 % ─────────────────────────────────────────────────────────────────
-\chapter{De bestanden}
+\chapter{De bestanden en het nachtrapport}
 \label{ch:files}
 
 \section{Wat een sessie schrijft}
@@ -572,60 +921,92 @@ volgcijfers dan achteraf.
 \toprule
 \textbf{Extensie} & \textbf{Inhoud} \\
 \midrule
-\texttt{.dat} & De meetpunten: tijd, RK, DEC, standaardafwijkingen, status. \\
-\texttt{.dti} & De synchronisatiemetingen tussen pc en montering. \\
-\texttt{.fft} & De tijdens de sessie vastgelegde spectra. \\
-\texttt{.env} & Temperatuur, luchtdruk, vochtigheid, als de montering ze
-geeft. \\
-\texttt{.log} & De gebeurtenissen: verbindingen, zwenkingen, meldingen,
-onderbrekingen. \\
+\texttt{.dat} & De meetpunten: tijd, RK, DEC, standaardafwijkingen, status.
+Zelfde formaat als MountMonitor~3. \\
+\texttt{.dti} & De klokmetingen pc / montering / NTP. \\
+\texttt{.fft} & Tijdens de sessie opgeslagen spectra. \\
+\texttt{.env} & Temperatuur, luchtdruk, temperatuur van de elektronica. \\
+\texttt{.log} & De gebeurtenissen: verbindingen, zwenkingen, waarschuwingen,
+pauzes. \\
+\texttt{-rapport-nl.txt} (fr, en) & Het nachtrapport, één versie per taal. \\
 \bottomrule
 \end{tabularx}
 \end{center}
 
-De kop van het \texttt{.dat}-bestand draagt de locatie en de tijdzone. Dat is
-wat toelaat de schemeringen bij het terugkijken opnieuw te berekenen, lang
-nadat de montering is losgekoppeld.
+De kop van het \texttt{.dat} bevat de locatie en de tijdverschuiving: de
+schemeringen worden bij het afspelen opnieuw berekend, ook lang daarna.
+\textbf{Bestand > Log openen} speelt een sessie af en maakt de hele analyse
+opnieuw; de taaltabbladen tonen hetzelfde rapport in de drie talen.
 
-\section{Het nachtrapport}
+\section{Het nachtrapport, paragraaf voor paragraaf}
+\label{sec:report}
 
-Het wordt aan het eind van een sessie automatisch geschreven, naast het
-\texttt{.dat}-bestand, als \textbf{één bestand per taal}. Er hoeft niets voor
-gevraagd te worden.
+\capture{nl-rapport.png}
 
-\section{Terugkijken}
+\begin{description}
+  \item[Overzicht van de sessie] Datum, sterrenwacht, montering, duur, aantal
+  meetpunten (in totaal en tijdens volgen), meetfrequentie, aantal doelen,
+  bestand.
 
-\textbf{Bestand $\rightarrow$ Logbestand openen} leest een afgeronde sessie en
-bouwt de volledige analyse opnieuw op: statistieken per doel, aangestuurde
-bewegingen, drift, spectra, efemeriden. De taaltabbladen tonen hetzelfde
-rapport in alle drie de talen.
+  \item[Algemene kwaliteit] Het \textbf{oordeel}, alleen gebaseerd op de
+  \textbf{gecombineerde jitter} (zie hoofdstuk~\ref{ch:stats}), dan zijn drie
+  bestanddelen:
+  \begin{enumerate}
+    \item \emph{Volgjitter}: de spreiding terwijl de montering een positie
+    vasthoudt, in RK, in DEC en gecombineerd. Dat smeert de ster uit.
+    \item \emph{Opgedragen herpositioneringen}: aantal dithers en
+    hercentreringen, mediane grootte. Geen effect tijdens een opname.
+    \item \emph{Langzame drift}: in \arcsec/u, en de sterverplaatsing die ze
+    veroorzaakt over een opname van 180~s.
+  \end{enumerate}
+  \emph{Ter informatie} geeft de ruwe RMS (alles door elkaar) en zonder drift:
+  ze staan er om te tonen waarom ze niet voor het oordeel dienen. Dan het type
+  montering, de drempels van het oordeel en een samenvattende zin.
 
-% ─────────────────────────────────────────────────────────────────
-\chapter{Als er iets misgaat}
-\label{ch:trouble}
+  \item[Doel \#] Voor elk doel: zijn coördinaten en aantal meetpunten; voor RK
+  en dan DEC de jitter, de ruwe RMS, de \emph{leesresolutie} (de kleinste stap
+  die de montering meldt; een jitter dicht bij die grens kan in werkelijkheid
+  kleiner zijn), de mediane lopende $\sigma$, de drift in \arcsec/min en
+  \arcsec/u met zijn effect op één opname en een oordeel: geen noemenswaardige
+  drift (onder 1\arcsec/u), licht (onder 5), aanwezig maar zonder effect op een
+  opname (onder 15), aanzienlijk daarboven. Dan de \emph{FFT}-tabel van de
+  dominante pieken (frequentie, periode, piekamplitude) en het oordeel over de
+  periodieke fout: gevonden als de hoofdpiek tussen 2 en 15~minuten valt, zeer
+  laag onder 0,5\arcsec, aanvaardbaar onder 1,5\arcsec, hoog daarboven.
 
-\begin{center}
-\rowcolors{2}{rowalt}{white}
-\begin{tabularx}{\textwidth}{lX}
-\toprule
-\textbf{Verschijnsel} & \textbf{Waar te kijken} \\
-\midrule
-Geen netwerkverbinding & Controleer het adres en poort 3492, en of niet iets
-anders de sessie al bezet houdt --- een 10Micron aanvaardt er maar één. \\
-Seriële verbinding stil & Beide uiteinden moeten het over de snelheid eens
-zijn. 10Micron-monteringen komen af fabriek op 9600 baud, en het menu van de
-montering kan dat wijzigen. \\
-Drift in declinatie & Voeg op een montering met model punten toe in de buurt
-van het doel. De azimutschroef is niet het antwoord. \\
-Matig oordeel, rustige montering & Lees hoofdstuk~\ref{ch:stats}: vaak is het
-de lezing die fout is, niet de montering. \\
-Onzinnige lopende STDEV & Normaal vlak na een zwenking of een
-herpositionering: haar venster overspant de beweging. Het rapport laat die
-waarden buiten beschouwing. \\
-Geen efemeriden & De locatie is niet ingevuld. Voorkeuren, deel locatie. \\
-\bottomrule
-\end{tabularx}
-\end{center}
+  \item[Tijd] (als er een \texttt{.dti} is) Het verschil pc~--~montering, de
+  drift in ms/min (stabiel onder 1~ms/min), de pc- en monteringslus
+  (gemiddelde, maximum; een pc-lus boven een seconde wijst op een pc die het
+  zwaar heeft) en het verschil pc~--~NTP (boven een seconde: de klok
+  synchroniseren).
+
+  \item[Volgstatus] Aandeel van de meetpunten volgend, geparkeerd, stil,
+  zwenkend. Onder 90~\% volgend verdient een blik.
+
+  \item[Aangestuurde bewegingen] Dithers, hercentreringen en \emph{niet
+  gestabiliseerde} bewegingen (waarna de spreiding meerdere keren haar
+  gebruikelijke waarde blijft: die verdienen een blik), mediane grootte,
+  grootste beweging, mediane duur en interval.
+
+  \item[Efemeriden van de nacht] Zonsondergang, nautische schemering,
+  astronomische nacht, zonsopkomst, en het deel van de donkere nacht dat de
+  sessie werkelijk besloeg.
+
+  \item[Tolerantieanalyse] Voor drempels van 0,5 tot 5\arcsec{} het aandeel
+  meetpunten waarvan de jitter de drempel overschrijdt, op dezelfde basis als het
+  oordeel: tussen herpositioneringen, drift verwijderd.
+
+  \item[Continuïteit van de gegevens] Onderbrekingen in de registratie (meer dan
+  vijf keer het normale interval), de langste, de totaal verloren tijd.
+
+  \item[Aanbevelingen] Wat te doen, doel per doel, als iets dat vraagt.
+\end{description}
+
+\begin{tip}
+Een goede nacht leest zo: oordeel UITSTEKEND of GOED, een jitter van enkele
+tienden van een boogseconde, drift ,,zonder effect op een opname'', geen
+typische periodieke fout, meer dan 90~\% volgend, geen aanbeveling.
+\end{tip}
 
 % ─────────────────────────────────────────────────────────────────
 \chapter{Naslag}

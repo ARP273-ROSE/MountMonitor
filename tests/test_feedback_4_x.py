@@ -699,7 +699,7 @@ def test_ascom_names_the_mount_not_the_driver():
     c = _ascom(D())
     c._warned_properties = set()
     assert c.get_product_name() == "10micron GM1000HPS"
-    assert c.get_firmware_version() == "3.4 (ASCOM driver 1.7)"
+    assert c.get_firmware_version() == "3.4 (ASCOM 1.7)"
 
 
 def test_ascom_cache_repeats_are_dropped():

@@ -751,7 +751,7 @@ TX = {
     "pref_layout": {"en": "Layout", "fr": "Mise en page", "nl": "Indeling"},
     "pref_graph_ratio": {"en": "Graph:Textbox ratio", "fr": "Ratio graphe:texte", "nl": "Verhouding grafiek:tekst"},
     "pref_polling_group": {"en": "Polling", "fr": "Acquisition", "nl": "Uitlezen"},
-    "pref_correct_graphs": {"en": "Correct graphs for range", "fr": "Recaler les graphes sur la fenêtre glissante", "nl": "Grafieken corrigeren voor bereik"},
+    "pref_correct_graphs": {"en": "Align graphs on the running window", "fr": "Recaler les graphes sur la fenêtre glissante", "nl": "Grafieken uitlijnen op het lopende venster"},
     "pref_log_mode_label": {"en": "Mode", "fr": "Mode", "nl": "Modus"},
     "pref_delay_slew": {"en": "Delay after slew (s)", "fr": "Délai après pointage (s)", "nl": "Wachttijd na zwenken (s)"},
     "pref_axial_mode": {"en": "Axial mode", "fr": "Mode axial", "nl": "Axiale modus"},

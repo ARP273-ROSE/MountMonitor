@@ -104,6 +104,19 @@ def monotone_curve(x, y, factor: int = 8, max_points: int = 1500):
     return np.append(xs, x[-1]), np.append(ys, y[-1])
 
 
+def _w(width: float) -> float:
+    """Line width in LOGICAL pixels. Qt draws cosmetic pens in physical
+    pixels: on a 4K screen at 200 % a 2-pixel curve came out half as thick
+    as on the screenshots (seen on the observatory PC)."""
+    try:
+        from PyQt6.QtWidgets import QApplication
+        screen = QApplication.primaryScreen()
+        ratio = screen.devicePixelRatio() if screen is not None else 1.0
+    except Exception:
+        ratio = 1.0
+    return width * max(1.0, ratio)
+
+
 class _Header(QLabel):
     """A strip ABOVE the graph holding its figures (value, sigma,
     tolerance, min/max...). Drawn inside the graph, they were covered by
@@ -458,7 +471,7 @@ class TrackingGraph(QWidget):
         self._data_color = QColor(data_color)
         self._smooth = True
         self._tracking = True
-        pen = pg.mkPen(color=data_color, width=2, cosmetic=True)
+        pen = pg.mkPen(color=data_color, width=_w(2.5), cosmetic=True)
         self._data_curve = self._plot.plot(pen=pen, name=title)
         # The real samples, as small dots, when they are few enough to be
         # told apart: the rounded line between them is drawn, they are read.
@@ -491,21 +504,21 @@ class TrackingGraph(QWidget):
         pi.vb.sigResized.connect(_align)
         self._align_sd = _align
 
-        stdev_pen = pg.mkPen(color=Colors.GRAPH_STDEV, width=1.5)
+        stdev_pen = pg.mkPen(color=Colors.GRAPH_STDEV, width=_w(1.5))
         self._stdev_curve = pg.PlotDataItem(pen=stdev_pen)
         self._stdev_curve.setDownsampling(auto=True, method='peak')
         self._stdev_curve.setClipToView(True)
         self._vb_sd.addItem(self._stdev_curve)
 
         # Tolerance lines (green horizontal)
-        tol_pen = pg.mkPen(color=Colors.GRAPH_TOLERANCE, width=1, style=Qt.PenStyle.SolidLine)
+        tol_pen = pg.mkPen(color=Colors.GRAPH_TOLERANCE, width=_w(1), style=Qt.PenStyle.SolidLine)
         self._tol_upper = pg.InfiniteLine(pos=self._tolerance, angle=0, pen=tol_pen)
         self._tol_lower = pg.InfiniteLine(pos=-self._tolerance, angle=0, pen=tol_pen)
         self._plot.addItem(self._tol_upper)
         self._plot.addItem(self._tol_lower)
 
         # Min/Max lines (dashed)
-        mm_pen = pg.mkPen(color=data_color, width=1, style=Qt.PenStyle.DashLine)
+        mm_pen = pg.mkPen(color=data_color, width=_w(1), style=Qt.PenStyle.DashLine)
         self._min_line = pg.InfiniteLine(pos=0, angle=0, pen=mm_pen, movable=False)
         self._max_line = pg.InfiniteLine(pos=0, angle=0, pen=mm_pen, movable=False)
         self._plot.addItem(self._min_line)
@@ -514,12 +527,12 @@ class TrackingGraph(QWidget):
         self._max_line.setVisible(False)
 
         # Median line (gray center)
-        median_pen = pg.mkPen(color=Colors.TEXT_MUTED, width=1, style=Qt.PenStyle.DashDotLine)
+        median_pen = pg.mkPen(color=Colors.TEXT_MUTED, width=_w(1), style=Qt.PenStyle.DashDotLine)
         self._median_line = pg.InfiniteLine(pos=0, angle=0, pen=median_pen)
         self._plot.addItem(self._median_line)
 
         # Max STDEV line (blue dashed)
-        max_stdev_pen = pg.mkPen(color=Colors.GRAPH_STDEV, width=1, style=Qt.PenStyle.DashLine)
+        max_stdev_pen = pg.mkPen(color=Colors.GRAPH_STDEV, width=_w(1), style=Qt.PenStyle.DashLine)
         self._max_stdev_line = pg.InfiniteLine(pos=0, angle=0, pen=max_stdev_pen)
         self._vb_sd.addItem(self._max_stdev_line)
         self._max_stdev_line.setVisible(False)
@@ -533,6 +546,7 @@ class TrackingGraph(QWidget):
         self._watermark.setFont(font)
         self._watermark.setOpacity(0.15)
         self._plot.addItem(self._watermark)
+        self._watermark.setVisible(False)   # the title above says it already
 
         # Min/Max annotation labels
         self._min_label = _Slot(self._header, data_color)
@@ -568,7 +582,7 @@ class TrackingGraph(QWidget):
         self._time_fix_labels = []
         self._MAX_TIME_FIXES = 40  # Max visible at once; recycle pool
         # Cache pen/font objects — avoid recreating every refresh
-        self._fix_pen = pg.mkPen(Colors.TEXT_MUTED, width=1, style=Qt.PenStyle.DotLine)
+        self._fix_pen = pg.mkPen(Colors.TEXT_MUTED, width=_w(1), style=Qt.PenStyle.DotLine)
         self._fix_label_font = QFont('Source Code Pro', 7)
 
         layout.addWidget(self._header)
@@ -638,7 +652,7 @@ class TrackingGraph(QWidget):
             self._max_stdev_line.setPos(max_stdev)
             self._max_stdev_line.setVisible(True)
             self._max_stdev_label.setText(
-                f"σ max {max_stdev:.{self._decimals + 1}f}{self._unit}")
+                f"σ max {max_stdev:.{self._decimals}f}{self._unit}")
             self._max_stdev_label.setPos(t_end, max_stdev)
             self._max_stdev_label.setVisible(True)
 
@@ -696,12 +710,13 @@ class TrackingGraph(QWidget):
             return
         self._tracking = tracking
         color = self._data_color if tracking else Colors.TEXT_MUTED
-        self._data_curve.setPen(pg.mkPen(color=color, width=2, cosmetic=True))
+        self._data_curve.setPen(pg.mkPen(color=color, width=_w(2.5), cosmetic=True))
+        self._stdev_curve.setPen(pg.mkPen(color=Colors.GRAPH_STDEV if tracking else Colors.TEXT_MUTED, width=_w(1.5)))
         self._markers.setBrush(pg.mkBrush(color))
 
     def set_tolerance(self, arcsec: float):
         """Update tolerance lines and their annotations (only if changed)."""
-        if arcsec == self._tolerance:
+        if arcsec == self._tolerance and self._tol_upper_label.text:
             return
         self._tolerance = arcsec
         self._tol_upper.setPos(arcsec)
@@ -888,29 +903,29 @@ class TimeGraph(QWidget):
 
         # Data curves
         self._diff_curve = self._plot.plot(
-            pen=pg.mkPen(Colors.GRAPH_TIME_DIFF, width=1.5),
+            pen=pg.mkPen(Colors.GRAPH_TIME_DIFF, width=_w(1.5)),
             name=T("lg_pc_mount")
         )
         self._pc_loop_curve = self._plot.plot(
-            pen=pg.mkPen(Colors.GRAPH_TIME_PC, width=1),
+            pen=pg.mkPen(Colors.GRAPH_TIME_PC, width=_w(1)),
             name=T("lg_pc_loop")
         )
         red = QColor(Colors.GRAPH_TIME_MOUNT)
         red.setAlpha(150)      # under the green, without hiding it
         self._mount_loop_curve = self._plot.plot(
-            pen=pg.mkPen(red, width=1),
+            pen=pg.mkPen(red, width=_w(1)),
             name=T("lg_mount_loop")
         )
         # Green (PC loop) drawn on top, as in MountMonitor 3: the mount loop
         # (red) otherwise hid it completely.
         self._pc_loop_curve.setZValue(10)
         self._ntp_curve = self._plot.plot(
-            pen=pg.mkPen(Colors.GRAPH_NTP, width=1.5),
+            pen=pg.mkPen(Colors.GRAPH_NTP, width=_w(1.5)),
             name=T("lg_pc_ntp")
         )
 
         # Zero line
-        zero_pen = pg.mkPen(Colors.TEXT_MUTED, width=1, style=Qt.PenStyle.DashLine)
+        zero_pen = pg.mkPen(Colors.TEXT_MUTED, width=_w(1), style=Qt.PenStyle.DashLine)
         self._zero_line = pg.InfiniteLine(pos=0, angle=0, pen=zero_pen)
         self._plot.addItem(self._zero_line)
 
@@ -921,6 +936,7 @@ class TimeGraph(QWidget):
         self._watermark.setFont(QFont('Arial', 24, QFont.Weight.Bold))
         self._watermark.setOpacity(0.15)
         self._plot.addItem(self._watermark)
+        self._watermark.setVisible(False)   # the title above says it already
 
         # Current values + drift overlay
         self._values_text = _Slot(self._header, Colors.GRAPH_TIME_DIFF)
@@ -1052,16 +1068,16 @@ class SeismicGraph(QWidget):
 
         # Data curve
         self._data_curve = self._plot.plot(
-            pen=pg.mkPen(Colors.GRAPH_SEISMIC, width=1)
+            pen=pg.mkPen(Colors.GRAPH_SEISMIC, width=_w(1))
         )
 
         # STDEV
         self._stdev_curve = self._plot.plot(
-            pen=pg.mkPen(Colors.GRAPH_STDEV, width=1.5)
+            pen=pg.mkPen(Colors.GRAPH_STDEV, width=_w(1.5))
         )
 
         # Tolerance lines
-        tol_pen = pg.mkPen(Colors.GRAPH_TOLERANCE, width=1)
+        tol_pen = pg.mkPen(Colors.GRAPH_TOLERANCE, width=_w(1))
         self._tol_upper = pg.InfiniteLine(pos=100, angle=0, pen=tol_pen)
         self._tol_lower = pg.InfiniteLine(pos=-100, angle=0, pen=tol_pen)
         self._plot.addItem(self._tol_upper)
@@ -1074,6 +1090,7 @@ class SeismicGraph(QWidget):
         self._watermark.setFont(QFont('Arial', 24, QFont.Weight.Bold))
         self._watermark.setOpacity(0.15)
         self._plot.addItem(self._watermark)
+        self._watermark.setVisible(False)   # the title above says it already
         self._plot.getViewBox().disableAutoRange()
 
         layout.addWidget(self._header)
@@ -1169,36 +1186,36 @@ class AxialGraph(QWidget):
 
         # RA raw speed (thin grey)
         self._ra_raw_curve = self._plot.plot(
-            pen=pg.mkPen(Colors.GRAPH_SPEED_RAW, width=1),
+            pen=pg.mkPen(Colors.GRAPH_SPEED_RAW, width=_w(1)),
             name="RA raw"
         )
         # DEC raw speed (thin grey, slightly different shade)
         self._dec_raw_curve = self._plot.plot(
-            pen=pg.mkPen(QColor(140, 140, 150), width=1),
+            pen=pg.mkPen(QColor(140, 140, 150), width=_w(1)),
             name="DEC raw"
         )
         # RA average speed (thick bright magenta)
         self._ra_avg_curve = self._plot.plot(
-            pen=pg.mkPen(Colors.GRAPH_RA, width=2.5),
+            pen=pg.mkPen(Colors.GRAPH_RA, width=_w(2.5)),
             name="RA avg"
         )
         # DEC average speed (thick bright red)
         self._dec_avg_curve = self._plot.plot(
-            pen=pg.mkPen(Colors.GRAPH_DEC, width=2.5),
+            pen=pg.mkPen(Colors.GRAPH_DEC, width=_w(2.5)),
             name="DEC avg"
         )
         # Linear regression lines (extra thick white)
         self._ra_reg_curve = self._plot.plot(
-            pen=pg.mkPen(Colors.GRAPH_SPEED_REG, width=3,
+            pen=pg.mkPen(Colors.GRAPH_SPEED_REG, width=_w(3),
                          style=Qt.PenStyle.DashLine),
         )
         self._dec_reg_curve = self._plot.plot(
-            pen=pg.mkPen(QColor(255, 200, 200), width=3,
+            pen=pg.mkPen(QColor(255, 200, 200), width=_w(3),
                          style=Qt.PenStyle.DashLine),
         )
 
         # Zero line
-        zero_pen = pg.mkPen(Colors.TEXT_MUTED, width=1,
+        zero_pen = pg.mkPen(Colors.TEXT_MUTED, width=_w(1),
                             style=Qt.PenStyle.DashLine)
         self._plot.addItem(pg.InfiniteLine(pos=0, angle=0, pen=zero_pen))
 
@@ -1209,6 +1226,7 @@ class AxialGraph(QWidget):
         self._watermark.setFont(QFont('Arial', 24, QFont.Weight.Bold))
         self._watermark.setOpacity(0.15)
         self._plot.addItem(self._watermark)
+        self._watermark.setVisible(False)   # the title above says it already
 
         # Regression annotation
         self._reg_label = _Slot(self._header, Colors.GRAPH_SPEED_REG)
