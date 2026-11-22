@@ -21,14 +21,14 @@ ASCOM through the 10Micron driver 1.7.2 shared with NINA; GUI of 4.4.11 and
 4.4.12 checked on a 4K screen at 200 %.
 
 **Not verified yet:**
-- 4.4.13 GUI checked on the real PC (thickness, arrows): OK. 4.4.14 drop-down arrows, 4.4.15 manual page breaks: not yet seen on the PC.
+- (done) 4.4.13-4.4.15 checked on the real PC at 4K/200 %: line thickness, spin-box and drop-down arrows, Help > Manual opens; the installed manual_fr.pdf is byte-identical (1 231 245 bytes) to the one checked here for orphan headings.
 - A full night of real tracking in ASCOM since 4.4.7 (curves, night report,
   6 s preference read every 5 min).
 - What the :GTMP1# sensor measures (labelled "mount electronics"; question
   sent to the MM3 author).
 
 **Next steps:**
-1. Check 4.4.13 on the real GUI (thickness, arrows).
+1. Send the recap mail to the MM3 author (4.4.5 -> 4.4.15, question on :GTMP1#): written, sent by the maintainer.
 2. After a real night: night report (FFT section now present), air gauge.
 3. Answer about :GTMP1# -> label `env_inside` and manuals.
 4. Screenshots: `QT_QPA_PLATFORM=offscreen MM_CAPTURE_RUN_S=150 python -B
