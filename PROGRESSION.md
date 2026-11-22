@@ -2,7 +2,7 @@
 
 ## Resume note (2026-11-22, evening)
 
-**State:** master = tag **v4.4.13** (release workflow: signed updates,
+**State:** master = tag **v4.4.15** (release workflow: signed updates,
 release_unique keeps only the latest Release). Code, comments and commits in
 English; user texts trilingual (EN/FR/NL) in `src/utils/i18n.py` and
 `src/gui/report_texts.py`.
@@ -21,7 +21,7 @@ ASCOM through the 10Micron driver 1.7.2 shared with NINA; GUI of 4.4.11 and
 4.4.12 checked on a 4K screen at 200 %.
 
 **Not verified yet:**
-- 4.4.13 on the real GUI: line thickness at 200 %, spin-box arrows.
+- 4.4.13 GUI checked on the real PC (thickness, arrows): OK. 4.4.14 drop-down arrows, 4.4.15 manual page breaks: not yet seen on the PC.
 - A full night of real tracking in ASCOM since 4.4.7 (curves, night report,
   6 s preference read every 5 min).
 - What the :GTMP1# sensor measures (labelled "mount electronics"; question
