@@ -91,6 +91,7 @@ DEFAULTS = {
 
     # Layout
     "graph_textbox_ratio": 4,
+    "smooth_curves": True,                 # monotone rounding, never overshoots
     "horizontal_zoom": 1,
     "time_span_s": 120.0,  # seconds shown by the scrolling graphs (30 s .. 1 h)
     "vertical_zoom_mode": "data",  # data, tolerance, maximum, minmax

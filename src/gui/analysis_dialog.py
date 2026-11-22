@@ -85,6 +85,18 @@ def _is_precision_unguided_mount(session) -> bool:
     return False
 
 
+def _count(value, lang: str) -> str:
+    """A count with the thousands separator of the language: 54,047 in
+    English read as 54.047 in French and Dutch."""
+    text = f"{int(value):,}"
+    return text if lang == 'en' else text.replace(",", "\u202f")
+
+
+def _axis(axis: str, lang: str) -> str:
+    """RA/DEC in the report's language (AD/DÉC, RK/DEC)."""
+    return T('ra_short' if axis == "RA" else 'dec_short', lang)
+
+
 def build_report(session, lang: str = 'fr') -> str:
     """The night report text, without opening a window.
 
@@ -269,8 +281,8 @@ class AnalysisDialog(QDialog):
         if s.firmware:
             lines.append(f"  {_('firmware'):<22} : {s.firmware}")
         lines.append(f"  {_('duree'):<22} : {s.duration_str}")
-        lines.append(f"  {_('ech_total'):<22} : {s.sample_count:,}")
-        lines.append(f"  {_('ech_suivi'):<22} : {s.tracking_sample_count:,}")
+        lines.append(f"  {_('ech_total'):<22} : {_count(s.sample_count, lg)}")
+        lines.append(f"  {_('ech_suivi'):<22} : {_count(s.tracking_sample_count, lg)}")
         if s.effective_frequency > 0:
             lines.append(f"  {_('cadence'):<22} : {s.effective_frequency:.2f} Hz")
         lines.append(f"  {_('cibles'):<22} : {len(s.target_segments)}")
@@ -404,11 +416,11 @@ class AnalysisDialog(QDialog):
         lines.append("      " + _("contient_paliers"))
         if s.excursions_removed:
             lines.append(f"  {_('excursions_ecartees'):<34} : "
-                         f"{s.excursions_removed:,} {_('echantillons')}")
+                         f"{_count(s.excursions_removed, lg)} {_('echantillons')}")
             lines.append("      " + _("excursions_explique"))
         _dropped = s.tracking_sample_count - s.samples_in_segments
         if _dropped > 0:
-            lines.append(f"  {_('slews_ecartes'):<34} : {_dropped:,}")
+            lines.append(f"  {_('slews_ecartes'):<34} : {_count(_dropped, lg)}")
         if precision_unguided:
             lines.append(f"  {_('type_monture'):<22} : {_('non_guidee_precision')}")
             lines.append(f"  {_('seuils_adaptes'):<22} : <0.5\" | <1.0\" | <2.0\"")
@@ -458,7 +470,7 @@ class AnalysisDialog(QDialog):
             dec_str = format_dec(seg.dec_median_degrees)
             lines.append(f"  {_('t_cible')} #{seg_idx + 1}  —  {T('ra_short', lg)} {ra_str}  "
                          f"{T('dec_short', lg)} {dec_str}  "
-                         f"({seg.sample_count:,} {_('echantillons')})")
+                         f"({_count(seg.sample_count, lg)} {_('echantillons')})")
             lines.append("=" * 70)
             lines.append("")
 
@@ -557,24 +569,24 @@ class AnalysisDialog(QDialog):
 
             if len(s.time_pc_loop) > 0:
                 pl = s.time_pc_loop
-                lines.append(f"  PC loop avg        : {np.mean(pl):.1f} ms")
-                lines.append(f"  PC loop max        : {np.max(pl):.1f} ms")
-                lines.append(f"  PC loop std        : {np.std(pl):.1f} ms")
+                lines.append(f"  {_('pc_loop_avg'):<34} : {np.mean(pl):.1f} ms")
+                lines.append(f"  {_('pc_loop_max'):<34} : {np.max(pl):.1f} ms")
+                lines.append(f"  {_('pc_loop_std'):<34} : {np.std(pl):.1f} ms")
                 if np.mean(pl) > 1000:
                     lines.append("  " + _("boucle_pc_lente") + " " + _("pc_a_du_mal"))
             lines.append("")
 
             if len(s.time_mount_loop) > 0:
                 ml = s.time_mount_loop
-                lines.append(f"  Mount loop avg     : {np.mean(ml):.1f} ms")
-                lines.append(f"  Mount loop max     : {np.max(ml):.1f} ms")
+                lines.append(f"  {_('mount_loop_avg'):<34} : {np.mean(ml):.1f} ms")
+                lines.append(f"  {_('mount_loop_max'):<34} : {np.max(ml):.1f} ms")
             lines.append("")
 
             if len(s.time_ntp_diff) > 0 and np.any(s.time_ntp_diff != 0):
                 ntp = s.time_ntp_diff[s.time_ntp_diff != 0]
                 if len(ntp) > 0:
-                    lines.append(f"  PC-NTP offset avg  : {np.mean(ntp):+.1f} ms")
-                    lines.append(f"  PC-NTP offset max  : {np.max(np.abs(ntp)):.1f} ms")
+                    lines.append(f"  {_('ntp_avg'):<34} : {np.mean(ntp):+.1f} ms")
+                    lines.append(f"  {_('ntp_max'):<34} : {np.max(np.abs(ntp)):.1f} ms")
                     if np.max(np.abs(ntp)) > 1000:
                         lines.append("  " + _("decalage_ntp") + " " + _("synchroniser_horloge"))
                     lines.append("")
@@ -593,7 +605,9 @@ class AnalysisDialog(QDialog):
             total = len(s.statuses)
             for status, count in status_counts.most_common():
                 pct = count / total * 100
-                lines.append(f"  {status:<20} : {count:>6} samples ({pct:.1f}%)")
+                name = {"TRACKING": T("st_tracking", lg), "PARKED": T("st_parked", lg),
+                        "IDLE": T("st_idle", lg), "SLEWING": T("st_slewing", lg)}.get(status, status)
+                lines.append(f"  {name:<20} : {_count(count, lg):>7} {_('echantillons')} ({pct:.1f}%)")
             lines.append("")
 
             tracking_pct = status_counts.get('TRACKING', 0) / total * 100
@@ -620,7 +634,6 @@ class AnalysisDialog(QDialog):
         if len(s.ra_deviations) > 0:
             lines.append("=" * 70)
             lines.append("  " + _("t_tolerance"))
-            lines.append("  (" + _("t_suivi").lower() + ")")
             lines.append("=" * 70)
             lines.append("")
 
@@ -630,16 +643,28 @@ class AnalysisDialog(QDialog):
             # jitter and then announced that 70% of samples exceeded 2" -- that
             # 70% was the slow drift and the dither steps, neither of which
             # blurs a frame.
-            _ra_tol = s.ra_residual if len(s.ra_residual) else s.ra_deviations
-            _dec_tol = s.dec_residual if len(s.dec_residual) else s.dec_deviations
+            # Since 4.4.12 the very samples the jitter is computed on
+            # (between repositionings, per-step line removed): with the
+            # drift-only residual the dither steps still counted, and an
+            # EXCELLENT 0.165" night announced 21% of samples over 0.5".
+            if s.target_segments:
+                _ra_tol = np.concatenate([g.jitter_residual(g.ra_deviations)
+                                          for g in s.target_segments])
+                _dec_tol = np.concatenate([g.jitter_residual(g.dec_deviations)
+                                           for g in s.target_segments])
+            else:
+                _ra_tol = s.ra_residual if len(s.ra_residual) else s.ra_deviations
+                _dec_tol = s.dec_residual if len(s.dec_residual) else s.dec_deviations
+            lines.append("  " + _("tol_base"))
+            lines.append("")
             for tol in [0.5, 1.0, 1.5, 2.0, 3.0, 5.0]:
                 ra_exceed = np.sum(np.abs(_ra_tol) > tol)
                 dec_exceed = np.sum(np.abs(_dec_tol) > tol)
                 ra_pct = ra_exceed / len(_ra_tol) * 100
                 dec_pct = dec_exceed / len(_dec_tol) * 100
                 lines.append(
-                    f"  > {tol:.1f}\"  :  RA {ra_exceed:>6} ({ra_pct:>5.1f}%)  "
-                    f"|  DEC {dec_exceed:>6} ({dec_pct:>5.1f}%)"
+                    f"  > {tol:.1f}\"  :  {_axis('RA', lg):<3} {_count(ra_exceed, lg):>7} ({ra_pct:>5.1f}%)  "
+                    f"|  {_axis('DEC', lg):<3} {_count(dec_exceed, lg):>7} ({dec_pct:>5.1f}%)"
                 )
             lines.append("")
 
@@ -1022,16 +1047,15 @@ class AnalysisDialog(QDialog):
         if len(deviations) >= 8:
             from ..logging_module.log_parser import TargetSegment
             jitter = TargetSegment().jitter(deviations)
-        lines.append(f"  --- {axis_name} ---")
-        lines.append(f"  {_('dev_moyenne'):<34} : {np.mean(deviations):+.4f}\"")
-        lines.append(f"  {_('dev_mediane'):<34} : {np.median(deviations):+.4f}\"")
+        shown = _axis(axis_name, lg)
+        lines.append(f"  --- {shown} ---")
+        # Mean, median, min, max, peak-to-peak and percentiles of the RAW
+        # deviations were dropped in 4.4.12: measured from the target's
+        # median, they were dominated by the dithers (median always 0,
+        # peak-to-peak 79" on an EXCELLENT night) and said nothing about
+        # what blurs a frame.
         lines.append(f"  {_('jitter_entre'):<34} : {jitter:.4f}\"   {_('etale_la_pose')}")
         lines.append(f"  {_('rms_brut_court'):<34} : {rms:.4f}\"")
-        lines.append(f"  {_('pic_a_pic'):<34} : {np.ptp(deviations):.4f}\"")
-        lines.append(f"  {_('dev_min'):<34} : {np.min(deviations):+.4f}\"")
-        lines.append(f"  {_('dev_max'):<34} : {np.max(deviations):+.4f}\"")
-        lines.append(f"  {'95e ' + _('percentile'):<34} : {np.percentile(np.abs(deviations), 95):.4f}\"")
-        lines.append(f"  {'99e ' + _('percentile'):<34} : {np.percentile(np.abs(deviations), 99):.4f}\"")
         lines.append("")
 
         # A median that lands exactly on zero means more than half the samples
@@ -1048,9 +1072,9 @@ class AnalysisDialog(QDialog):
 
         # Running STDEV statistics
         if len(stdevs) > 0 and np.any(stdevs > 0):
+            # Median only: the mean and the maximum took in the slews and
+            # target changes (maximum 2030" on a good night).
             valid_stdevs = stdevs[stdevs > 0]
-            lines.append(f"  {_('stdev_moy'):<34} : {np.mean(valid_stdevs):.4f}\"")
-            lines.append(f"  {_('stdev_max'):<34} : {np.max(valid_stdevs):.4f}\"")
             lines.append(f"  {_('stdev_med'):<34} : {np.median(valid_stdevs):.4f}\"")
             lines.append("")
 
@@ -1081,18 +1105,18 @@ class AnalysisDialog(QDialog):
 
             if abs(drift_per_hour) > 15.0:
                 if precision_unguided:
-                    lines.append("  " + _("derive_forte_modele", axe=axis_name))
+                    lines.append("  " + _("derive_forte_modele", axe=shown))
                     lines.append("      " + _("derive_forte_modele_note"))
                 elif axis_name == "RA":
                     lines.append("  " + _("derive_forte_ad"))
                 else:
                     lines.append("  " + _("derive_forte_dec"))
             elif abs(drift_per_hour) > 5.0:
-                lines.append("  " + _("derive_sans_effet", axe=axis_name))
+                lines.append("  " + _("derive_sans_effet", axe=shown))
             elif abs(drift_per_hour) > 1.0:
-                lines.append("  " + _("derive_legere", axe=axis_name))
+                lines.append("  " + _("derive_legere", axe=shown))
             else:
-                lines.append("  " + _("derive_nulle", axe=axis_name))
+                lines.append("  " + _("derive_nulle", axe=shown))
             lines.append("")
         lines.append("")
 
@@ -1115,8 +1139,8 @@ class AnalysisDialog(QDialog):
         if not peak_indices:
             return
 
-        lines.append(_("fft_pics", axe=axis_name, n=top_n) + " :")
-        lines.append(f"  {'Rank':>4}  {'Frequency':>12}  {'Period':>12}  {'Amp. (peak)':>12}")
+        lines.append(_("fft_pics", axe=_axis(axis_name, lg), n=top_n) + " :")
+        lines.append(f"  {_('fft_rang'):>4}  {_('fft_freq'):>12}  {_('fft_periode'):>12}  {_('fft_amp'):>12}")
         lines.append(f"  {'----':>4}  {'----------':>12}  {'------':>12}  {'---------':>12}")
 
         for rank, idx in enumerate(peak_indices, 1):
@@ -1144,7 +1168,7 @@ class AnalysisDialog(QDialog):
         if 120 < dominant_period < 900:
             lines.append(f"  [PE] " + _("pe_detectee"))
             lines.append(f"        {_('periode')} : {dominant_period:.1f} s ({dominant_period/60:.1f} min)")
-            lines.append(f"        Amplitude : {dominant_amp:.4f}\" (peak)")
+            lines.append(f"        Amplitude : {dominant_amp:.4f}\" ({_('crete')})")
             if dominant_amp < 0.5:
                 lines.append("        " + _("pe_tres_faible"))
             elif dominant_amp < 1.5:

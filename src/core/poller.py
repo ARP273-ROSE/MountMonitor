@@ -408,10 +408,10 @@ class MountPoller(QThread):
                 'elevation': self._connection.get_elevation(),
             }
             self.mount_info_ready.emit(info)
-            self.log_message.emit(
-                f"Mount: {info['product']} | Firmware: {info['firmware']} | "
-                f"Pier: {info['pier_side'].value}"
-            )
+            # The window prints the same facts, translated, one per line;
+            # this English summary only goes to the log file.
+            logger.info(f"Mount: {info['product']} | Firmware: {info['firmware']} | "
+                        f"Pier: {info['pier_side'].value}")
         except Exception as e:
             logger.error(f"Failed to retrieve mount info: {e}")
 

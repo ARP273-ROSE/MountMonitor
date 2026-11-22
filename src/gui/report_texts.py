@@ -106,17 +106,17 @@ TR = {
 
     # ── section titles ─────────────────────────────────────────────────
     "t_apercu": {
-        "en": "SESSION OVERVIEW", "fr": "APERCU DE LA SESSION",
+        "en": "SESSION OVERVIEW", "fr": "APERÇU DE LA SESSION",
         "nl": "OVERZICHT VAN DE SESSIE"},
     "t_qualite": {
-        "en": "OVERALL QUALITY", "fr": "QUALITE GLOBALE",
+        "en": "OVERALL QUALITY", "fr": "QUALITÉ GLOBALE",
         "nl": "ALGEMENE KWALITEIT"},
     "t_cible": {"en": "TARGET", "fr": "CIBLE", "nl": "DOEL"},
     "t_ad": {
         "en": "RIGHT ASCENSION (RA)", "fr": "ASCENSION DROITE (AD)",
         "nl": "RECHTE KLIMMING (RK)"},
     "t_dec": {
-        "en": "DECLINATION (DEC)", "fr": "DECLINAISON (DEC)",
+        "en": "DECLINATION (DEC)", "fr": "DÉCLINAISON (DÉC)",
         "nl": "DECLINATIE (DEC)"},
     "t_temps": {
         "en": "TIME SYNCHRONIZATION", "fr": "SYNCHRONISATION TEMPORELLE",
@@ -126,10 +126,10 @@ TR = {
     "t_suivi": {
         "en": "TRACKING STATUS", "fr": "STATUT DE SUIVI", "nl": "VOLGSTATUS"},
     "t_tolerance": {
-        "en": "TOLERANCE ANALYSIS", "fr": "ANALYSE DE TOLERANCE",
+        "en": "TOLERANCE ANALYSIS", "fr": "ANALYSE DE TOLÉRANCE",
         "nl": "TOLERANTIEANALYSE"},
     "t_continuite": {
-        "en": "DATA CONTINUITY", "fr": "CONTINUITE DES DONNEES",
+        "en": "DATA CONTINUITY", "fr": "CONTINUITÉ DES DONNÉES",
         "nl": "CONTINUITEIT VAN DE GEGEVENS"},
     "t_environnement": {
         "en": "ENVIRONMENT & DIAGNOSTICS", "fr": "ENVIRONNEMENT & DIAGNOSTICS",
@@ -201,7 +201,7 @@ TR = {
     "s_derive": {
         "en": "3. Slow drift", "fr": "3. Dérive lente", "nl": "3. Langzame drift"},
     "derive_ad": {"en": "RA drift", "fr": "Dérive AD", "nl": "RK-drift"},
-    "derive_dec": {"en": "DEC drift", "fr": "Dérive DEC", "nl": "DEC-drift"},
+    "derive_dec": {"en": "DEC drift", "fr": "Dérive DÉC", "nl": "DEC-drift"},
     "deplacement_pose": {
         "en": "Star motion over a {n:.0f} s exposure",
         "fr": "Déplacement de l'étoile sur une pose de {n:.0f} s",
@@ -302,10 +302,6 @@ TR = {
         "nl": "Controleer: poolopstelling, aandraaien, uitbalancering."},
 
     # ── per-axis statistics ────────────────────────────────────────────
-    "dev_moyenne": {
-        "en": "Mean deviation", "fr": "Déviation moyenne", "nl": "Gemiddelde afwijking"},
-    "dev_mediane": {
-        "en": "Median deviation", "fr": "Déviation médiane", "nl": "Mediane afwijking"},
     "jitter_entre": {
         "en": "JITTER (between repositionings)",
         "fr": "JITTER (entre repositionnements)",
@@ -316,10 +312,6 @@ TR = {
     "rms_brut_court": {
         "en": "RMS raw (everything mixed)", "fr": "RMS brut (tout mélangé)",
         "nl": "Ruwe RMS (alles door elkaar)"},
-    "pic_a_pic": {"en": "Peak-to-peak", "fr": "Pic-à-pic", "nl": "Piek-tot-piek"},
-    "dev_min": {"en": "Min deviation", "fr": "Déviation min", "nl": "Minimale afwijking"},
-    "dev_max": {"en": "Max deviation", "fr": "Déviation max", "nl": "Maximale afwijking"},
-    "percentile": {"en": "percentile", "fr": "percentile", "nl": "percentiel"},
     "resolution_lecture": {
         "en": "Reading resolution", "fr": "Résolution de lecture",
         "nl": "Uitleesresolutie"},
@@ -327,12 +319,6 @@ TR = {
         "en": "[!] jitter is at the resolution limit — the true value may be smaller",
         "fr": "[!] le jitter est à la limite de résolution — la vraie valeur peut être plus faible",
         "nl": "[!] de jitter ligt op de resolutiegrens — de werkelijke waarde kan kleiner zijn"},
-    "stdev_moy": {
-        "en": "Running STDEV avg", "fr": "ÉCART-TYPE glissant moyen",
-        "nl": "Lopende STDEV gemiddeld"},
-    "stdev_max": {
-        "en": "Running STDEV max", "fr": "ÉCART-TYPE glissant max",
-        "nl": "Lopende STDEV max"},
     "stdev_med": {
         "en": "Running STDEV med", "fr": "ÉCART-TYPE glissant médian",
         "nl": "Lopende STDEV mediaan"},
@@ -359,7 +345,7 @@ TR = {
         "nl": "[!] Aanzienlijke RK-drift — controleer de poolopstelling (azimut)"},
     "derive_forte_dec": {
         "en": "[!] Significant DEC drift — check polar alignment (altitude)",
-        "fr": "[!] Dérive DEC significative — vérifiez l'alignement polaire (altitude)",
+        "fr": "[!] Dérive DÉC significative — vérifiez l'alignement polaire (altitude)",
         "nl": "[!] Aanzienlijke DEC-drift — controleer de poolopstelling (hoogte)"},
     "derive_sans_effet": {
         "en": "[i] {axe} drift present but harmless over one exposure",
@@ -508,7 +494,7 @@ TR = {
         "nl": "- RK-jitter > {seuil}\": controleer de RK-uitbalancering, het aandraaien, de kabels"},
     "r_dec_instable": {
         "en": "- DEC jitter > {seuil}\": check DEC balance and DEC axis backlash",
-        "fr": "- Jitter DEC > {seuil}\" : vérifiez l'équilibrage DEC et le jeu de l'axe DEC",
+        "fr": "- Jitter DÉC > {seuil}\" : vérifiez l'équilibrage DÉC et le jeu de l'axe DÉC",
         "nl": "- DEC-jitter > {seuil}\": controleer de DEC-uitbalancering en de speling van de DEC-as"},
     "r_derive_modele": {
         "en": "- Target #{n}: {axe} drift {v:+.1f}\"/h — add model points near this target\n"
@@ -526,7 +512,7 @@ TR = {
         "nl": "- Doel #{n}: RK-drift {v:+.1f}\"/u — stel de azimut van de poolopstelling bij"},
     "r_derive_dec_polaire": {
         "en": "- Target #{n}: DEC drift {v:+.1f}\"/h — adjust altitude of polar alignment",
-        "fr": "- Cible #{n} : dérive DEC {v:+.1f}\"/h — ajustez l'altitude de l'alignement polaire",
+        "fr": "- Cible #{n} : dérive DÉC {v:+.1f}\"/h — ajustez l'altitude de l'alignement polaire",
         "nl": "- Doel #{n}: DEC-drift {v:+.1f}\"/u — stel de hoogte van de poolopstelling bij"},
     "r_temperature": {
         "en": "- Temperature drop of {v:.1f}°C: use a motorized focuser with temperature compensation",
@@ -536,6 +522,23 @@ TR = {
         "en": "- Polar error of {v:.1f}': redo the polar alignment",
         "fr": "- Erreur polaire de {v:.1f}' : refaites l'alignement polaire",
         "nl": "- Poolfout van {v:.1f}': voer de poolopstelling opnieuw uit"},
+    "pc_loop_avg": {"en": "PC loop, mean", "fr": "Boucle PC, moyenne", "nl": "Pc-lus, gemiddeld"},
+    "pc_loop_max": {"en": "PC loop, maximum", "fr": "Boucle PC, maximum", "nl": "Pc-lus, maximum"},
+    "pc_loop_std": {"en": "PC loop, standard deviation", "fr": "Boucle PC, écart-type", "nl": "Pc-lus, standaardafwijking"},
+    "mount_loop_avg": {"en": "Mount loop, mean", "fr": "Boucle monture, moyenne", "nl": "Monteringslus, gemiddeld"},
+    "mount_loop_max": {"en": "Mount loop, maximum", "fr": "Boucle monture, maximum", "nl": "Monteringslus, maximum"},
+    "ntp_avg": {"en": "PC - NTP offset, mean", "fr": "Écart PC - NTP, moyen", "nl": "Afwijking pc - NTP, gemiddeld"},
+    "ntp_max": {"en": "PC - NTP offset, maximum", "fr": "Écart PC - NTP, maximum", "nl": "Afwijking pc - NTP, maximum"},
+    "fft_rang": {"en": "Rank", "fr": "Rang", "nl": "Rang"},
+    "fft_freq": {"en": "Frequency", "fr": "Fréquence", "nl": "Frequentie"},
+    "fft_periode": {"en": "Period", "fr": "Période", "nl": "Periode"},
+    "fft_amp": {"en": "Amp. (peak)", "fr": "Amp. (crête)", "nl": "Amp. (piek)"},
+    "crete": {"en": "peak", "fr": "crête", "nl": "piek"},
+    "tol_base": {
+        "en": "(share of tracking samples whose jitter exceeds each threshold: between repositionings, drift removed, the basis of the rating)",
+        "fr": "(part des échantillons en suivi dont le jitter dépasse chaque seuil : entre repositionnements, dérive retirée, même base que la note)",
+        "nl": "(aandeel van de meetpunten tijdens volgen waarvan de jitter elke drempel overschrijdt: tussen herpositioneringen, drift verwijderd, dezelfde basis als de beoordeling)"},
+
 }
 
 

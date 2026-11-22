@@ -83,7 +83,7 @@ def test_report_no_longer_hardcoded_bilingual():
 
 @pytest.mark.parametrize("language,expected_value", [
     ("en", "SESSION OVERVIEW"),
-    ("fr", "APERCU DE LA SESSION"),
+    ("fr", "APERÇU DE LA SESSION"),
     ("nl", "OVERZICHT VAN DE SESSIE"),
 ])
 def test_each_language_has_its_title(language, expected_value):

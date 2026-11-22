@@ -148,6 +148,24 @@ class TargetSegment:
         # rated BAD.
         return float(np.median([_detrended_spread(m) for m in chunks]))
 
+    def jitter_residual(self, dev: np.ndarray) -> np.ndarray:
+        """The samples the jitter is computed on, around their own line:
+        between repositionings, a margin after each, a straight line
+        removed per step. What the tolerance table counts, so that it
+        agrees with the jitter and the rating."""
+        dev = np.asarray(dev, dtype=np.float64)
+        if len(dev) < 8:
+            return dev - np.mean(dev) if len(dev) else dev
+        edges_idx = np.concatenate(([0], self._plateaus(dev), [len(dev)]))
+        out = []
+        for a, b in zip(edges_idx[:-1], edges_idx[1:]):
+            m = dev[a + _MOVE_MARGIN:b] if a > 0 else dev[a:b]
+            if len(m) >= 8:
+                x = np.arange(len(m), dtype=np.float64)
+                k, c = np.polyfit(x, m, 1)
+                out.append(m - (k * x + c))
+        return np.concatenate(out) if out else dev - np.mean(dev)
+
     @property
     def ra_jitter(self) -> float:
         return self.jitter(self.ra_deviations)

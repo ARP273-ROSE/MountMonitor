@@ -218,6 +218,11 @@ class PreferencesDialog(QDialog):
         self._graph_ratio.setToolTip(T("tt_ratio"))
         layout_form.addRow(T("pref_graph_ratio"), self._graph_ratio)
 
+        self._smooth_curves = QCheckBox(T("pref_smooth"))
+        self._smooth_curves.setChecked(bool(self._settings.get("smooth_curves")))
+        self._smooth_curves.setToolTip(T("tt_smooth"))
+        layout_form.addRow(self._smooth_curves)
+
         # Language. The list is built from i18n so that adding a language is a
         # one-line change there, and each one is named in its own tongue —
         # someone looking for their language does not read the current one.
@@ -682,6 +687,7 @@ class PreferencesDialog(QDialog):
         s.set("serial_baudrate", self._serial_baudrate.currentData())
         s.set("ascom_driver", self._ascom_driver.text())
         s.set("graph_textbox_ratio", self._graph_ratio.value())
+        s.set("smooth_curves", self._smooth_curves.isChecked())
         i = self._language.currentIndex()
         s.set("language", self._language_codes[i] if 0 <= i < len(self._language_codes) else "auto")
         s.set("ra_in_degrees", self._ra_degrees_cb.isChecked())

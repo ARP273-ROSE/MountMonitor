@@ -9,7 +9,6 @@ Each graph supports zoom, tolerance lines, STDEV overlay, min/max lines.
 """
 
 import logging
-import os
 from pathlib import Path
 from datetime import datetime
 
@@ -29,15 +28,15 @@ from ..utils.i18n import T
 def _setup_pyqtgraph():
     """Configure pyqtgraph defaults for astronomy theme.
 
-    Antialiasing costs about 40 % of the drawing time: kept on machines with
-    eight threads or more, off on small observatory PCs (2-4 cores) where it
-    would compete with the polling. OpenGL stays off: old Intel iGPUs and
-    remote desktop sessions are where it fails.
+    Antialiasing everywhere since 4.4.12: the curves hold a few hundred
+    points per frame once downsampled, so its cost is negligible, and the
+    jagged lines on small PCs looked broken. OpenGL stays off: old Intel
+    iGPUs and remote desktop sessions are where it fails.
     """
     pg.setConfigOptions(
         background=Colors.BG_GRAPH,
         foreground=Colors.TEXT_SECONDARY,
-        antialias=(os.cpu_count() or 2) >= 8,
+        antialias=True,
         useOpenGL=False,
     )
     # No automatic SI prefixes on the axes: they turned 4000 ms into "kms",
@@ -55,6 +54,107 @@ def _setup_pyqtgraph():
 _setup_pyqtgraph()
 
 
+
+def monotone_curve(x, y, factor: int = 8, max_points: int = 1500):
+    """Rounded DISPLAY of a series that never overshoots the samples.
+
+    Monotone cubic (Fritsch-Carlson, the PCHIP of SciPy and d3's
+    curveMonotoneX): between two samples the curve stays between their
+    values, so the extremes are exactly the measured ones. An ordinary
+    spline (Catmull-Rom, natural, Bezier "smooth") overshoots at every
+    step of the staircase and would draw tracking errors that never
+    happened. Statistics are never computed on this curve, only on the
+    samples. Long series (> max_points) are returned as they are: at that
+    density a pixel holds several samples and nothing is gained.
+    """
+    x = np.asarray(x, dtype=np.float64)
+    y = np.asarray(y, dtype=np.float64)
+    n = len(x)
+    if n < 3 or n > max_points or len(y) != n:
+        return x, y
+    keep = np.concatenate(([True], np.diff(x) > 0))     # strictly increasing
+    x, y = x[keep], y[keep]
+    n = len(x)
+    if n < 3 or not np.all(np.isfinite(y)):
+        return x, y
+    h = np.diff(x)
+    delta = np.diff(y) / h
+    m = np.empty(n)
+    m[0], m[-1] = delta[0], delta[-1]
+    same = delta[:-1] * delta[1:] > 0
+    w1 = 2 * h[1:] + h[:-1]
+    w2 = h[1:] + 2 * h[:-1]
+    with np.errstate(divide='ignore', invalid='ignore'):
+        harmonic = (w1 + w2) / (w1 / delta[:-1] + w2 / delta[1:])
+    m[1:-1] = np.where(same, harmonic, 0.0)
+    # end slopes kept within the monotone bounds
+    for i, d in ((0, delta[0]), (n - 1, delta[-1])):
+        if m[i] * d <= 0:
+            m[i] = 0.0
+        elif abs(m[i]) > 3 * abs(d):
+            m[i] = 3 * d
+    t = np.linspace(0.0, 1.0, factor, endpoint=False)
+    h00 = 2 * t**3 - 3 * t**2 + 1
+    h10 = t**3 - 2 * t**2 + t
+    h01 = -2 * t**3 + 3 * t**2
+    h11 = t**3 - t**2
+    ys = (np.outer(y[:-1], h00) + np.outer(h * m[:-1], h10)
+          + np.outer(y[1:], h01) + np.outer(h * m[1:], h11)).ravel()
+    xs = (x[:-1, None] + np.outer(h, t)).ravel()
+    return np.append(xs, x[-1]), np.append(ys, y[-1])
+
+
+class _Header(QLabel):
+    """A strip ABOVE the graph holding its figures (value, sigma,
+    tolerance, min/max...). Drawn inside the graph, they were covered by
+    the curves, and a backing behind them would have hidden the curves."""
+
+    def __init__(self):
+        super().__init__()
+        self.setFont(QFont('Source Code Pro', 9))
+        self.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.setTextFormat(Qt.TextFormat.RichText)
+        self.setStyleSheet(f"background: {Colors.BG_GRAPH.name()}; padding: 1px 8px;")
+        self._slots = []
+        self.setVisible(False)       # a graph without figures has no strip
+
+    def render(self):
+        parts = [f'<span style="color:{s.color}">{s.text}</span>'
+                 for s in self._slots if s.visible and s.text]
+        self.setText("&nbsp;&nbsp;&nbsp;".join(parts))
+
+
+class _Slot:
+    """Stands where a pg.TextItem was: same calls, written in the header."""
+
+    def __init__(self, header: _Header, color):
+        self._header = header
+        self.color = QColor(color).name()
+        self.text = ""
+        self.visible = True
+        header._slots.append(self)
+        header.setVisible(True)
+
+    def setText(self, text, *a):
+        text = str(text).strip()
+        if text != self.text:
+            self.text = text
+            self._header.render()
+
+    def setVisible(self, visible):
+        if bool(visible) != self.visible:
+            self.visible = bool(visible)
+            self._header.render()
+
+    def setPos(self, *a):
+        pass
+
+    def setFont(self, *a):
+        pass
+
+
+#: real samples are marked with a dot when no more than this many are shown
+MARKERS_MAX = 240
 
 LEFT_AXIS_WIDTH = 70
 RIGHT_AXIS_WIDTH = 62
@@ -337,6 +437,7 @@ class TrackingGraph(QWidget):
         self._decimals = 2
 
         layout = QVBoxLayout(self)
+        self._header = _Header()
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
@@ -354,8 +455,16 @@ class TrackingGraph(QWidget):
         # is drawn (peaks kept), and only within the frame.
         self._plot.setDownsampling(auto=True, mode='peak')
         self._plot.setClipToView(True)
-        pen = pg.mkPen(color=data_color, width=1.5)
+        self._data_color = QColor(data_color)
+        self._smooth = True
+        self._tracking = True
+        pen = pg.mkPen(color=data_color, width=2, cosmetic=True)
         self._data_curve = self._plot.plot(pen=pen, name=title)
+        # The real samples, as small dots, when they are few enough to be
+        # told apart: the rounded line between them is drawn, they are read.
+        self._markers = pg.ScatterPlotItem(size=4, pen=None,
+                                           brush=pg.mkBrush(data_color))
+        self._plot.addItem(self._markers)
 
         # STDEV on its own scale (right axis), from zero at the bottom, as in
         # MountMonitor 3: on the deviation scale a 0.1" sigma was a flat line
@@ -426,48 +535,32 @@ class TrackingGraph(QWidget):
         self._plot.addItem(self._watermark)
 
         # Min/Max annotation labels
-        self._min_label = pg.TextItem(
-            text='', color=data_color, anchor=(0, 0.5)
-        )
+        self._min_label = _Slot(self._header, data_color)
         self._min_label.setFont(QFont('Source Code Pro', 8))
-        self._plot.addItem(self._min_label)
         self._min_label.setVisible(False)
 
-        self._max_label = pg.TextItem(
-            text='', color=data_color, anchor=(0, 0.5)
-        )
+        self._max_label = _Slot(self._header, data_color)
         self._max_label.setFont(QFont('Source Code Pro', 8))
-        self._plot.addItem(self._max_label)
         self._max_label.setVisible(False)
 
         # Max STDEV annotation
-        self._max_stdev_label = pg.TextItem(
-            text='', color=Colors.GRAPH_STDEV, anchor=(0, 0.5)
-        )
+        self._max_stdev_label = _Slot(self._header, Colors.GRAPH_STDEV)
         self._max_stdev_label.setFont(QFont('Source Code Pro', 8))
-        self._vb_sd.addItem(self._max_stdev_label)
         self._max_stdev_label.setVisible(False)
 
         # Stats text overlay
-        self._stats_text = pg.TextItem(
-            text='', color=Colors.TEXT_SECONDARY,
-            anchor=(1, 0)
-        )
+        self._stats_text = _Slot(self._header, Colors.TEXT_SECONDARY)
         self._stats_text.setFont(QFont('Source Code Pro', 9))
-        self._plot.addItem(self._stats_text)
 
         # Tolerance value annotations (labels showing the arcsec value)
-        self._tol_upper_label = pg.TextItem(
-            text='', color=Colors.GRAPH_TOLERANCE, anchor=(1, 1)
-        )
+        self._tol_upper_label = _Slot(self._header, Colors.GRAPH_TOLERANCE)
         self._tol_upper_label.setFont(QFont('Source Code Pro', 8))
-        self._plot.addItem(self._tol_upper_label)
 
-        self._tol_lower_label = pg.TextItem(
-            text='', color=Colors.GRAPH_TOLERANCE, anchor=(1, 0)
-        )
+        self._tol_lower_label = _Slot(self._header, Colors.GRAPH_TOLERANCE)
         self._tol_lower_label.setFont(QFont('Source Code Pro', 8))
-        self._plot.addItem(self._tol_lower_label)
+        self._header._slots = [self._stats_text, self._tol_upper_label,
+                               self._tol_lower_label, self._min_label,
+                               self._max_label, self._max_stdev_label]
 
         # Time fix markers (grey vertical lines every 30s)
         # Pool a fixed max number to avoid unbounded growth over long sessions
@@ -478,6 +571,7 @@ class TrackingGraph(QWidget):
         self._fix_pen = pg.mkPen(Colors.TEXT_MUTED, width=1, style=Qt.PenStyle.DotLine)
         self._fix_label_font = QFont('Source Code Pro', 7)
 
+        layout.addWidget(self._header)
         layout.addWidget(self._plot)
 
     def update_data(self, timestamps: np.ndarray, values: np.ndarray,
@@ -508,7 +602,16 @@ class TrackingGraph(QWidget):
         vb = self._plot.getViewBox()
         vb.blockSignals(True)
 
-        self._data_curve.setData(rel_times, values)
+        if self._smooth:
+            xs, ys = monotone_curve(rel_times, values)
+            self._data_curve.setData(xs, ys)
+        else:
+            self._data_curve.setData(rel_times, values)
+        if self._smooth and len(rel_times) <= MARKERS_MAX:
+            self._markers.setData(rel_times, values)
+            self._markers.setVisible(True)
+        else:
+            self._markers.setVisible(False)
 
         # Update STDEV (with optional corrected timestamps)
         if stdev_values is not None and stdev_timestamps is not None:
@@ -523,10 +626,10 @@ class TrackingGraph(QWidget):
             self._max_line.setPos(max_val)
             self._min_line.setVisible(True)
             self._max_line.setVisible(True)
-            self._min_label.setText(f" {min_val:+.{self._decimals}f}{self._unit}")
+            self._min_label.setText(f"min {min_val:+.{self._decimals}f}{self._unit}")
             self._min_label.setPos(t_end, min_val)
             self._min_label.setVisible(True)
-            self._max_label.setText(f" {max_val:+.{self._decimals}f}{self._unit}")
+            self._max_label.setText(f"max {max_val:+.{self._decimals}f}{self._unit}")
             self._max_label.setPos(t_end, max_val)
             self._max_label.setVisible(True)
 
@@ -535,7 +638,7 @@ class TrackingGraph(QWidget):
             self._max_stdev_line.setPos(max_stdev)
             self._max_stdev_line.setVisible(True)
             self._max_stdev_label.setText(
-                f" max σ={max_stdev:.{self._decimals + 1}f}{self._unit}")
+                f"σ max {max_stdev:.{self._decimals + 1}f}{self._unit}")
             self._max_stdev_label.setPos(t_end, max_stdev)
             self._max_stdev_label.setVisible(True)
 
@@ -544,7 +647,7 @@ class TrackingGraph(QWidget):
             current = values[-1]
             rms = float(np.std(values))
             d, u = self._decimals, self._unit
-            self._stats_text.setText(f"{current:+.{d}f}{u}  \u03c3={rms:.{d}f}{u}")
+            self._stats_text.setText(f"{current:+.{d}f}{u}&nbsp;&nbsp;\u03c3 {rms:.{d}f}{u}")
 
         # Manually set range (replaces auto-range)
         y_low, y_high = vertical_range(self._vertical_mode, values,
@@ -582,6 +685,20 @@ class TrackingGraph(QWidget):
         self._tol_upper_label.setPos(x_right, self._tolerance)
         self._tol_lower_label.setPos(x_right, -self._tolerance)
 
+    def set_smooth(self, smooth: bool):
+        """Rounded (monotone, no overshoot) or straight segments."""
+        self._smooth = bool(smooth)
+
+    def set_tracking(self, tracking: bool):
+        """Greyed while the mount does not track: parked, its RA drifts with
+        the sky and the curve shows nothing about the tracking."""
+        if tracking == self._tracking:
+            return
+        self._tracking = tracking
+        color = self._data_color if tracking else Colors.TEXT_MUTED
+        self._data_curve.setPen(pg.mkPen(color=color, width=2, cosmetic=True))
+        self._markers.setBrush(pg.mkBrush(color))
+
     def set_tolerance(self, arcsec: float):
         """Update tolerance lines and their annotations (only if changed)."""
         if arcsec == self._tolerance:
@@ -590,8 +707,8 @@ class TrackingGraph(QWidget):
         self._tol_upper.setPos(arcsec)
         self._tol_lower.setPos(-arcsec)
         d, u = self._decimals, self._unit
-        self._tol_upper_label.setText(f'{arcsec:+.{d}f}{u}')
-        self._tol_lower_label.setText(f'{-arcsec:+.{d}f}{u}')
+        self._tol_upper_label.setText(f'{T("tol_short")} \u00b1{arcsec:.{d}f}{u}')
+        self._tol_lower_label.setVisible(False)
 
     def set_unit(self, unit: str):
         """'"' (arcseconds) or 's' (seconds of time, RA in hours mode)."""
@@ -739,6 +856,7 @@ class TimeGraph(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         layout = QVBoxLayout(self)
+        self._header = _Header()
         layout.setContentsMargins(0, 0, 0, 0)
 
         self._plot = pg.PlotWidget(axisItems={'right': OffsetAxis('right')})
@@ -764,29 +882,31 @@ class TimeGraph(QWidget):
         self._plot.getAxis('left').enableAutoSIPrefix(False)
 
         # Add legend
-        self._plot.addLegend(offset=(10, 10))
+        # No legend inside the graph (it covered the curves and was cut at
+        # the bottom): the figures above, each in its curve's colour, are
+        # the legend.
 
         # Data curves
         self._diff_curve = self._plot.plot(
             pen=pg.mkPen(Colors.GRAPH_TIME_DIFF, width=1.5),
-            name="PC-Mount"
+            name=T("lg_pc_mount")
         )
         self._pc_loop_curve = self._plot.plot(
             pen=pg.mkPen(Colors.GRAPH_TIME_PC, width=1),
-            name="PC loop"
+            name=T("lg_pc_loop")
         )
         red = QColor(Colors.GRAPH_TIME_MOUNT)
         red.setAlpha(150)      # under the green, without hiding it
         self._mount_loop_curve = self._plot.plot(
             pen=pg.mkPen(red, width=1),
-            name="Mount loop"
+            name=T("lg_mount_loop")
         )
         # Green (PC loop) drawn on top, as in MountMonitor 3: the mount loop
         # (red) otherwise hid it completely.
         self._pc_loop_curve.setZValue(10)
         self._ntp_curve = self._plot.plot(
             pen=pg.mkPen(Colors.GRAPH_NTP, width=1.5),
-            name="PC-NTP"
+            name=T("lg_pc_ntp")
         )
 
         # Zero line
@@ -803,13 +923,14 @@ class TimeGraph(QWidget):
         self._plot.addItem(self._watermark)
 
         # Current values + drift overlay
-        self._values_text = pg.TextItem(
-            text='', color=Colors.TEXT_SECONDARY, anchor=(1, 0)
-        )
-        self._values_text.setFont(QFont('Source Code Pro', 9))
-        self._plot.addItem(self._values_text)
+        self._values_text = _Slot(self._header, Colors.GRAPH_TIME_DIFF)
+        self._slot_pc = _Slot(self._header, Colors.GRAPH_TIME_PC)
+        self._slot_mount = _Slot(self._header, Colors.GRAPH_TIME_MOUNT)
+        self._slot_mean = _Slot(self._header, Colors.TEXT_SECONDARY)
+        self._slot_ntp = _Slot(self._header, Colors.GRAPH_NTP)
         self._plot.getViewBox().disableAutoRange()
 
+        layout.addWidget(self._header)
         layout.addWidget(self._plot)
 
     def update_data(self, diff_t, diff_v, pc_loop_t=None, pc_loop_v=None,
@@ -869,21 +990,22 @@ class TimeGraph(QWidget):
             self._watermark.setPos((x0 + x1) / 2, (y_min + y_max) / 2)
 
             # Values + drift rate annotation
-            parts = []
+            # In the strip above the graph, each figure in its curve's
+            # colour: "PC - mount +221.6 ms, drift +3.1 ms/h   PC loop 500 ms
+            #  mount loop 1000 ms   (mean 662)   PC - NTP -250.3 ms".
+            text = ""
             if len(diff_v) > 0:
-                parts.append(f"PC-Mount: {diff_v[-1]:+.1f}ms")
+                text = f"{T('lg_pc_mount')} {diff_v[-1]:+.1f} ms"
                 if drift_ms_h is not None:
-                    parts.append(f"Drift: {drift_ms_h:+.1f}ms/h")
-            if pc_loop_v is not None and len(pc_loop_v) > 0:
-                parts.append(f"PC loop: {pc_loop_v[-1]:.1f}ms")
-            if mount_loop_v is not None and len(mount_loop_v) > 0:
-                parts.append(f"Mt loop: {mount_loop_v[-1]:.1f}ms")
-            if (pc_loop_v is not None and len(pc_loop_v)) or \
-                    (mount_loop_v is not None and len(mount_loop_v)):
-                parts.append(f"loops avg: {avg:.0f}ms")
-            if ntp_v is not None and len(ntp_v) > 0:
-                parts.append(f"NTP: {ntp_v[-1]:+.1f}ms")
-            self._values_text.setText("  ".join(parts))
+                    text += f", {T('lg_drift').lower()} {drift_ms_h:+.1f} ms/h"
+            self._values_text.setText(text)
+            pc_ok = pc_loop_v is not None and len(pc_loop_v) > 0
+            mt_ok = mount_loop_v is not None and len(mount_loop_v) > 0
+            self._slot_pc.setText(f"{T('lg_pc_loop')} {pc_loop_v[-1]:.0f} ms" if pc_ok else "")
+            self._slot_mount.setText(f"{T('lg_mount_loop')} {mount_loop_v[-1]:.0f} ms" if mt_ok else "")
+            self._slot_mean.setText(f"({T('lg_mean')} {avg:.0f} ms)" if (pc_ok or mt_ok) else "")
+            self._slot_ntp.setText(f"{T('lg_pc_ntp')} {ntp_v[-1]:+.1f} ms"
+                                   if ntp_v is not None and len(ntp_v) > 0 else "")
 
     def export_to_image(self, directory: str):
         """Export time graph as PNG."""
@@ -915,6 +1037,7 @@ class SeismicGraph(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         layout = QVBoxLayout(self)
+        self._header = _Header()
         layout.setContentsMargins(0, 0, 0, 0)
 
         self._plot = pg.PlotWidget()
@@ -953,6 +1076,7 @@ class SeismicGraph(QWidget):
         self._plot.addItem(self._watermark)
         self._plot.getViewBox().disableAutoRange()
 
+        layout.addWidget(self._header)
         layout.addWidget(self._plot)
 
     def update_data(self, timestamps: np.ndarray, values: np.ndarray,
@@ -1029,6 +1153,7 @@ class AxialGraph(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         layout = QVBoxLayout(self)
+        self._header = _Header()
         layout.setContentsMargins(0, 0, 0, 0)
 
         self._plot = pg.PlotWidget()
@@ -1086,13 +1211,11 @@ class AxialGraph(QWidget):
         self._plot.addItem(self._watermark)
 
         # Regression annotation
-        self._reg_label = pg.TextItem(
-            text='', color=Colors.GRAPH_SPEED_REG, anchor=(1, 0)
-        )
+        self._reg_label = _Slot(self._header, Colors.GRAPH_SPEED_REG)
         self._reg_label.setFont(QFont('Source Code Pro', 9))
-        self._plot.addItem(self._reg_label)
 
         self._plot.getViewBox().disableAutoRange()
+        layout.addWidget(self._header)
         layout.addWidget(self._plot)
 
     def update_data(self,

@@ -445,6 +445,8 @@ class MainWindow(QMainWindow):
         self._dec_graph = TrackingGraph(
             T("declination"), Colors.GRAPH_DEC
         )
+        for graph in (self._ra_graph, self._dec_graph):
+            graph.set_smooth(self._settings.get("smooth_curves"))
         self._time_graph = TimeGraph()
         self._seismic_graph = SeismicGraph()
         self._axial_graph = AxialGraph()
@@ -792,6 +794,9 @@ class MainWindow(QMainWindow):
         prev_status = getattr(self, '_prev_mount_status', MountStatus.UNKNOWN)
         self._prev_mount_status = status
         self._status_panel.update_status(status)
+        tracking = status not in (MountStatus.PARKED, MountStatus.IDLE, MountStatus.SLEWING)
+        for graph in (self._ra_graph, self._dec_graph):
+            graph.set_tracking(tracking)
         if self._logging_active:
             self._file_logger.log_event(f"Mount status: {status.name}")
 
@@ -903,7 +908,9 @@ class MainWindow(QMainWindow):
         if mount_id:
             self._status_panel.add_message(f"{T('pan_id')} : {mount_id}")
         if pier_side and hasattr(pier_side, 'value'):
-            self._status_panel.add_message(f"{T('pan_pier')} : {pier_side.value}")
+            side = {"East": T("pier_east"), "West": T("pier_west")}.get(
+                pier_side.value, pier_side.value)
+            self._status_panel.add_message(f"{T('pan_pier')} : {side}")
         if azimuth is not None and altitude is not None:
             self._status_panel.add_message(
                 f"Az: {azimuth:.1f}\u00b0  Alt: {altitude:.1f}\u00b0"
@@ -944,13 +951,13 @@ class MainWindow(QMainWindow):
             or (p is not None and prev[1] is not None and abs(p - prev[1]) >= 1.0))
         parts = []
         if sample.temperature_ext is not None:
-            parts.append(f"Temp: {sample.temperature_ext:.1f}\u00b0C")
+            parts.append(f"{T('env_temp')} {sample.temperature_ext:.1f} \u00b0C")
         if sample.pressure is not None:
-            parts.append(f"Press: {sample.pressure:.0f}mbar")
+            parts.append(f"{sample.pressure:.1f} hPa")
         if sample.temperature_int is not None:
-            parts.append(f"{T('env_inside')}: {sample.temperature_int:.1f}\u00b0C")
+            parts.append(f"{T('env_inside')} {sample.temperature_int:.1f} \u00b0C")
         if sample.meridian_flip_minutes is not None:
-            parts.append(f"Flip: {sample.meridian_flip_minutes:.0f}min")
+            parts.append(f"{T('env_flip')} {sample.meridian_flip_minutes:.0f} min")
         if parts and changed:
             self._status_panel.add_message("  ".join(parts))
             self._env_logged = (t, p)
@@ -2133,6 +2140,8 @@ class MainWindow(QMainWindow):
     def _apply_settings(self):
         """Apply changed settings to running components."""
         set_language(self._settings.get("language"))
+        for graph in (self._ra_graph, self._dec_graph):
+            graph.set_smooth(self._settings.get("smooth_curves"))
 
         if self._processor:
             self._processor.set_tolerances(
@@ -2293,10 +2302,11 @@ class MainWindow(QMainWindow):
             expected_val = self._settings.get("check_refraction_status_value") or "enabled"
             actual = "enabled" if r["refraction"] else "disabled"
             if actual == expected_val:
-                ok_checks.append(T("chk_refr_status_ok").format(v=T(f"val_{actual}")) + " \u2713")
+                # "correction" is feminine in French: activée, désactivée
+                ok_checks.append(T("chk_refr_status_ok").format(v=T(f"val_{actual}_f")) + " \u2713")
             else:
                 warnings.append(T("chk_refr_status_ko").format(
-                    a=T(f"val_{actual}"), e=T(f"val_{expected_val}")))
+                    a=T(f"val_{actual}_f"), e=T(f"val_{expected_val}_f")))
 
         # Refraction update mode (:WSG#: not_updating, not_updating_tracking,
         # continuously_updating). Pointless when the correction is off.

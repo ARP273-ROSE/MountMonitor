@@ -762,7 +762,7 @@ def test_air_gauge_and_history_only_on_change(window):
         w._on_environment(e)
     text = w._status_panel._env_label.text()
     assert "6.0 °C ↘" in text and "1001.9 hPa ↘" in text and "339 min" in text
-    assert len([m for m in msgs if m.startswith("Temp")]) == 3   # 5.6, 6.2 (+0.6), 6.0/1001.9 (-1.5 hPa)
+    assert len([m for m in msgs if "hPa" in m]) == 3   # 5.6, 6.2 (+0.6), 6.0/1001.9 (-1.5 hPa)
 
 
 def test_no_tolerance_alarm_on_a_parked_mount():
@@ -780,3 +780,51 @@ def test_no_tolerance_alarm_on_a_parked_mount():
     s.status = MountStatus.TRACKING
     dp._check_tolerances(s)
     assert dp.tolerance_state.ra_exceeded
+
+
+def test_spectrum_on_whole_second_time_stamps():
+    """The .dat keeps HH:MM:SS: at 2 Hz stamps repeat, and the night report
+    had no spectrum at all (longest stretch without a 'gap' = 7 samples)."""
+    from src.core.spectrum import spectrum, spread_whole_seconds
+    t_true = np.arange(4000) * 0.5
+    t = np.floor(t_true)                          # what the file keeps
+    v = 0.3 * np.sin(2 * np.pi * t_true / 384)
+    assert len(np.unique(np.diff(spread_whole_seconds(t)))) <= 3
+    f, a = spectrum(t, v)
+    i = int(np.argmax(a))
+    assert len(f) and abs(1 / f[i] - 384) < 12 and 0.25 < a[i] < 0.35
+
+
+def test_report_counts_in_the_language_and_tolerance_on_jitter():
+    from src.gui.analysis_dialog import _count, _axis
+    assert _count(54047, "en") == "54,047" and _count(54047, "fr") == "54 047"
+    assert _axis("RA", "fr") == "AD" and _axis("DEC", "nl") == "DEC"
+    from src.logging_module.log_parser import TargetSegment
+    rng = np.random.default_rng(0)
+    dev = np.concatenate([rng.normal(0, 0.1, 200) + k * 3.0 for k in range(5)])  # 4 dithers
+    res = TargetSegment().jitter_residual(dev)
+    assert np.mean(np.abs(res) > 0.5) < 0.01      # the steps are not counted
+
+
+def test_rounded_curve_never_goes_beyond_the_samples():
+    """Monotone cubic: a staircase stays within its steps (an ordinary
+    spline would overshoot and draw tracking errors that never happened)."""
+    from src.gui.graph_widgets import monotone_curve
+    x = np.arange(40, dtype=float)
+    y = np.repeat([0.0, 0.1, 0.1, -0.2, 0.3], 8)
+    xs, ys = monotone_curve(x, y)
+    assert len(xs) > len(x) and ys.min() >= y.min() - 1e-12 and ys.max() <= y.max() + 1e-12
+    for a, b in zip(range(len(x) - 1), range(1, len(x))):
+        seg = ys[(xs >= x[a]) & (xs <= x[b])]
+        assert seg.min() >= min(y[a], y[b]) - 1e-12 and seg.max() <= max(y[a], y[b]) + 1e-12
+    assert np.allclose(np.interp(x, xs, ys), y)          # passes through every sample
+    xs2, ys2 = monotone_curve(np.arange(2000.0), np.zeros(2000))
+    assert len(xs2) == 2000                                # long series left as they are
+
+
+def test_graph_greyed_when_not_tracking(window):
+    g = window._ra_graph
+    g.set_tracking(False)
+    assert g._data_curve.opts['pen'].color().name() != g._data_color.name()
+    g.set_tracking(True)
+    assert g._data_curve.opts['pen'].color().name() == g._data_color.name()

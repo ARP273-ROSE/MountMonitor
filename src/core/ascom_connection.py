@@ -391,12 +391,10 @@ class ASCOMConnection(MountConnection):
         return "Unknown ASCOM Mount"
 
     def get_mount_id(self) -> str:
-        """Get mount identifier from ASCOM Description property."""
-        desc = self._safe_read("Description")
-        if desc:
-            return str(desc)
-        # Fallback to driver ID
-        return self._driver_id
+        """No identifier: ASCOM's Description names the DRIVER ("10Micron
+        Mount ASCOM Driver"), which the window printed as the mount's
+        identifier. Product and firmware already come from the mount."""
+        return ""
 
     def get_pier_side(self) -> PierSide:
         """Get pier side from ASCOM SideOfPier property.

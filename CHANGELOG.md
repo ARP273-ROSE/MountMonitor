@@ -6,6 +6,43 @@ behaviour changes, the patch number when only a defect is fixed.
 
 Figures quoted below were measured on real sessions, not estimated.
 
+## 4.4.12 — 2026-11-22
+
+Night report reviewed in its three languages; window checked on a 4K
+screen at 200 % on the observatory PC.
+
+### Fixed
+- **The night report had no spectrum at all**: the .dat keeps whole
+  seconds (MountMonitor 3's format), so at 2 Hz most samples shared their
+  time stamp, every repeat counted as a gap and the longest stretch was 7
+  samples. Repeated stamps are now spread over their second; the FFT
+  section is back (live window unaffected, it has real time stamps).
+- **Tolerance table on the jitter basis**: it counted the dither steps
+  and announced 21 % of samples over 0.5" on a night rated EXCELLENT on a
+  0.165" jitter. It now counts the very samples the jitter uses.
+- Report: French titles with their accents, RA/DEC as AD/DÉC (RK/DEC),
+  tracking states, FFT table, clock section and counts in the report's
+  language (54 047, not 54,047).
+- Window: the history's air line, pier side, time-graph legend and figures
+  translated; standard buttons (Cancel...) translated through Qt's own
+  catalogues; ticked boxes show a tick; the ASCOM driver's description is
+  no longer shown as the mount's identifier; "correction ... activée".
+
+### Changed
+- **Rounded curves** (option, on by default): RA/DEC drawn with a
+  monotone cubic (PCHIP) that never goes beyond the samples, so no
+  invented peak; dots mark the real samples on short spans; thicker
+  anti-aliased lines on every PC. Curves greyed while the mount is parked.
+- **Figures above the graphs**: value, sigma, tolerance, min/max and
+  sigma max (RA, DEC), and the clock figures, moved from the corner of the
+  graph, where the curves ran over them, to a strip above it. In the time
+  graph each figure takes its curve's colour and replaces the legend that
+  covered the curves.
+- Report: dropped the figures that said nothing about the tracking
+  (mean, median, min, max, peak-to-peak and percentiles of the raw
+  deviations; mean and maximum of the running sigma, which took in the
+  slews).
+
 ## 4.4.11 — 2026-11-22
 
 ### Fixed

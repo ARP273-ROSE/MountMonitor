@@ -94,10 +94,10 @@ TX = {
     "chk_gps_ok": {"en": "GPS: {v}", "fr": "GPS : {v}", "nl": "Gps: {v}"},
     "chk_gps_ko": {"en": "GPS is '{a}', expected '{e}'", "fr": "Le GPS est « {a} », attendu « {e} »",
                    "nl": "De gps is '{a}', verwacht '{e}'"},
-    "chk_dual_ok": {"en": "Dual tracking: {v}", "fr": "Suivi dual : {v}",
+    "chk_dual_ok": {"en": "Dual tracking: {v}", "fr": "Suivi deux axes : {v}",
                     "nl": "Dual tracking: {v}"},
     "chk_dual_ko": {"en": "Dual tracking is '{a}', expected '{e}'",
-                    "fr": "Le suivi dual est « {a} », attendu « {e} »",
+                    "fr": "Le suivi deux axes est « {a} », attendu « {e} »",
                     "nl": "Dual tracking is '{a}', verwacht '{e}'"},
     "chk_parked": {
         "en": "Mount not tracking: tracking checks skipped.",
@@ -140,6 +140,31 @@ TX = {
         "en": "The mount is not tracking (parked, idle or slewing): its right ascension drifts with the sky, so the deviation is not judged against the tolerance.",
         "fr": "La monture ne suit pas (parquée, à l'arrêt ou en pointage) : son ascension droite défile avec le ciel, l'écart n'est donc pas comparé à la tolérance.",
         "nl": "De montering volgt niet (geparkeerd, stil of draaiend): de rechte klimming schuift met de hemel mee, dus de afwijking wordt niet aan de tolerantie getoetst."},
+    "st_tracking": {"en": "Tracking", "fr": "En suivi", "nl": "Volgend"},
+    "st_parked": {"en": "Parked", "fr": "Parquée", "nl": "Geparkeerd"},
+    "st_idle": {"en": "Idle", "fr": "À l'arrêt", "nl": "Stil"},
+    "st_slewing": {"en": "Slewing", "fr": "En pointage", "nl": "Zwenkend"},
+    "pier_east": {"en": "east", "fr": "est", "nl": "oost"},
+    "pier_west": {"en": "west", "fr": "ouest", "nl": "west"},
+    "env_temp": {"en": "Air", "fr": "Air", "nl": "Lucht"},
+    "lg_pc_mount": {"en": "PC - mount", "fr": "PC - monture", "nl": "Pc - montering"},
+    "lg_pc_loop": {"en": "PC loop", "fr": "Boucle PC", "nl": "Pc-lus"},
+    "lg_mount_loop": {"en": "Mount loop", "fr": "Boucle monture", "nl": "Monteringslus"},
+    "lg_pc_ntp": {"en": "PC - NTP", "fr": "PC - NTP", "nl": "Pc - NTP"},
+    "lg_drift": {"en": "Drift", "fr": "Dérive", "nl": "Drift"},
+    "lg_loops": {"en": "loops PC/mount", "fr": "boucles PC/monture", "nl": "lussen pc/montering"},
+    "lg_mean": {"en": "mean", "fr": "moy.", "nl": "gem."},
+    "val_enabled_f": {"en": "enabled", "fr": "activée", "nl": "ingeschakeld"},
+    "val_disabled_f": {"en": "disabled", "fr": "désactivée", "nl": "uitgeschakeld"},
+    "btn_cancel": {"en": "Cancel", "fr": "Annuler", "nl": "Annuleren"},
+    "pref_smooth": {"en": "Rounded curves (never beyond the samples)",
+                    "fr": "Courbes arrondies (jamais au-delà des mesures)",
+                    "nl": "Afgeronde curven (nooit voorbij de metingen)"},
+    "tt_smooth": {
+        "en": "AD/DEC curves drawn with a monotone cubic (PCHIP): rounded, yet the highs and lows are exactly the measured samples, never invented. Dots mark the real samples when the span is short. Statistics always use the samples. Unticked: straight segments.",
+        "fr": "Courbes AD/DÉC tracées par une cubique monotone (PCHIP) : arrondies, mais les hauts et les bas sont exactement les mesures, jamais inventés. Des points marquent les vraies mesures quand la durée affichée est courte. Les statistiques utilisent toujours les mesures. Décoché : segments droits.",
+        "nl": "RK/DEC-curven getekend met een monotone kubische functie (PCHIP): afgerond, maar de toppen en dalen zijn precies de metingen, nooit verzonnen. Punten markeren de echte metingen bij een korte tijdspanne. Statistieken gebruiken altijd de metingen. Uitgevinkt: rechte lijnstukken."},
+    "tol_short": {"en": "tol.", "fr": "tol.", "nl": "tol."},
     "chk_speed_follow": {
         "en": "Tracking speed Custom, set by Follow object (r.a. {ra}, dec. {dec})",
         "fr": "Vitesse de suivi Custom, fixée par le suivi d'objet (a.d. {ra}, déc. {dec})",
@@ -433,11 +458,11 @@ TX = {
         "nl": "Verwachte staat van de gps-synchronisatie"},
     "tt_chk_dual": {
         "en": "Verify dual tracking status",
-        "fr": "Vérifier le statut du suivi dual",
+        "fr": "Vérifier l'état du suivi deux axes (:Gdat#)",
         "nl": "De status van dual tracking controleren"},
     "tt_chk_dual_val": {
         "en": "Expected dual tracking state",
-        "fr": "État attendu du suivi dual",
+        "fr": "État attendu du suivi deux axes",
         "nl": "Verwachte staat van dual tracking"},
     "tt_ra": {
         "en": "Right Ascension",
@@ -726,7 +751,7 @@ TX = {
     "pref_layout": {"en": "Layout", "fr": "Mise en page", "nl": "Indeling"},
     "pref_graph_ratio": {"en": "Graph:Textbox ratio", "fr": "Ratio graphe:texte", "nl": "Verhouding grafiek:tekst"},
     "pref_polling_group": {"en": "Polling", "fr": "Acquisition", "nl": "Uitlezen"},
-    "pref_correct_graphs": {"en": "Correct graphs for range", "fr": "Corriger graphes pour la plage", "nl": "Grafieken corrigeren voor bereik"},
+    "pref_correct_graphs": {"en": "Correct graphs for range", "fr": "Recaler les graphes sur la fenêtre glissante", "nl": "Grafieken corrigeren voor bereik"},
     "pref_log_mode_label": {"en": "Mode", "fr": "Mode", "nl": "Modus"},
     "pref_delay_slew": {"en": "Delay after slew (s)", "fr": "Délai après pointage (s)", "nl": "Wachttijd na zwenken (s)"},
     "pref_axial_mode": {"en": "Axial mode", "fr": "Mode axial", "nl": "Axiale modus"},
@@ -997,7 +1022,7 @@ TX = {
 },
     "check_dual_label": {
         "en": "Check if dual tracking is",
-        "fr": "Vérifier suivi dual",
+        "fr": "Vérifier que le suivi deux axes est",
     "nl": "Dubbele tracking controleren",
 },
     "refraction_not_updating": {
@@ -1114,6 +1139,34 @@ def set_language(lang: str):
     else:
         # An unknown code must not leave the interface half-translated.
         _current_lang = DEFAULT_LANGUAGE
+    _install_qt_translation(_current_lang)
+
+
+_qt_translator = None
+
+
+def _install_qt_translation(lang: str) -> None:
+    """Qt's own texts (standard buttons: "Cancel", "Yes"...) in the same
+    language. Without it a French window showed OK / Cancel."""
+    global _qt_translator
+    try:
+        from PyQt6.QtCore import QTranslator, QLibraryInfo
+        from PyQt6.QtWidgets import QApplication
+        app = QApplication.instance()
+        if app is None:
+            return
+        if _qt_translator is not None:
+            app.removeTranslator(_qt_translator)
+            _qt_translator = None
+        if lang == "en":
+            return
+        translator = QTranslator()
+        folder = QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)
+        if translator.load(f"qtbase_{lang}", folder):
+            app.installTranslator(translator)
+            _qt_translator = translator
+    except Exception:
+        pass
 
 
 def get_language() -> str:

@@ -39,6 +39,30 @@ def remove_jumps(v: np.ndarray, factor: float = 8.0) -> np.ndarray:
     return np.concatenate(([v[0]], v[0] + np.cumsum(d)))
 
 
+def spread_whole_seconds(t: np.ndarray) -> np.ndarray:
+    """Spread samples that share a time stamp evenly over that second.
+
+    The .dat file keeps MountMonitor 3's HH:MM:SS format: at 2 Hz two
+    samples out of three share their second with another. Every repeated
+    stamp was a zero step, read as a gap, and the longest stretch without
+    a gap was 7 samples: the night report had NO spectrum at all. A run
+    of n equal stamps becomes t, t+1/n, ..., t+(n-1)/n."""
+    t = np.asarray(t, dtype=np.float64)
+    if len(t) < 2:
+        return t
+    d = np.diff(t)
+    if not np.any(d == 0):
+        return t
+    starts = np.concatenate(([0], np.flatnonzero(d != 0) + 1))
+    lengths = np.diff(np.concatenate((starts, [len(t)])))
+    run_len = np.repeat(lengths, lengths)
+    rank = np.arange(len(t)) - np.repeat(starts, lengths)
+    # spread over the gap to the next stamp (1 s in a .dat), never further
+    nxt = np.concatenate((t[starts[1:]], [t[starts[-1]] + 1.0]))
+    span = np.repeat(np.minimum(nxt - t[starts], 1.0), lengths)
+    return t + span * rank / run_len
+
+
 def contiguous_block(t: np.ndarray, v: np.ndarray, gap_factor: float = 5.0):
     """Longest stretch without a gap (gap = step > facteur_trou x median step)."""
     if len(t) < 2:
@@ -65,6 +89,7 @@ def spectrum(t, v, remove_steps: bool = True):
         return empty
     ok = np.isfinite(t) & np.isfinite(v)
     t, v = t[ok], v[ok]
+    t = spread_whole_seconds(t)
     t, v = contiguous_block(t, v)
     if len(t) < MIN_POINTS:
         return empty

@@ -68,6 +68,26 @@ COLOURS = {
 }
 
 
+_CHECK_SVG = (
+    '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">'
+    '<path d="M3.5 8.5l3 3 6-7" fill="none" stroke="#ffffff" stroke-width="2.2" '
+    'stroke-linecap="round" stroke-linejoin="round"/></svg>')
+
+
+def _style_sheet() -> str:
+    """The style sheet with a tick in checked boxes. A plain blue square
+    was hard to tell from an empty one (seen on a 4K screen at 200 %)."""
+    try:
+        import tempfile
+        from pathlib import Path
+        path = Path(tempfile.gettempdir()) / "mountmonitor_check.svg"
+        if not path.exists() or path.read_text(encoding="utf-8") != _CHECK_SVG:
+            path.write_text(_CHECK_SVG, encoding="utf-8")
+        return STYLESHEET.replace("%CHECK%", path.as_posix())
+    except Exception:
+        return STYLESHEET.replace("            image: url(%CHECK%);\n", "")
+
+
 def apply_dark_theme(app: QApplication):
     """Apply the dark astronomy theme to the application."""
     palette = QPalette()
@@ -105,11 +125,11 @@ def apply_dark_theme(app: QApplication):
         from pathlib import Path
         root = Path(__file__).resolve().parent.parent.parent
         interface_kit.appliquer_style(app, COLOURS, polices=root / "polices",
-                                      famille="Source Sans 3", taille=10, feuille=STYLESHEET)
+                                      famille="Source Sans 3", taille=10, feuille=_style_sheet())
     except Exception:
         app.setStyle("Fusion")
         app.setPalette(palette)
-        app.setStyleSheet(STYLESHEET)
+        app.setStyleSheet(_style_sheet())
 
 
 #: application style sheet (fine-tuning on top of the palette)
@@ -265,6 +285,7 @@ STYLESHEET = """
         QCheckBox::indicator:checked {
             background-color: #5082c8;
             border-color: #5082c8;
+            image: url(%CHECK%);
         }
         QLabel {
             color: #c8c8d2;
