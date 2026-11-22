@@ -125,6 +125,18 @@ class StatusPanel(QWidget):
         self._freq_label.setToolTip(T("tt_freq"))
         values_layout.addWidget(self._freq_label, 3, 0, 1, 4)
 
+        # Air read from the mount every 30 s: temperature and pressure (what
+        # the refraction correction uses, pushed by a weather station or a
+        # script), the inside temperature and the time to the meridian flip.
+        self._env_label = QLabel(T("env_none"))
+        self._env_label.setFont(QFont('Source Code Pro', 9))
+        self._env_label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY.name()};")
+        self._env_label.setToolTip(T("tt_env"))
+        self._env_label.setWordWrap(True)
+        values_layout.addWidget(self._env_label, 4, 0, 1, 4)
+        self._env_prev = {}       # last DIFFERENT value of each field, for the arrows
+        self._env_last = {}
+
         layout.addWidget(values_frame)
 
         # Scrolling message log — QPlainTextEdit is FAR more performant than QTextEdit
@@ -241,6 +253,31 @@ class StatusPanel(QWidget):
         cursor.movePosition(QTextCursor.MoveOperation.Start)
         self._log_text.setTextCursor(cursor)
 
+    def update_environment(self, sample) -> None:
+        """Show the mount's air data, with an arrow for the last change."""
+        from datetime import datetime
+        fields = (("t", sample.temperature_ext, "{:.1f} °C"),
+                  ("p", sample.pressure, "{:.1f} hPa"),
+                  ("i", sample.temperature_int, T("env_inside") + " {:.1f} °C"),
+                  ("f", sample.meridian_flip_minutes, T("env_flip") + " {:.0f} min"))
+        parts = []
+        for key, value, fmt in fields:
+            if value is None:
+                continue
+            last = self._env_last.get(key)
+            if last is not None and abs(value - last) > 1e-9:
+                self._env_prev[key] = last
+            self._env_last[key] = value
+            prev = self._env_prev.get(key)
+            arrow = ""
+            if key in ("t", "p") and prev is not None:
+                arrow = " \u2197" if value > prev else " \u2198"
+            parts.append(fmt.format(value) + arrow)
+        if parts:
+            self._env_label.setText("   ".join(parts))
+            self._env_label.setToolTip(T("tt_env") + "\n" + T("env_updated").format(
+                t=datetime.now().strftime("%H:%M:%S")))
+
     def set_connected(self, connected: bool):
         """Update connection state display."""
         if connected:
@@ -259,5 +296,8 @@ class StatusPanel(QWidget):
         self._ra_stdev.setText("σ --.--\"")
         self._dec_stdev.setText("σ --.--\"")
         self._freq_label.setText(f"0.0 Hz | 0 {T('samples')}")
+        self._env_label.setText(T("env_none"))
+        self._env_prev.clear()
+        self._env_last.clear()
         self._log_text.clear()
         self._message_lines.clear()

@@ -128,6 +128,14 @@ TX = {
         "en": "Follow object, tracking correction and speed not checked: the ASCOM driver refuses :PRlist# (allow \"unchecked raw commands\" in the 10Micron driver setup, or connect in LX200 TCP/IP)",
         "fr": "Suivi d'objet, correction et vitesse de suivi non vérifiés : le pilote ASCOM refuse :PRlist# (autoriser les « unchecked raw commands » dans la configuration du pilote 10Micron, ou se connecter en LX200 TCP/IP)",
         "nl": "Object volgen, volgcorrectie en -snelheid niet gecontroleerd: de ASCOM-driver weigert :PRlist# (sta \"unchecked raw commands\" toe in de instellingen van de 10Micron-driver, of verbind via LX200 TCP/IP)"},
+    "env_none": {"en": "Air: not read yet", "fr": "Air : pas encore lu", "nl": "Lucht: nog niet gelezen"},
+    "env_inside": {"en": "inside", "fr": "int.", "nl": "binnen"},
+    "env_flip": {"en": "flip", "fr": "flip", "nl": "flip"},
+    "env_updated": {"en": "Read at {t}", "fr": "Lu à {t}", "nl": "Gelezen om {t}"},
+    "tt_env": {
+        "en": "Read from the mount every 30 s: outside temperature and pressure (those used by the refraction correction, pushed by a weather station or a script), inside temperature, time to the meridian flip. The arrow shows the direction of the last change.",
+        "fr": "Lu sur la monture toutes les 30 s : température et pression extérieures (celles qu'utilise la correction de réfraction, poussées par une station météo ou un script), température intérieure, temps avant le retournement. La flèche indique le sens du dernier changement.",
+        "nl": "Elke 30 s van de montering gelezen: buitentemperatuur en luchtdruk (die de refractiecorrectie gebruikt, aangeleverd door een weerstation of een script), binnentemperatuur, tijd tot de meridiaanomslag. De pijl toont de richting van de laatste verandering."},
     "chk_speed_follow": {
         "en": "Tracking speed Custom, set by Follow object (r.a. {ra}, dec. {dec})",
         "fr": "Vitesse de suivi Custom, fixée par le suivi d'objet (a.d. {ra}, déc. {dec})",

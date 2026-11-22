@@ -933,7 +933,15 @@ class MainWindow(QMainWindow):
         if self._writes_samples():
             self._file_logger.log_environment(sample)
 
-        # Log significant changes to status panel
+        # Permanent gauge in the values box; the history gets a line only
+        # when the air has really changed (it got one every 30 s, 120 lines
+        # an hour that pushed everything else out).
+        self._status_panel.update_environment(sample)
+        prev = getattr(self, "_env_logged", None)
+        t, p = sample.temperature_ext, sample.pressure
+        changed = prev is None or (
+            (t is not None and prev[0] is not None and abs(t - prev[0]) >= 0.5)
+            or (p is not None and prev[1] is not None and abs(p - prev[1]) >= 1.0))
         parts = []
         if sample.temperature_ext is not None:
             parts.append(f"Temp: {sample.temperature_ext:.1f}\u00b0C")
@@ -943,8 +951,9 @@ class MainWindow(QMainWindow):
             parts.append(f"Int: {sample.temperature_int:.1f}\u00b0C")
         if sample.meridian_flip_minutes is not None:
             parts.append(f"Flip: {sample.meridian_flip_minutes:.0f}min")
-        if parts:
+        if parts and changed:
             self._status_panel.add_message("  ".join(parts))
+            self._env_logged = (t, p)
 
         # Log alignment data (less frequently visible)
         if sample.alignment_stars is not None and sample.alignment_rms is not None:

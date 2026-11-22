@@ -6,6 +6,18 @@ behaviour changes, the patch number when only a defect is fixed.
 
 Figures quoted below were measured on real sessions, not estimated.
 
+## 4.4.9 — 2026-11-22
+
+### Added
+- **Air gauge** under the coordinates: outside temperature and pressure
+  read from the mount every 30 s (those the refraction correction uses,
+  whether a weather station or a script pushes them), inside temperature
+  and time to the meridian flip, with an arrow for the last change.
+
+### Changed
+- The history gets an air line only when the temperature changes by
+  0.5 °C or the pressure by 1 hPa, instead of every 30 s.
+
 ## 4.4.8 — 2026-11-22
 
 ### Fixed

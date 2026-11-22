@@ -748,3 +748,18 @@ def test_check_values_in_the_users_language(window, monkeypatch):
     assert T("refraction_not_updating") in text and T("refraction_continuous") in text
     assert T("val_nosync") in text and T("val_disabled") in text
     assert "not_updating" not in text and "continuously_updating" not in text
+
+
+def test_air_gauge_and_history_only_on_change(window):
+    from src.models.mount_data import EnvironmentSample
+    w = window
+    msgs = []
+    w._status_panel.add_message = lambda m, c=None: msgs.append(m)
+    w._env_logged = None
+    for t, p in ((5.6, 1003.3), (5.7, 1003.4), (6.2, 1003.4), (6.0, 1001.9)):
+        e = EnvironmentSample()
+        e.temperature_ext, e.pressure, e.temperature_int, e.meridian_flip_minutes = t, p, 24.5, 339.0
+        w._on_environment(e)
+    text = w._status_panel._env_label.text()
+    assert "6.0 °C ↘" in text and "1001.9 hPa ↘" in text and "339 min" in text
+    assert len([m for m in msgs if m.startswith("Temp")]) == 3   # 5.6, 6.2 (+0.6), 6.0/1001.9 (-1.5 hPa)
