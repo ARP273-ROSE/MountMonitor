@@ -396,6 +396,9 @@ prendre le port pour lui seul. Le pilote 10Micron 1.7 refuse la liste des
 préférences (\texttt{:PRlist\#}) tant que les \emph{unchecked raw commands}
 ne sont pas autorisées dans sa configuration ; d'ici là, suivi d'objet,
 correction et vitesse de suivi ne sont pas vérifiés, et l'historique le dit.
+Le pilote sert aussi les positions depuis un cache rafraîchi environ toutes les
+deux secondes ; MountMonitor ignore les répétitions, la vraie cadence en ASCOM
+est donc celle du pilote.
 
 \section{Le site d'observation}
 

@@ -689,3 +689,41 @@ def test_refused_list_is_said_once_not_alarmed(window, monkeypatch):
     w._judge_checks({"rate": "60.2", "prefs": None, "prefs_refused": True}, True)
     assert any(T("chk_prefs_refused") == m for m in msgs)
     assert not any("⚠" in m for m in msgs)
+
+
+def test_ascom_names_the_mount_not_the_driver():
+    class D(_Driver1072):
+        REPLIES = dict(_Driver1072.REPLIES, **{":GVP#": "10micron GM1000HPS#"})
+        DriverVersion = "1.7"
+        Name = "10Micron Mount Driver"
+    c = _ascom(D())
+    c._warned_properties = set()
+    assert c.get_product_name() == "10micron GM1000HPS"
+    assert c.get_firmware_version() == "3.4 (ASCOM driver 1.7)"
+
+
+def test_ascom_cache_repeats_are_dropped():
+    """The 10Micron driver serves RA/DEC from a cache refreshed every ~2 s."""
+    from src.core.poller import MountPoller
+    from src.models.mount_data import ConnectionProtocol, MountStatus
+
+    class Conn:
+        protocol = ConnectionProtocol.ASCOM
+        mount_time_is_utc = True
+        def __init__(self): self.i = 0
+        def get_status(self): return MountStatus.TRACKING
+        def get_mount_time(self): return None
+        def get_ra(self):
+            self.i += 1
+            return f"04:39:{33 + self.i // 4:02d}.1992"     # changes every 4th poll
+        def get_dec(self): return "+87:54:11.000"
+    p = MountPoller.__new__(MountPoller)
+    p._connection, p._last_status = Conn(), MountStatus.TRACKING
+    p._last_radec, p._last_radec_t, p._cache_noted = None, 0.0, False
+    p._last_pc_time_for_loop = p._last_mount_time_parsed = None
+    p._axial_enabled = False
+    notes = []
+    p.log_message = type("S", (), {"emit": lambda self, m: notes.append(m)})()
+    p.status_changed = type("S", (), {"emit": lambda self, m: None})()
+    kept = [p._poll_sequence() for _ in range(12)]
+    assert sum(s is not None for s in kept) == 4 and len(notes) == 1

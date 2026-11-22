@@ -6,6 +6,22 @@ behaviour changes, the patch number when only a defect is fixed.
 
 Figures quoted below were measured on real sessions, not estimated.
 
+## 4.4.7 — 2026-11-22
+
+4.4.6 run on the observatory PC through the 10Micron ASCOM driver, with
+NINA connected to the same driver.
+
+### Fixed
+- **Positions repeated by the ASCOM driver's cache**: the 10Micron driver
+  serves RA/DEC from a cache refreshed about every 2 s, so at 2 Hz three
+  samples out of four repeated the previous position with a later time
+  stamp, a staircase that was not the mount's. Repeats are now skipped (a
+  sample is still kept at least every 5 s), and the history says so once.
+- **Mount named after its driver in ASCOM mode**: product and firmware
+  showed "10Micron Mount Driver" and "1.7" (the driver's version). They now
+  come from the mount (:GVP#, :GVN#), e.g. "10micron GM1000HPS", "3.4 (ASCOM
+  driver 1.7)", with the driver's properties as a fallback.
+
 ## 4.4.6 — 2026-11-22
 
 Tested on a GM1000HPS (firmware 3.4) through the 10Micron ASCOM driver

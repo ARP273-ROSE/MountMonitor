@@ -395,7 +395,10 @@ terwijl LX200 serieel de poort voor zichzelf zou moeten opeisen. Het
 10Micron-stuurprogramma 1.7 weigert de voorkeurenlijst (\texttt{:PRlist\#})
 zolang \emph{unchecked raw commands} niet zijn toegestaan in zijn
 instellingen; tot dan worden Object volgen, volgcorrectie en -snelheid niet
-gecontroleerd, en de geschiedenis meldt dat.
+gecontroleerd, en de geschiedenis meldt dat. Het stuurprogramma levert de
+posities ook uit een cache die ongeveer elke twee seconden wordt ververst;
+MountMonitor slaat de herhalingen over, dus de echte bemonstering in ASCOM is
+die van het stuurprogramma.
 
 \section{De waarnemingslocatie}
 

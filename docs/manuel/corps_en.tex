@@ -382,7 +382,9 @@ the one link between all its clients, whereas LX200 serial would have to take
 the port for itself. The 10Micron driver 1.7 refuses the preference list
 (\texttt{:PRlist\#}) unless \emph{unchecked raw commands} are allowed in its
 setup dialog; until then Follow object, tracking correction and speed are not
-checked, and the history says so.
+checked, and the history says so. The driver also serves positions from a cache
+refreshed about every two seconds; MountMonitor skips the repeats, so the
+real sampling rate in ASCOM is the driver's.
 
 \section{The observing site}
 

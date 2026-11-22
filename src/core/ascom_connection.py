@@ -359,29 +359,32 @@ class ASCOMConnection(MountConnection):
         return datetime.now(timezone.utc).strftime("%H:%M:%S.%f")[:-4]
 
     def get_firmware_version(self) -> str:
-        """Get firmware/driver version from ASCOM.
+        """The MOUNT's firmware (10Micron :GVN#), with the driver version.
 
-        Tries DriverInfo first, then DriverVersion, then Description.
+        The ASCOM DriverVersion alone ("1.7") was shown as the firmware: it
+        is the driver's, not the mount's (fw 3.4 on the GM1000 measured).
         """
-        # Try DriverVersion (short version string)
-        version = self._safe_read("DriverVersion")
-        if version:
-            return str(version)
-
-        # Try DriverInfo (longer description with version)
+        driver = self._safe_read("DriverVersion")
+        mount_fw = self.send_raw_command(":GVN#")
+        mount_fw = (mount_fw or '').strip().rstrip('#')
+        if mount_fw:
+            return f"{mount_fw} (ASCOM driver {driver})" if driver else mount_fw
+        if driver:
+            return str(driver)
         info = self._safe_read("DriverInfo")
         if info:
             return str(info)
-
-        # Fallback to Description
         desc = self._safe_read("Description")
         if desc:
             return str(desc)
-
         return "Unknown"
 
     def get_product_name(self) -> str:
-        """Get mount product name from ASCOM Name property."""
+        """The mount's product name (10Micron :GVP#), else the driver Name
+        ("10Micron Mount Driver", which named the driver, not the mount)."""
+        product = (self.send_raw_command(":GVP#") or '').strip().rstrip('#')
+        if product:
+            return product
         name = self._safe_read("Name")
         if name:
             return str(name)

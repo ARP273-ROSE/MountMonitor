@@ -53,6 +53,10 @@ TX = {
         "en": "Hours: RA shown as h:m:s, its deviations, sigma and tolerance in seconds of time (s). Degrees: RA in degrees, all of them in arcseconds of RA (15 times larger). Applied at once.",
         "fr": "Heures : AD en h:m:s, ses écarts, son sigma et sa tolérance en secondes de temps (s). Degrés : AD en degrés, tout cela en secondes d'arc d'AD (15 fois plus). Appliqué aussitôt.",
         "nl": "Uren: RA als u:m:s, afwijkingen, sigma en tolerantie in tijdseconden (s). Graden: RA in graden, dat alles in boogseconden RA (15 keer groter). Direct toegepast."},
+    "poller_ascom_cache": {
+        "en": "The ASCOM driver repeats cached positions: repeats are skipped, the real sampling rate is the driver's refresh rate",
+        "fr": "Le pilote ASCOM répète des positions en cache : les répétitions sont ignorées, la vraie cadence est celle du rafraîchissement du pilote",
+        "nl": "De ASCOM-driver herhaalt posities uit zijn cache: herhalingen worden overgeslagen, de echte bemonstering is de verversing van de driver"},
     "poller_slewing": {"en": "Mount is slewing...", "fr": "La monture pivote...",
                        "nl": "De montering zwenkt..."},
     "poller_checks_ok": {

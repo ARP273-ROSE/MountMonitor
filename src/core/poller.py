@@ -16,7 +16,8 @@ from PyQt6.QtCore import QThread, pyqtSignal, QMutex
 
 from .mount_connection import MountConnection
 from .data_processor import DataProcessor
-from ..models.mount_data import MountSample, TimeSample, MountStatus, PierSide, EnvironmentSample
+from ..models.mount_data import (MountSample, TimeSample, MountStatus, PierSide,
+                                 EnvironmentSample, ConnectionProtocol)
 from ..utils.coordinates import parse_ra, parse_dec
 
 logger = logging.getLogger(__name__)
@@ -61,6 +62,10 @@ class MountPoller(QThread):
         self._mutex = QMutex()
 
         self._last_status = MountStatus.UNKNOWN
+        # Last RA/DEC kept, to drop the repeats of an ASCOM driver's cache.
+        self._last_radec = None
+        self._last_radec_t = 0.0
+        self._cache_noted = False
         self._last_mount_time: Optional[str] = None
         self._last_mount_time_parsed: Optional[float] = None
         self._last_pc_time_for_loop: Optional[float] = None
@@ -256,6 +261,8 @@ class MountPoller(QThread):
         except (ValueError, IndexError):
             return None
 
+    CACHE_REPEAT_MAX_S = 5.0
+
     def _poll_sequence(self) -> Optional[MountSample]:
         """Execute one full polling sequence.
 
@@ -347,6 +354,23 @@ class MountPoller(QThread):
         if dec_degrees is None:
             logger.warning(f"Failed to parse DEC: {dec_str}")
             return None
+
+        # ASCOM drivers may serve RA/DEC from a cache: the 10Micron driver
+        # 1.7.2 refreshes it about every 2 s, so at 2 Hz three samples out
+        # of four repeated the previous position, stamped with a later time
+        # -- a staircase that is not the mount's. Measured with NINA on the
+        # same driver (22/11/2026). A repeat is dropped; a real mount never
+        # gives the same high-precision RA and DEC twice in a row for long,
+        # and a sample is kept at least every CACHE_REPEAT_MAX_S anyway.
+        if self._connection.protocol == ConnectionProtocol.ASCOM:
+            key = (ra_str, dec_str)
+            t_now = time.time()
+            if key == self._last_radec and t_now - self._last_radec_t < self.CACHE_REPEAT_MAX_S:
+                if not self._cache_noted:
+                    self._cache_noted = True
+                    self.log_message.emit(T("poller_ascom_cache"))
+                return None
+            self._last_radec, self._last_radec_t = key, t_now
 
         # Build sample
         sample = MountSample(
