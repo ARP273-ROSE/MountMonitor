@@ -2,7 +2,7 @@
 
 ## Resume note (2026-11-22, evening)
 
-**Unreleased on master (23/11 evening, no tag):** after the MM3 author's side-by-side screenshots
+**Released as v4.5.4 (23/11 evening):** after the MM3 author's side-by-side screenshots
 (figures agreed, look did not): axial graph draws only the regression speed vs its median;
 displacement = integral of (reg - median) over the shown span, around its mean, + "sky"
 (x cos dec, MM3 "SPH"); shift by range/2 (speed) or range (displacement) when

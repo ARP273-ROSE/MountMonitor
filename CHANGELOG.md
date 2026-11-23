@@ -6,7 +6,7 @@ behaviour changes, the patch number when only a defect is fixed.
 
 Figures quoted below were measured on real sessions, not estimated.
 
-## Unreleased
+## 4.5.4 — 2026-11-23
 
 ### Changed
 - Axial graph drawn as MountMonitor 3 after a side-by-side test by its
