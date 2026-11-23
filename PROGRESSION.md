@@ -2,7 +2,7 @@
 
 ## Resume note (2026-11-22, evening)
 
-**Unreleased on master (23/11, no tag; batch):** axial speeds as MM3 (code sent by its author,
+**Released as v4.5.3 (23/11):** axial speeds as MM3 (code sent by its author,
 23/11): `src/core/axial.py` (raw, 6-sample mean, regression of the angle over the running
 range, median reference); graph drawn relative to each axis' median; manuals updated.
 Displacement mode NOT done: MM3 integrates the speed ("[x.xx"]" and "x cos(dec) [SPH]",

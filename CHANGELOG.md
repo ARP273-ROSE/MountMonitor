@@ -6,7 +6,7 @@ behaviour changes, the patch number when only a defect is fixed.
 
 Figures quoted below were measured on real sessions, not estimated.
 
-## Unreleased
+## 4.5.3 — 2026-11-23
 
 ### Fixed
 - Axial graph: speeds now computed as MountMonitor 3 does. The "regression"
