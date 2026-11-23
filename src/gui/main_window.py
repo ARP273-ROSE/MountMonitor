@@ -1165,7 +1165,11 @@ class MainWindow(QMainWindow):
                     s["t"] = s["t"] + (float(t[0]) - float(t[-1]))
                 args[name] = s
             if args["ra"] or args["dec"]:
-                self._axial_graph.update_data(span_s=span, **args)
+                mode = self._settings.get("axial_mode")
+                shift = (rng if mode == "displacement" else rng / 2.0) if correct else 0.0
+                self._axial_graph.update_data(
+                    span_s=span, mode=mode, shift_s=shift,
+                    dec_deg=self._processor._declination_deg, **args)
 
         # Seismic graph
         sei_t, sei_v, sei_sd_t, sei_sd = self._processor.seismic_buffer.get_tail(span)
@@ -1722,7 +1726,11 @@ class MainWindow(QMainWindow):
             dec = (axial_speeds(t, session.dec_axis, rng)
                    if len(session.dec_axis) == len(session.ra_axis) else None)
             if ra is not None:
-                self._axial_graph.update_data(ra=ra, dec=dec)
+                dec_deg = (float(np.median(session.dec_degrees))
+                           if len(session.dec_degrees) else 0.0)
+                self._axial_graph.update_data(
+                    ra=ra, dec=dec, dec_deg=dec_deg,
+                    mode=self._settings.get("axial_mode") or "velocity")
 
     def _replay_fft(self, session):
         """Compute and display FFT from replayed data."""

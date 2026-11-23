@@ -578,17 +578,21 @@ une vibration (un pas, une porte, le vent sur l'abri), pas la monture.
 
 Optionnel (Préférences, Traitement, \emph{Mode axial}). Il montre la vitesse
 ou le déplacement des axes de la monture eux-mêmes, lus par
-\texttt{:GaXa\#} et \texttt{:GaXb\#} sur une 10Micron (LX200, ou ASCOM avec
-les commandes 10Micron), calculés comme MountMonitor~3 : en gris la vitesse
-brute entre deux mesures (bruitée : l'angle est lu à 0,36\,\arcsec près), en
-épais la moyenne des 6 dernières, en tirets la pente d'une droite ajustée sur
-l'angle pendant la plage glissante, lisse mais en retard d'environ la moitié
-de cette plage. Chaque axe est tracé par rapport à la médiane de sa vitesse
-de régression, pour que les deux tiennent sur la même échelle ; le bandeau
-au-dessus donne la dernière vitesse de régression et cette référence en
-\arcsec/s : environ 15,04 sur l'axe AD au suivi sidéral, 0 sur l'axe Dec, à
-l'erreur de mise en station et à la réfraction près. La première plage
-glissante n'est pas encore fiable.
+\texttt{:GaXa\#} et \texttt{:GaXb\#} sur une 10Micron (LX200, ou ASCOM avec les
+commandes 10Micron), calculés comme MountMonitor~3. \emph{Vitesse} : pour
+chaque mesure, la pente d'une droite ajustée sur l'angle de l'axe pendant la
+plage glissante, tracée par rapport à sa médiane ; le bandeau donne la
+vitesse, la médiane et l'écart, en \arcsec/s (environ 15,04 sur l'axe AD au
+suivi sidéral, 0 sur l'axe Dec, à l'erreur de mise en station et à la
+réfraction près). La vitesse entre deux mesures n'est pas tracée : l'angle
+est lu à 0,36\,\arcsec près, ce qui la rend cent fois plus bruitée.
+\emph{Déplacement} : l'intégrale de (vitesse $-$ médiane) sur le temps
+affiché, en \arcsec, tracée autour de sa moyenne ; le bandeau donne la valeur
+actuelle, la moyenne et l'amplitude crête à crête, aussi sur le ciel
+($\times\cos\delta$ pour l'axe AD, « SPH » dans MountMonitor~3), à comparer
+à l'échantillonnage. Avec \emph{Recaler les graphes sur la fenêtre glissante},
+la vitesse est reculée d'une demi-plage et le déplacement d'une plage
+entière. La première plage glissante n'est pas encore fiable.
 
 \section{Le panneau d'état et l'historique}
 \label{sec:panel}

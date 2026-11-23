@@ -580,15 +580,20 @@ de montering.
 Optioneel (Voorkeuren, Verwerking, \emph{Axiale modus}). Ze toont de snelheid of
 de verplaatsing van de assen van de montering zelf, op een 10Micron gelezen met
 \texttt{:GaXa\#} en \texttt{:GaXb\#} (LX200, of ASCOM met de
-10Micron-commando's), berekend zoals MountMonitor~3 doet: grijs de ruwe
-snelheid tussen twee metingen (ruisig: de hoek wordt tot op 0,36\,\arcsec
-gelezen), dik het gemiddelde van de laatste 6, gestreept de helling van een
-rechte lijn gefit op de hoek over het lopende bereik, glad maar ongeveer een
-half bereik te laat. Elke as wordt getekend ten opzichte van de mediaan van
-haar regressiesnelheid, zodat beide op één schaal passen; de strook erboven
-geeft de laatste regressiesnelheid en die referentie in \arcsec/s: ongeveer
-15,04 op de RA-as bij siderisch volgen, 0 op de DEC-as, polaire fout en
-refractie terzijde. Het eerste lopende bereik is nog niet betrouwbaar.
+10Micron-commando's), berekend zoals MountMonitor~3 doet. \emph{Snelheid}:
+voor elke meting de helling van een rechte lijn gefit op de hoek van de as
+over het lopende bereik, getekend ten opzichte van haar mediaan; de strook
+geeft de snelheid, de mediaan en het verschil, in \arcsec/s (ongeveer 15,04
+op de RA-as bij siderisch volgen, 0 op de DEC-as, polaire fout en refractie
+terzijde). De snelheid tussen twee metingen wordt niet getekend: de hoek
+wordt tot op 0,36\,\arcsec gelezen, wat haar honderd keer ruisiger maakt.
+\emph{Verplaatsing}: de integraal van (snelheid $-$ mediaan) over de getoonde
+tijd, in \arcsec, getekend rond haar gemiddelde; de strook geeft de huidige
+waarde, het gemiddelde en de top-tot-top-amplitude, ook aan de hemel
+($\times\cos\delta$ voor de RA-as, ``SPH'' in MountMonitor~3), te
+vergelijken met de pixelschaal. Met \emph{Grafieken uitlijnen op het
+lopende venster} schuift de snelheid een half bereik terug en de verplaatsing
+een heel bereik. Het eerste lopende bereik is nog niet betrouwbaar.
 
 \section{Het statuspaneel en de historie}
 \label{sec:panel}

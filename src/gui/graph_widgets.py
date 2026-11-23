@@ -1184,35 +1184,18 @@ class AxialGraph(QWidget):
                             color=Colors.TEXT_SECONDARY.name())
         self._plot.addLegend(offset=(10, 10))
 
-        # RA raw speed (thin grey)
-        self._ra_raw_curve = self._plot.plot(
-            pen=pg.mkPen(Colors.GRAPH_SPEED_RAW, width=_w(1)),
-            name="RA raw"
-        )
-        # DEC raw speed (thin grey, slightly different shade)
-        self._dec_raw_curve = self._plot.plot(
-            pen=pg.mkPen(QColor(140, 140, 150), width=_w(1)),
-            name="DEC raw"
-        )
-        # RA average speed (thick bright magenta)
-        self._ra_avg_curve = self._plot.plot(
-            pen=pg.mkPen(Colors.GRAPH_RA, width=_w(2.5)),
-            name="RA avg"
-        )
-        # DEC average speed (thick bright red)
-        self._dec_avg_curve = self._plot.plot(
-            pen=pg.mkPen(Colors.GRAPH_DEC, width=_w(2.5)),
-            name="DEC avg"
-        )
-        # Linear regression lines (extra thick white)
+        # Raw and 6-sample speeds: kept for the export and the replay, not
+        # drawn -- at 0.36" per step of the angle they swamp the regression
+        # speed by a factor 100 (MM3 only draws the latter, thick).
+        self._ra_raw_curve = self._plot.plot(pen=pg.mkPen(Colors.GRAPH_SPEED_RAW, width=_w(1)))
+        self._dec_raw_curve = self._plot.plot(pen=pg.mkPen(QColor(140, 140, 150), width=_w(1)))
+        self._ra_avg_curve = self._plot.plot(pen=pg.mkPen(Colors.GRAPH_RA, width=_w(1)))
+        self._dec_avg_curve = self._plot.plot(pen=pg.mkPen(Colors.GRAPH_DEC, width=_w(1)))
+        # Regression speed, or its integral in displacement mode
         self._ra_reg_curve = self._plot.plot(
-            pen=pg.mkPen(Colors.GRAPH_SPEED_REG, width=_w(3),
-                         style=Qt.PenStyle.DashLine),
-        )
+            pen=pg.mkPen(Colors.GRAPH_RA, width=_w(2.5)), name="RA")
         self._dec_reg_curve = self._plot.plot(
-            pen=pg.mkPen(QColor(255, 200, 200), width=_w(3),
-                         style=Qt.PenStyle.DashLine),
-        )
+            pen=pg.mkPen(Colors.GRAPH_DEC, width=_w(2.5)), name="DEC")
 
         # Zero line
         zero_pen = pg.mkPen(Colors.TEXT_MUTED, width=_w(1),
@@ -1236,77 +1219,80 @@ class AxialGraph(QWidget):
         layout.addWidget(self._header)
         layout.addWidget(self._plot)
 
-    def update_data(self, ra=None, dec=None, t_offset=0.0, span_s=None):
-        """Draw the axial speeds (src.core.axial.axial_speeds) of both axes.
+    def update_data(self, ra=None, dec=None, span_s=None, mode="velocity",
+                    dec_deg=0.0, shift_s=0.0):
+        """Draw the axes' speed or displacement (src.core.axial), as
+        MountMonitor 3 does.
 
-        Each axis is drawn as its deviation from its own reference -- the
-        median of the regression speed -- so that RA (about 15.04"/s) and
-        DEC (about 0) share one scale; the references and the latest
-        regression speeds are written above the graph. t_offset is added to
-        the series' times (seconds); with span_s the graph scrolls at the
-        present."""
-        from ..core.axial import median_speed
-        series = []
-        parts = []
-        for name, s, curves in (
-                ("RA", ra, (self._ra_raw_curve, self._ra_avg_curve, self._ra_reg_curve)),
-                ("DEC", dec, (self._dec_raw_curve, self._dec_avg_curve, self._dec_reg_curve))):
-            if not s or len(s["t"]) < 2:
-                for c in curves:
-                    c.setData([], [])
-                continue
-            ref = median_speed(s["reg"], s.get("full"))
-            base = ref if ref is not None else float(np.median(s["avg"]))
-            t = s["t"] + t_offset
-            ok = ~np.isnan(s["reg"])
-            curves[0].setData(t, s["raw"] - base)
-            curves[1].setData(t, s["avg"] - base)
-            curves[2].setData(t[ok], s["reg"][ok] - base)
-            series.append((t, s, base, ok))
-            if ref is not None and ok.any():
-                parts.append(f'{name} {s["reg"][ok][-1]:.4f}"/s (ref {ref:.4f})')
-        self._reg_label.setText("  ".join(parts))
-        if not series:
+        velocity: regression speed minus its median, each axis on the same
+        scale; the strip gives the speed, its median and the deviation.
+        displacement: integral of (speed - median) over the shown time, in
+        arc seconds, drawn around its mean; the strip gives the current
+        value against that mean and the peak-to-peak range, also on the sky
+        (x cos dec for the RA axis, "SPH" in MM3). shift_s moves the curves
+        back in time (Correct graphs for running range: half a range for
+        the speed, a whole one for the displacement). With span_s the
+        times are relative to the present."""
+        from ..core.axial import median_speed, displacement
+        for c in (self._ra_raw_curve, self._ra_avg_curve,
+                  self._dec_raw_curve, self._dec_avg_curve):
+            c.setData([], [])
+        disp = mode == "displacement"
+        self._plot.setLabel('left', T('axial_disp_label' if disp else 'axial_dev_label'),
+                            units='"' if disp else '"/s',
+                            color=Colors.TEXT_SECONDARY.name())
+        ends = [float(s["t"][-1]) for s in (ra, dec) if s and len(s["t"]) > 1]
+        if not ends:
             return
-
-        t_end = max(float(t[-1]) for t, *_ in series)
-        t_beg = min(float(t[0]) for t, *_ in series)
-        if span_s:
-            x0, x1 = t_end - float(span_s), t_end
-        else:
-            x0, x1 = t_beg, max(t_end, t_beg + 1.0)
-        # Scale on the averaged and regression speeds; the raw one (0.36"
-        # steps of the angle) only widens it up to its 5-95 % spread.
-        vals = []
-        for t, s, base, ok in series:
-            vis = (t >= x0) & (t <= x1)
-            vals.append(s["avg"][vis] - base)
-            vals.append(s["reg"][vis & ok] - base)
-            raw = s["raw"][vis] - base
-            if len(raw):
-                vals.append(np.percentile(raw, [5, 95]))
-        v = np.concatenate([x for x in vals if len(x)]) if vals else np.array([0.0])
+        t_end = max(ends)
+        x1 = 0.0 if span_s else t_end
+        x0 = -float(span_s) if span_s else min(float(s["t"][0]) for s in (ra, dec)
+                                                if s and len(s["t"]) > 1)
+        cos_d = abs(np.cos(np.radians(dec_deg or 0.0)))
+        parts, vals = [], []
+        for name, s, curve, sky in (("RA", ra, self._ra_reg_curve, cos_d),
+                                    ("DEC", dec, self._dec_reg_curve, 1.0)):
+            if not s or len(s["t"]) < 2:
+                curve.setData([], [])
+                continue
+            t = s["t"] - (t_end if span_s else 0.0) - shift_s
+            ref = median_speed(s["reg"], s.get("full"))
+            if ref is None:
+                curve.setData([], [])
+                continue
+            if disp:
+                start = int(np.searchsorted(t, x0))
+                y = displacement(t, s["reg"], ref, start)
+                ok = ~np.isnan(y)
+                if ok.sum() < 2:
+                    curve.setData([], [])
+                    continue
+                avg = float(np.mean(y[ok]))
+                y = y - avg
+                pp = float(np.ptp(y[ok]))
+                parts.append(f'{name} {y[ok][-1] + avg:+.2f}" = avg {avg:+.2f}" '
+                             f'{y[ok][-1]:+.2f}" ({pp:.2f}" p-p, {pp * sky:.2f}" sky)')
+            else:
+                y = s["reg"] - ref
+                ok = ~np.isnan(y)
+                parts.append(f'{name} {s["reg"][ok][-1]:.4f}"/s = median {ref:.4f} '
+                             f'{y[ok][-1]:+.4f}')
+            curve.setData(t[ok], y[ok])
+            vis = ok & (t >= x0) & (t <= x1)
+            vals.append(y[vis])
+        self._reg_label.setText("  ".join(parts))
+        v = np.concatenate(vals) if vals else np.array([])
         if not len(v):
             v = np.array([0.0])
         y_min, y_max = float(min(v.min(), 0.0)), float(max(v.max(), 0.0))
-        y_margin = max((y_max - y_min) * 0.15, 0.01)
-
+        y_margin = max((y_max - y_min) * 0.12, 0.05 if disp else 0.002)
         vb = self._plot.getViewBox()
         vb.blockSignals(True)
-        if span_s:
-            # times relative to the present, like the other graphs
-            for c in (self._ra_raw_curve, self._ra_avg_curve, self._ra_reg_curve,
-                      self._dec_raw_curve, self._dec_avg_curve, self._dec_reg_curve):
-                x, y = c.getData()
-                if x is not None and len(x):
-                    c.setData(x - t_end, y)
-            x0, x1 = -float(span_s), 0.0
-        vb.setRange(xRange=(x0, x1),
+        vb.setRange(xRange=(x0, max(x1, x0 + 1.0)),
                     yRange=(y_min - y_margin, y_max + y_margin), padding=0)
         vb.blockSignals(False)
         match_axes(self._plot)
         self._watermark.setPos((x0 + x1) / 2, 0)
-        self._reg_label.setPos(x1, y_max + y_margin)
 
     def export_to_image(self, directory: str):
         """Export axial graph as PNG."""

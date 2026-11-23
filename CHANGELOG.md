@@ -6,6 +6,21 @@ behaviour changes, the patch number when only a defect is fixed.
 
 Figures quoted below were measured on real sessions, not estimated.
 
+## Unreleased
+
+### Changed
+- Axial graph drawn as MountMonitor 3 after a side-by-side test by its
+  author: the figures matched (RA 15.16"/s, DEC 0.006"/s) but the raw and
+  6-sample speeds, a hundred times noisier (0.36" steps of the angle),
+  hid the regression speed. Only the latter is drawn now, thick, relative
+  to its median; the strip reads "speed = median +deviation".
+- Axial displacement mode implemented: integral of (regression speed -
+  median) over the time shown, in arc seconds, around its mean; strip with
+  the current value, the mean and the peak-to-peak range, also on the sky
+  (x cos dec for RA, MM3's "SPH").
+- "Align graphs on the running window" now also moves the axial speed back
+  by half a range and the displacement by a whole one, as MM3.
+
 ## 4.5.3 — 2026-11-23
 
 ### Fixed
@@ -20,9 +35,6 @@ Figures quoted below were measured on real sessions, not estimated.
   is replayed (`src/core/axial.py`).
 - Simulated mount: axis angles read with 4 decimals like a 10Micron, with
   the periodic error, instead of a 3.6" random noise.
-
-### Not done yet
-- Axial displacement mode still draws the speeds: waiting for MM3's code.
 
 ## 4.5.2 — 2026-11-23
 

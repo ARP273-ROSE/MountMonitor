@@ -101,3 +101,22 @@ def median_speed(reg, full=None) -> Optional[float]:
         ok &= np.asarray(full)
     r = r[ok]
     return float(np.median(r)) if len(r) else None
+
+
+def displacement(t, reg, ref: float, start: int = 0) -> np.ndarray:
+    """Integral of (regression speed - reference) from index `start`, in
+    arc seconds: how far the axis has run ahead of (or behind) a steady
+    motion at the reference speed. NaN before `start` or where the speed is
+    not known yet. MountMonitor 3's "axial displacement"."""
+    t = np.asarray(t, dtype=float)
+    v = np.asarray(reg, dtype=float) - float(ref)
+    out = np.full(len(t), np.nan)
+    ok = np.flatnonzero(~np.isnan(v))
+    ok = ok[ok >= start]
+    if len(ok) < 2:
+        return out
+    i0 = ok[0]
+    tt, vv = t[i0:], np.nan_to_num(v[i0:])
+    steps = np.diff(tt) * (vv[1:] + vv[:-1]) / 2.0
+    out[i0:] = np.concatenate(([0.0], np.cumsum(steps)))
+    return out

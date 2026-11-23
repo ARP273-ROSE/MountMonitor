@@ -2,7 +2,7 @@
 running range)."""
 import numpy as np
 
-from src.core.axial import axial_speeds, median_speed, unwrap_deg
+from src.core.axial import axial_speeds, displacement, median_speed, unwrap_deg
 
 SIDEREAL = 15.041067  # "/s
 
@@ -64,7 +64,22 @@ def test_axial_graph_draws_both_axes_on_one_scale():
     g.update_data(ra=ra, dec=dec, span_s=120)
     x, y = g._ra_reg_curve.getData()
     assert abs(np.nanmedian(y)) < 0.01           # drawn relative to its reference
-    assert "RA 15.04" in g._reg_label.text
+    assert "RA 15.04" in g._reg_label.text and "median 15.04" in g._reg_label.text
     (x0, x1), (y0, y1) = g._plot.getViewBox().viewRange()
-    assert (x0, x1) == (-120, 0) and y1 - y0 < 5  # not 0..15
+    assert (x0, x1) == (-120, 0) and y1 - y0 < 0.5  # scaled on the regression
+    g.update_data(ra=ra, dec=dec, span_s=120, mode="displacement", dec_deg=60)
+    assert "sky" in g._reg_label.text
+    x, y = g._ra_reg_curve.getData()
+    assert x[0] >= -120.5 and abs(np.mean(y)) < 1e-9   # integrated over the view, around its mean
     g.reset()
+
+
+def test_displacement_is_the_integral_of_the_speed_excess():
+    t = np.arange(0, 100.0)
+    reg = np.full_like(t, 15.0)
+    reg[50:] = 15.1                              # 0.1"/s faster for 50 s
+    d = displacement(t, reg, 15.0)
+    assert d[0] == 0 and abs(d[-1] - 0.1 * 49.5) < 1e-9
+    reg[:10] = np.nan
+    d = displacement(t, reg, 15.0, start=20)
+    assert np.all(np.isnan(d[:20])) and d[20] == 0

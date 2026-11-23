@@ -2,6 +2,12 @@
 
 ## Resume note (2026-11-22, evening)
 
+**Unreleased on master (23/11 evening, no tag):** after the MM3 author's side-by-side screenshots
+(figures agreed, look did not): axial graph draws only the regression speed vs its median;
+displacement = integral of (reg - median) over the shown span, around its mean, + "sky"
+(x cos dec, MM3 "SPH"); shift by range/2 (speed) or range (displacement) when
+correct_graphs_for_range. My reading of the MM3 screenshots, not of its code: to confirm.
+
 **Released as v4.5.3 (23/11):** axial speeds as MM3 (code sent by its author,
 23/11): `src/core/axial.py` (raw, 6-sample mean, regression of the angle over the running
 range, median reference); graph drawn relative to each axis' median; manuals updated.
@@ -65,7 +71,7 @@ ASCOM through the 10Micron driver 1.7.2 shared with NINA; GUI of 4.4.11 and
 5. Pre-existing: `check_subprocesses.py` flags `reporting.py:218` (kit file).
 
 **How to work:**
-- Tests: `QT_QPA_PLATFORM=offscreen python -m pytest -q tests` (192 pass).
+- Tests: `QT_QPA_PLATFORM=offscreen python -m pytest -q tests` (193 pass).
 - Code must compile on Python 3.10 (the MM3 author runs from source).
 - Manuals: `cd docs/manuel && python compiler.py` (pdflatex), commit the
   three PDFs with the .tex.
