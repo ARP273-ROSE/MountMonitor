@@ -670,6 +670,9 @@ class MainWindow(QMainWindow):
 
         self._connected = True
         self._status_panel.set_connected(True)
+        pure_ascom = (isinstance(self._connection, ASCOMConnection)
+                      and not self._connection.tenmicron_commands)
+        self._status_panel.set_env_placeholder("env_pure_ascom" if pure_ascom else "env_none")
         self._btn_connect.setText(T("btn_disconnect"))
         self._connect_action.setEnabled(False)
         self._disconnect_action.setEnabled(True)
@@ -764,6 +767,7 @@ class MainWindow(QMainWindow):
     def _on_sample(self, sample: MountSample):
         """Handle a new processed mount sample."""
         self._status_panel.update_mount_sample(sample)
+        self._refresh_target(sample.status)
 
         # Log to file
         if self._writes_samples():
@@ -856,19 +860,50 @@ class MainWindow(QMainWindow):
         if was_slewing and now_tracking:
             QTimer.singleShot(1000, self._run_mount_checks)
             # Retrieve target coordinates for reference mode
-            if self._settings.get("reference_mode") == "target":
-                self._mount_request(
-                    lambda c: (c.get_target_ra(), c.get_target_dec()),
-                    self._receive_target)
+            self._refresh_target(status, force=True)
+
+    #: the target is read again this often while tracking (seconds)
+    TARGET_REFRESH_S = 30.0
+
+    def _refresh_target(self, status, force: bool = False):
+        """Read the mount's target (:Gr#/:Gd#, ASCOM TargetRightAscension/
+        TargetDeclination) for the "Mount target coordinates" reference.
+
+        It used to be read only when a slew ended: connecting to a mount
+        already tracking, or choosing the mode during a session, left no
+        target and the median was used without a word, so both references
+        drew the same graph. Now read whenever tracking without one, after
+        every slew, and every TARGET_REFRESH_S (a new target set without a
+        slew is followed too)."""
+        if self._settings.get("reference_mode") != "target" or status != MountStatus.TRACKING:
+            return
+        now = time.monotonic()
+        last = getattr(self, '_target_asked_at', None)
+        if not force and last is not None and now - last < self.TARGET_REFRESH_S:
+            return
+        self._target_asked_at = now
+        self._mount_request(lambda c: (c.get_target_ra(), c.get_target_dec()),
+                            self._receive_target)
 
     def _receive_target(self, target):
+        from ..utils.coordinates import parse_ra, parse_dec
         target_ra, target_dec = target or (None, None)
-        if target_ra and target_dec:
-            from ..utils.coordinates import parse_ra, parse_dec
-            ra_h = parse_ra(target_ra)
-            dec_d = parse_dec(target_dec)
-            if ra_h is not None and dec_d is not None:
-                self._processor.set_target_coordinates(ra_h, dec_d)
+        ra_h = parse_ra(target_ra) if target_ra else None
+        dec_d = parse_dec(target_dec) if target_dec else None
+        if ra_h is None or dec_d is None:
+            if not getattr(self, '_target_missing_said', False):
+                self._target_missing_said = True
+                self._status_panel.add_message(T("ref_target_missing"), Colors.STATUS_WARNING)
+            return
+        self._target_missing_said = False
+        if self._processor is None:
+            return
+        previous = self._processor.target
+        self._processor.set_target_coordinates(ra_h, dec_d)
+        if previous != (ra_h, dec_d):
+            self._status_panel.add_message(
+                T("ref_target_set").format(ra=target_ra.strip().rstrip('#'),
+                                           dec=target_dec.strip().rstrip('#')))
 
     @pyqtSlot()
     def _on_connection_lost(self):
@@ -2153,6 +2188,7 @@ class MainWindow(QMainWindow):
             )
             self._processor.set_running_range(self._settings.get("running_range_seconds"))
             self._processor.set_reference_mode(self._settings.get("reference_mode"))
+        self._target_asked_at = None          # mode may have just changed: read the target now
 
         if self._poller:
             self._poller.set_frequency(self._settings.get("polling_frequency_hz"))

@@ -6,6 +6,24 @@ behaviour changes, the patch number when only a defect is fixed.
 
 Figures quoted below were measured on real sessions, not estimated.
 
+## 4.5.1 — 2026-11-23
+
+### Fixed
+- Reference "Mount target coordinates" drew the same graph as the median:
+  the target (`:Gr#`/`:Gd#`, ASCOM `TargetRightAscension`/`TargetDeclination`)
+  was only read when a slew ended, so connecting to a mount already tracking,
+  or choosing the mode during a session, silently kept the median. It is now
+  read whenever the mount tracks without one, after every slew and every 30 s;
+  the history shows the target in use, and says once when the mount gives
+  none.
+
+### Changed
+- `:Gmte#` is shown as "tracking ends in" rather than "flip": the protocol
+  defines it as the mount's estimate of the time until tracking stops at the
+  meridian limit for the current pier side, or at the horizon limit.
+- Pure ASCOM: the air line says "not available in pure ASCOM" instead of
+  "not read yet".
+
 ## 4.5.0 — 2026-11-22
 
 ### Changed

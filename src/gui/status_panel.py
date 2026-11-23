@@ -129,6 +129,7 @@ class StatusPanel(QWidget):
         # Air read from the mount every 30 s: temperature and pressure (what
         # the refraction correction uses, pushed by a weather station or a
         # script), the inside temperature and the time to the meridian flip.
+        self._env_placeholder = "env_none"
         self._env_label = QLabel(T("env_none"))
         self._env_label.setFont(QFont('Source Code Pro', 9))
         self._env_label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY.name()};")
@@ -167,6 +168,13 @@ class StatusPanel(QWidget):
         self._tolerance_dec_arcsec = dec_arcsec
         self._tolerance_as_ha_seconds = as_ha_seconds
         self._declination_deg = declination_deg
+
+    def set_env_placeholder(self, key: str):
+        """Text shown while no air reading exists: "not read yet", or "not
+        available" in pure ASCOM, where it will never come."""
+        self._env_placeholder = key
+        if not self._env_last:
+            self._env_label.setText(T(key))
 
     def update_mount_sample(self, sample: MountSample):
         """Update display with new mount data."""
@@ -311,7 +319,7 @@ class StatusPanel(QWidget):
         self._ra_stdev.setText("σ --.--\"")
         self._dec_stdev.setText("σ --.--\"")
         self._freq_label.setText(f"0.0 Hz | 0 {T('samples')}")
-        self._env_label.setText(T("env_none"))
+        self._env_label.setText(T(self._env_placeholder))
         self._env_prev.clear()
         self._env_last.clear()
         self._log_text.clear()

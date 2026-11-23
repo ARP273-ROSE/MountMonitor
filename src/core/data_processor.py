@@ -128,6 +128,13 @@ class DataProcessor:
         """Set reference mode: 'median' or 'target'."""
         self._reference_mode = mode
 
+    @property
+    def target(self):
+        """(RA hours, DEC degrees) of the mount target in use, or None."""
+        if self._target_ra is None:
+            return None
+        return (self._target_ra, self._target_dec)
+
     def set_target_coordinates(self, ra_hours: float, dec_degrees: float):
         """Set target coordinates for reference mode."""
         self._target_ra = ra_hours

@@ -2,7 +2,8 @@
 
 ## Resume note (2026-11-22, evening)
 
-**State:** master = tag **v4.5.0** (22/11 afternoon: pure ASCOM by default + option
+**State:** master = tag **v4.5.1** (23/11: target reference read while tracking, :Gmte# =
+"tracking ends in", pure-ASCOM air text). Before: tag **v4.5.0** (22/11 afternoon: pure ASCOM by default + option
 "10Micron commands through the ASCOM driver", :GTMP1# = RA driver, :getain# fixed).
 Before that: tag v4.4.15 (release workflow: signed updates,
 release_unique keeps only the latest Release). Code, comments and commits in
@@ -43,14 +44,14 @@ ASCOM through the 10Micron driver 1.7.2 shared with NINA; GUI of 4.4.11 and
 3b. (released in 4.5.0) MM3 author's point on ASCOM: never send LX200 commands to an ASCOM
    driver. Now pure ASCOM by default (send_raw_* return None, DoesRefraction for :GREF#);
    setting `ascom_10micron_commands` (off) re-enables them, only for a 10Micron driver id.
-   Not yet tried on real hardware in pure mode (expected: no temperature/pressure/axis/
+   Pure mode tried by the MM3 author on an iOptron CEM120 (22/11, works). Not yet tried on a 10Micron in pure mode (expected: no temperature/pressure/axis/
    alignment/preferences, history line "chk_prefs_pure_ascom").
 4. Screenshots (redone for 4.5.0): `QT_QPA_PLATFORM=offscreen MM_CAPTURE_RUN_S=150 python -B
    docs/manuel/captures.py`, then `python docs/manuel/compiler.py`.
 5. Pre-existing: `check_subprocesses.py` flags `reporting.py:218` (kit file).
 
 **How to work:**
-- Tests: `QT_QPA_PLATFORM=offscreen python -m pytest -q tests` (180 pass).
+- Tests: `QT_QPA_PLATFORM=offscreen python -m pytest -q tests` (183 pass).
 - Code must compile on Python 3.10 (the MM3 author runs from source).
 - Manuals: `cd docs/manuel && python compiler.py` (pdflatex), commit the
   three PDFs with the .tex.

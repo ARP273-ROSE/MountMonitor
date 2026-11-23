@@ -141,13 +141,14 @@ TX = {
         "fr": "Suivi d'objet, correction et vitesse de suivi non vérifiés : le pilote ASCOM refuse :PRlist# (autoriser les « unchecked raw commands » dans la configuration du pilote 10Micron, ou se connecter en LX200 TCP/IP)",
         "nl": "Object volgen, volgcorrectie en -snelheid niet gecontroleerd: de ASCOM-driver weigert :PRlist# (sta \"unchecked raw commands\" toe in de instellingen van de 10Micron-driver, of verbind via LX200 TCP/IP)"},
     "env_none": {"en": "Air: not read yet", "fr": "Air : pas encore lu", "nl": "Lucht: nog niet gelezen"},
+    "env_pure_ascom": {"en": "Air: not available in pure ASCOM", "fr": "Air : indisponible en ASCOM pur", "nl": "Lucht: niet beschikbaar in zuiver ASCOM"},
     "env_inside": {"en": "RA driver", "fr": "driver AD", "nl": "RA-driver"},
-    "env_flip": {"en": "flip", "fr": "flip", "nl": "flip"},
+    "env_flip": {"en": "tracking ends in", "fr": "fin du suivi dans", "nl": "volgen stopt over"},
     "env_updated": {"en": "Read at {t}", "fr": "Lu à {t}", "nl": "Gelezen om {t}"},
     "tt_env": {
-        "en": "Read from the mount every 30 s: outside temperature and pressure (those used by the refraction correction, pushed by a weather station or a script), temperature of the right ascension motor driver (:GTMP1#, warmer than the air), time to the meridian flip. The arrow shows the direction of the last change.",
-        "fr": "Lu sur la monture toutes les 30 s : température et pression extérieures (celles qu'utilise la correction de réfraction, poussées par une station météo ou un script), température du driver du moteur d'ascension droite (:GTMP1#, plus chaude que l'air), temps avant le retournement. La flèche indique le sens du dernier changement.",
-        "nl": "Elke 30 s van de montering gelezen: buitentemperatuur en luchtdruk (die de refractiecorrectie gebruikt, aangeleverd door een weerstation of een script), temperatuur van de motordriver van de rechte klimming (:GTMP1#, warmer dan de lucht), tijd tot de meridiaanomslag. De pijl toont de richting van de laatste verandering."},
+        "en": "Read from the mount every 30 s: outside temperature and pressure (those used by the refraction correction, pushed by a weather station or a script), temperature of the right ascension motor driver (:GTMP1#, warmer than the air), time until tracking stops (:Gmte#, the mount's estimate: meridian limit for the current pier side, or horizon limit; with the tube on the \"wrong\" side it can be many hours, up to the lower meridian). The arrow shows the direction of the last change.",
+        "fr": "Lu sur la monture toutes les 30 s : température et pression extérieures (celles qu'utilise la correction de réfraction, poussées par une station météo ou un script), température du driver du moteur d'ascension droite (:GTMP1#, plus chaude que l'air), temps avant l'arrêt du suivi (:Gmte#, estimation de la monture : limite méridienne pour le côté du pied actuel, ou limite d'horizon ; tube du « mauvais » côté, cela peut faire de longues heures, jusqu'au méridien inférieur). La flèche indique le sens du dernier changement.",
+        "nl": "Elke 30 s van de montering gelezen: buitentemperatuur en luchtdruk (die de refractiecorrectie gebruikt, aangeleverd door een weerstation of een script), temperatuur van de motordriver van de rechte klimming (:GTMP1#, warmer dan de lucht), tijd tot het volgen stopt (:Gmte#, schatting van de montering: meridiaanlimiet voor de huidige pierzijde, of horizonlimiet; met de tubus aan de \"verkeerde\" kant kan dat vele uren zijn, tot de benedenmeridiaan). De pijl toont de richting van de laatste verandering."},
     "tt_dev_not_tracking": {
         "en": "The mount is not tracking (parked, idle or slewing): its right ascension drifts with the sky, so the deviation is not judged against the tolerance.",
         "fr": "La monture ne suit pas (parquée, à l'arrêt ou en pointage) : son ascension droite défile avec le ciel, l'écart n'est donc pas comparé à la tolérance.",
@@ -979,6 +980,14 @@ TX = {
     "period_label": {"en": "Period", "fr": "Période", "nl": "Periode"},
 
     # Preferences combobox items
+    "ref_target_missing": {
+        "en": "Reference \"Mount target coordinates\": the mount gives no target (none set, or the driver does not expose it); the median is used until it does",
+        "fr": "Référence « Coordonnées cible monture » : la monture ne donne pas de cible (aucune définie, ou le pilote ne l'expose pas) ; la médiane sert en attendant",
+        "nl": "Referentie \"Doelcoördinaten montering\": de montering geeft geen doel (niet ingesteld, of de driver geeft het niet door); tot dan wordt de mediaan gebruikt"},
+    "ref_target_set": {
+        "en": "Reference: mount target RA {ra}  DEC {dec}",
+        "fr": "Référence : cible de la monture AD {ra}  DÉC {dec}",
+        "nl": "Referentie: doel van de montering RK {ra}  DEC {dec}"},
     "ref_median": {"en": "Median", "fr": "Médiane", "nl": "Mediaan"},
     "ref_target": {
         "en": "Mount target coordinates",

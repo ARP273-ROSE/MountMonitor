@@ -18,3 +18,9 @@ def test_sample_filled():
     s = EnvironmentSample()
     apply_getain("010.0000,+49.0000,0.0500,090.00,+0.0010,+0.10,+0.20,12,7.3#", s)
     assert (s.alignment_stars, s.alignment_rms, s.polar_error_deg) == (12, 7.3, 0.05)
+
+
+def test_real_gm3000_reply():
+    # reply of a GM3000HPS, fw 3.2.5, sent by the MM3 author (22/11/2026)
+    info = parse_getain("359.9966,+52.5324,00.0082,165.14,+00.0124,-00.01,-00.01,22,00003.5#")
+    assert info == {'polar_error_deg': 0.0082, 'orthogonality_deg': 0.0124, 'terms': 22, 'rms': 3.5}
