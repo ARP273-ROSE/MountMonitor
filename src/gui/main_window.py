@@ -23,6 +23,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSlot, pyqtSignal
 from PyQt6.QtGui import QAction, QActionGroup, QFont, QIcon, QKeySequence
 
+from ..core.axial import axial_speeds, RA_DEFAULT_SPEED
 from .graph_widgets import (TrackingGraph, TimeGraph, SeismicGraph, AxialGraph,
                             cut_to_present, window_width,
                             shown_span, span_name, clock_drift,
@@ -1151,20 +1152,19 @@ class MainWindow(QMainWindow):
                 drift_ms_h=self._clock_drift(),
             )
 
-        # Axial graph
+        # Axial graph: speeds computed from the axis angles over the
+        # visible span plus one running range (the regression needs it).
         if self._settings.get("axial_mode") != "off":
-            bufs = (self._processor.ra_speed_raw_buffer,
-                    self._processor.dec_speed_raw_buffer,
-                    self._processor.ra_speed_avg_buffer,
-                    self._processor.dec_speed_avg_buffer)
-            ends = [t[-1] for t in (b.get_last_n(1)[0] for b in bufs) if len(t)]
-            if ends:
-                end = float(max(ends))
-                args = {}
-                for name, b in zip(("ra_raw", "dec_raw", "ra_avg", "dec_avg"), bufs):
-                    t, v, _, _ = b.get_tail(span, end)
-                    args[name + "_t"] = t if len(t) > 0 else None
-                    args[name + "_v"] = v if len(t) > 0 else None
+            rng = float(self._settings.get("running_range_seconds") or 60)
+            args = {}
+            for name, b, dflt in (("ra", self._processor.ra_axis_buffer, RA_DEFAULT_SPEED),
+                                  ("dec", self._processor.dec_axis_buffer, 0.0)):
+                t, v, _, _ = b.get_tail(span + rng)
+                s = axial_speeds(t, v, rng, dflt) if len(t) > 1 else None
+                if s is not None:
+                    s["t"] = s["t"] + (float(t[0]) - float(t[-1]))
+                args[name] = s
+            if args["ra"] or args["dec"]:
                 self._axial_graph.update_data(span_s=span, **args)
 
         # Seismic graph
@@ -1716,28 +1716,13 @@ class MainWindow(QMainWindow):
 
         # Axial graph
         if len(session.ra_axis) > 2 and np.any(session.ra_axis != 0):
-            # Compute speeds from axis positions
-            # Degrees -> arcsec/s. Samples with the same time stamp (ASCOM
-            # times to the second in older files) are dropped: dividing by
-            # 1e-6 drew huge spikes.
+            rng = float(self._settings.get("running_range_seconds") or 60)
             t = session.timestamps[:len(session.ra_axis)]
-            dt = np.diff(t)
-            good = dt > 0
-
-            def rate(pos):
-                d = (np.diff(pos) + 180.0) % 360.0 - 180.0
-                return (d[good] * 3600.0) / dt[good]
-            ra_speed = rate(session.ra_axis)
-            dec_speed = (rate(session.dec_axis)
-                         if len(session.dec_axis) == len(session.ra_axis) else None)
-            t = np.concatenate((t[:1], t[1:][good]))
-
-            if len(ra_speed) > 0:
-                self._axial_graph.update_data(
-                    ra_raw_t=t[1:], ra_raw_v=ra_speed,
-                    dec_raw_t=t[1:] if dec_speed is not None else None,
-                    dec_raw_v=dec_speed,
-                )
+            ra = axial_speeds(t, session.ra_axis, rng, RA_DEFAULT_SPEED)
+            dec = (axial_speeds(t, session.dec_axis, rng)
+                   if len(session.dec_axis) == len(session.ra_axis) else None)
+            if ra is not None:
+                self._axial_graph.update_data(ra=ra, dec=dec)
 
     def _replay_fft(self, session):
         """Compute and display FFT from replayed data."""

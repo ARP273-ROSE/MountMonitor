@@ -1160,11 +1160,11 @@ class SeismicGraph(QWidget):
 class AxialGraph(QWidget):
     """Axial velocity/displacement graph.
 
-    Shows for RA and DEC axes:
-    - Raw speed (thin grey)
-    - 6-sample running average speed (thick bright line)
-    - Linear regression overlay (extra thick, annotated with slope)
-    Equivalent to the Java Axial Velocity/Displacement graph.
+    Shows for RA and DEC axes, as MountMonitor 3 computes them
+    (src.core.axial): raw speed (thin grey), 6-sample running average
+    (thick), linear regression over the running range (dashed, annotated
+    in "/s). Each axis is drawn relative to the median of its regression
+    speed.
     """
 
     def __init__(self, parent=None):
@@ -1178,7 +1178,7 @@ class AxialGraph(QWidget):
         self._plot.setBackground(Colors.BG_GRAPH)
         self._plot.showGrid(x=False, y=True, alpha=0.1)
         self._plot.setTitle(T("axial_title"), color='#aaaaaa', size='11pt')
-        self._plot.setLabel('left', T('speed_label'), units='"/s',
+        self._plot.setLabel('left', T('axial_dev_label'), units='"/s',
                             color=Colors.TEXT_SECONDARY.name())
         self._plot.setLabel('bottom', T('time_label'), units='s',
                             color=Colors.TEXT_SECONDARY.name())
@@ -1236,101 +1236,77 @@ class AxialGraph(QWidget):
         layout.addWidget(self._header)
         layout.addWidget(self._plot)
 
-    def update_data(self,
-                    ra_raw_t=None, ra_raw_v=None,
-                    dec_raw_t=None, dec_raw_v=None,
-                    ra_avg_t=None, ra_avg_v=None,
-                    dec_avg_t=None, dec_avg_v=None, span_s=None):
-        """Update axial graph with speed data.
+    def update_data(self, ra=None, dec=None, t_offset=0.0, span_s=None):
+        """Draw the axial speeds (src.core.axial.axial_speeds) of both axes.
 
-        All timestamps/values are numpy arrays. With `span_s`, the origin
-        is the last sample and the graph scrolls at the present.
-        """
-        t0 = None
-        for t_arr in [ra_raw_t, dec_raw_t, ra_avg_t, dec_avg_t]:
-            if t_arr is not None and len(t_arr) > 0:
-                if span_s:
-                    if t0 is None or t_arr[-1] > t0:
-                        t0 = t_arr[-1]
-                elif t0 is None or t_arr[0] < t0:
-                    t0 = t_arr[0]
-        if t0 is None:
+        Each axis is drawn as its deviation from its own reference -- the
+        median of the regression speed -- so that RA (about 15.04"/s) and
+        DEC (about 0) share one scale; the references and the latest
+        regression speeds are written above the graph. t_offset is added to
+        the series' times (seconds); with span_s the graph scrolls at the
+        present."""
+        from ..core.axial import median_speed
+        series = []
+        parts = []
+        for name, s, curves in (
+                ("RA", ra, (self._ra_raw_curve, self._ra_avg_curve, self._ra_reg_curve)),
+                ("DEC", dec, (self._dec_raw_curve, self._dec_avg_curve, self._dec_reg_curve))):
+            if not s or len(s["t"]) < 2:
+                for c in curves:
+                    c.setData([], [])
+                continue
+            ref = median_speed(s["reg"], s.get("full"))
+            base = ref if ref is not None else float(np.median(s["avg"]))
+            t = s["t"] + t_offset
+            ok = ~np.isnan(s["reg"])
+            curves[0].setData(t, s["raw"] - base)
+            curves[1].setData(t, s["avg"] - base)
+            curves[2].setData(t[ok], s["reg"][ok] - base)
+            series.append((t, s, base, ok))
+            if ref is not None and ok.any():
+                parts.append(f'{name} {s["reg"][ok][-1]:.4f}"/s (ref {ref:.4f})')
+        self._reg_label.setText("  ".join(parts))
+        if not series:
             return
+
+        t_end = max(float(t[-1]) for t, *_ in series)
+        t_beg = min(float(t[0]) for t, *_ in series)
+        if span_s:
+            x0, x1 = t_end - float(span_s), t_end
+        else:
+            x0, x1 = t_beg, max(t_end, t_beg + 1.0)
+        # Scale on the averaged and regression speeds; the raw one (0.36"
+        # steps of the angle) only widens it up to its 5-95 % spread.
+        vals = []
+        for t, s, base, ok in series:
+            vis = (t >= x0) & (t <= x1)
+            vals.append(s["avg"][vis] - base)
+            vals.append(s["reg"][vis & ok] - base)
+            raw = s["raw"][vis] - base
+            if len(raw):
+                vals.append(np.percentile(raw, [5, 95]))
+        v = np.concatenate([x for x in vals if len(x)]) if vals else np.array([0.0])
+        if not len(v):
+            v = np.array([0.0])
+        y_min, y_max = float(min(v.min(), 0.0)), float(max(v.max(), 0.0))
+        y_margin = max((y_max - y_min) * 0.15, 0.01)
 
         vb = self._plot.getViewBox()
         vb.blockSignals(True)
-
-        # Plot raw speeds
-        if ra_raw_t is not None and len(ra_raw_t) > 0:
-            self._ra_raw_curve.setData(ra_raw_t - t0, ra_raw_v)
-        if dec_raw_t is not None and len(dec_raw_t) > 0:
-            self._dec_raw_curve.setData(dec_raw_t - t0, dec_raw_v)
-
-        # Plot averaged speeds
-        if ra_avg_t is not None and len(ra_avg_t) > 0:
-            self._ra_avg_curve.setData(ra_avg_t - t0, ra_avg_v)
-        if dec_avg_t is not None and len(dec_avg_t) > 0:
-            self._dec_avg_curve.setData(dec_avg_t - t0, dec_avg_v)
-
-        # Compute linear regression on RA average speed
-        reg_parts = []
-        if ra_avg_t is not None and len(ra_avg_v) > 10:
-            t_rel = ra_avg_t - t0
-            try:
-                coeffs = np.polyfit(t_rel, ra_avg_v, 1)
-                fit_y = np.polyval(coeffs, t_rel)
-                self._ra_reg_curve.setData(t_rel, fit_y)
-                slope_per_min = coeffs[0] * 60.0
-                reg_parts.append(f"RA: {slope_per_min:+.4f}\"/s/min")
-            except Exception:
-                pass
-        else:
-            self._ra_reg_curve.setData([], [])
-
-        if dec_avg_t is not None and len(dec_avg_v) > 10:
-            t_rel = dec_avg_t - t0
-            try:
-                coeffs = np.polyfit(t_rel, dec_avg_v, 1)
-                fit_y = np.polyval(coeffs, t_rel)
-                self._dec_reg_curve.setData(t_rel, fit_y)
-                slope_per_min = coeffs[0] * 60.0
-                reg_parts.append(f"DEC: {slope_per_min:+.4f}\"/s/min")
-            except Exception:
-                pass
-        else:
-            self._dec_reg_curve.setData([], [])
-
-        self._reg_label.setText("  ".join(reg_parts))
-
-        # Manual range management
-        all_v = []
-        t_end = 0.0
-        for t_arr, v_arr in [(ra_raw_t, ra_raw_v), (dec_raw_t, dec_raw_v),
-                              (ra_avg_t, ra_avg_v), (dec_avg_t, dec_avg_v)]:
-            if t_arr is not None and len(t_arr) > 0:
-                all_v.append(v_arr)
-                t_end = max(t_end, float((t_arr - t0)[-1]))
-        if all_v:
-            combined = np.concatenate(all_v)
-            y_min = float(np.min(combined))
-            y_max = float(np.max(combined))
-            y_margin = max(abs(y_max - y_min) * 0.15, 0.01)
-            # The axial graph plots several series of different lengths:
-            # there is no common point scale to window.
-            if span_s:
-                x0, x1 = -float(span_s), 0.0
-            else:
-                x0, x1 = 0.0, max(t_end, 1.0)
-            vb.setRange(xRange=(x0, x1),
-                        yRange=(y_min - y_margin, y_max + y_margin), padding=0)
-
+        if span_s:
+            # times relative to the present, like the other graphs
+            for c in (self._ra_raw_curve, self._ra_avg_curve, self._ra_reg_curve,
+                      self._dec_raw_curve, self._dec_avg_curve, self._dec_reg_curve):
+                x, y = c.getData()
+                if x is not None and len(x):
+                    c.setData(x - t_end, y)
+            x0, x1 = -float(span_s), 0.0
+        vb.setRange(xRange=(x0, x1),
+                    yRange=(y_min - y_margin, y_max + y_margin), padding=0)
         vb.blockSignals(False)
         match_axes(self._plot)
-
-        # Position overlays
-        if all_v:
-            self._watermark.setPos((x0 + x1) / 2, 0)
-            self._reg_label.setPos(x1, y_max + y_margin)
+        self._watermark.setPos((x0 + x1) / 2, 0)
+        self._reg_label.setPos(x1, y_max + y_margin)
 
     def export_to_image(self, directory: str):
         """Export axial graph as PNG."""

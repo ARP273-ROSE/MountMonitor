@@ -979,6 +979,8 @@ TX = {
         "fr": "AXIAL — Vitesse / Déplacement",
     "nl": "AXIAAL — Snelheid / Verplaatsing",
 },
+    "axial_dev_label": {"en": "Speed - reference", "fr": "Vitesse - référence",
+                        "nl": "Snelheid - referentie"},
     "speed_label": {"en": "Speed", "fr": "Vitesse", "nl": "Snelheid"},
     "frequency_label": {"en": "Frequency", "fr": "Fréquence", "nl": "Frequentie"},
     "period_label": {"en": "Period", "fr": "Période", "nl": "Periode"},

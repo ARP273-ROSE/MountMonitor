@@ -557,8 +557,16 @@ wind on the shelter), not to the mount.
 
 Optional (Preferences, Processing, \emph{Axial mode}). It shows the speed or
 the displacement of the mount's axes themselves, read with \texttt{:GaXa\#}
-and \texttt{:GaXb\#} on a 10Micron: grey the raw speed, white the averaged
-speed, bright white the regression line.
+and \texttt{:GaXb\#} on a 10Micron (LX200, or ASCOM with the 10Micron
+commands), computed as MountMonitor~3 does: grey the raw speed between two
+samples (noisy: the angle is read to 0.36\,\arcsec), thick the mean of the
+last 6, dashed the slope of a straight line fitted to the angle over the
+running range, smooth but late by about half that range. Each axis is drawn
+relative to the median of its regression speed, so that both share one
+scale; the strip above gives the latest regression speed and that reference
+in \arcsec/s: about 15.04 on the RA axis at the sidereal rate, 0 on the DEC
+axis, apart from polar error and refraction. The first running range is not
+reliable yet.
 
 \section{The status panel and the history}
 \label{sec:panel}

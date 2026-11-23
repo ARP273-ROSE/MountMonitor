@@ -116,17 +116,18 @@ class SimulatedMount(MountConnection):
         if not self._connected:
             return None
         elapsed = time.time() - self._start_time
-        # RA axis moves at ~15.04 arcsec/s (sidereal + small corrections)
-        position = self._ra_axis_base + (15.04 * elapsed) / 3600.0
-        noise = random.gauss(0, 0.001)
-        return position + noise
+        # Sidereal rate plus the periodic error, read like :GaXa# (4 decimals
+        # of a degree: 0.36" steps).
+        pe = self._pe_amplitude * math.sin(2 * math.pi * elapsed / self._pe_period)
+        position = self._ra_axis_base + (15.041067 * elapsed + pe) / 3600.0
+        return round(position, 4)
 
     def get_dec_axis_position(self) -> Optional[float]:
         if not self._connected:
             return None
-        # DEC axis mostly stationary with tiny noise
-        noise = random.gauss(0, 0.0005)
-        return 30.0 + noise
+        # DEC axis still, but for a slow polar-error drift (0.01"/s)
+        elapsed = time.time() - self._start_time
+        return round(30.0 + 0.01 * elapsed / 3600.0, 4)
 
     def get_target_ra(self) -> Optional[str]:
         return format_ra(self._target_ra)

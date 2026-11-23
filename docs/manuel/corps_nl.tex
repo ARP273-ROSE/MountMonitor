@@ -579,8 +579,16 @@ de montering.
 
 Optioneel (Voorkeuren, Verwerking, \emph{Axiale modus}). Ze toont de snelheid of
 de verplaatsing van de assen van de montering zelf, op een 10Micron gelezen met
-\texttt{:GaXa\#} en \texttt{:GaXb\#}: grijs de ruwe snelheid, wit de
-gemiddelde snelheid, helder wit de regressielijn.
+\texttt{:GaXa\#} en \texttt{:GaXb\#} (LX200, of ASCOM met de
+10Micron-commando's), berekend zoals MountMonitor~3 doet: grijs de ruwe
+snelheid tussen twee metingen (ruisig: de hoek wordt tot op 0,36\,\arcsec
+gelezen), dik het gemiddelde van de laatste 6, gestreept de helling van een
+rechte lijn gefit op de hoek over het lopende bereik, glad maar ongeveer een
+half bereik te laat. Elke as wordt getekend ten opzichte van de mediaan van
+haar regressiesnelheid, zodat beide op één schaal passen; de strook erboven
+geeft de laatste regressiesnelheid en die referentie in \arcsec/s: ongeveer
+15,04 op de RA-as bij siderisch volgen, 0 op de DEC-as, polaire fout en
+refractie terzijde. Het eerste lopende bereik is nog niet betrouwbaar.
 
 \section{Het statuspaneel en de historie}
 \label{sec:panel}

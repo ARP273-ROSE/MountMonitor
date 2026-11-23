@@ -2,6 +2,12 @@
 
 ## Resume note (2026-11-22, evening)
 
+**Unreleased on master (23/11, no tag; batch):** axial speeds as MM3 (code sent by its author,
+23/11): `src/core/axial.py` (raw, 6-sample mean, regression of the angle over the running
+range, median reference); graph drawn relative to each axis' median; manuals updated.
+Displacement mode NOT done: MM3 integrates the speed ("[x.xx"]" and "x cos(dec) [SPH]",
+shifted by one running range) but its code was not sent -> asked for it.
+
 **Released as v4.5.2 (23/11):** slew fix from the MM3
 author's video (4.4.15 recorded during the final approach): `MountPoller._skip_for_slew` drops
 samples while slewing and for delay_after_slew after the slew END, emits `slew_settled` ->
@@ -59,7 +65,7 @@ ASCOM through the 10Micron driver 1.7.2 shared with NINA; GUI of 4.4.11 and
 5. Pre-existing: `check_subprocesses.py` flags `reporting.py:218` (kit file).
 
 **How to work:**
-- Tests: `QT_QPA_PLATFORM=offscreen python -m pytest -q tests` (186 pass).
+- Tests: `QT_QPA_PLATFORM=offscreen python -m pytest -q tests` (192 pass).
 - Code must compile on Python 3.10 (the MM3 author runs from source).
 - Manuals: `cd docs/manuel && python compiler.py` (pdflatex), commit the
   three PDFs with the .tex.

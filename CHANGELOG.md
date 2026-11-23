@@ -6,6 +6,24 @@ behaviour changes, the patch number when only a defect is fixed.
 
 Figures quoted below were measured on real sessions, not estimated.
 
+## Unreleased
+
+### Fixed
+- Axial graph: speeds now computed as MountMonitor 3 does. The "regression"
+  was a straight line fitted to the averaged speed over the visible graph,
+  annotated in "/s per minute, which said nothing about the axis speed. It
+  is now, for each sample, the slope of a line fitted to the axis angle
+  (`:GaXa#`/`:GaXb#`) over the running range, in "/s. Each axis is drawn
+  relative to the median of that speed, so RA (about 15.04"/s) and DEC
+  (about 0) no longer squash each other on one scale; the latest speed and
+  the reference are written above the graph. Same computation when a .dat
+  is replayed (`src/core/axial.py`).
+- Simulated mount: axis angles read with 4 decimals like a 10Micron, with
+  the periodic error, instead of a 3.6" random noise.
+
+### Not done yet
+- Axial displacement mode still draws the speeds: waiting for MM3's code.
+
 ## 4.5.2 — 2026-11-23
 
 ### Fixed
