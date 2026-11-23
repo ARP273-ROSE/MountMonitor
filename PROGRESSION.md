@@ -6,7 +6,8 @@
 (figures agreed, look did not): axial graph draws only the regression speed vs its median;
 displacement = integral of (reg - median) over the shown span, around its mean, + "sky"
 (x cos dec, MM3 "SPH"); shift by range/2 (speed) or range (displacement) when
-correct_graphs_for_range. My reading of the MM3 screenshots, not of its code: to confirm.
+correct_graphs_for_range. Then aligned on MM3's drawing code (received 23/11 evening): rectangle-rule integral from
+the first valid point, smoothing (4 prev + new)/5, symmetric scale x1.2, nothing below 30 points.
 
 **Released as v4.5.3 (23/11):** axial speeds as MM3 (code sent by its author,
 23/11): `src/core/axial.py` (raw, 6-sample mean, regression of the angle over the running

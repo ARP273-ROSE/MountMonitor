@@ -18,6 +18,11 @@ Figures quoted below were measured on real sessions, not estimated.
   median) over the time shown, in arc seconds, around its mean; strip with
   the current value, the mean and the peak-to-peak range, also on the sky
   (x cos dec for RA, MM3's "SPH").
+- Checked against MM3's drawing code (sent by its author): displacement
+  integrated with the rectangle rule (speed now x time since the previous
+  sample), smoothed raw speed as (4 previous + new) / 5, axial scale
+  symmetric about the reference (1.2 x the farthest point), nothing drawn
+  below 30 points.
 - "Align graphs on the running window" now also moves the axial speed back
   by half a range and the displacement by a whole one, as MM3.
 

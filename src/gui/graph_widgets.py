@@ -1252,7 +1252,7 @@ class AxialGraph(QWidget):
         parts, vals = [], []
         for name, s, curve, sky in (("RA", ra, self._ra_reg_curve, cos_d),
                                     ("DEC", dec, self._dec_reg_curve, 1.0)):
-            if not s or len(s["t"]) < 2:
+            if not s or len(s["t"]) < 30:      # MM3: not drawn below 30 points
                 curve.setData([], [])
                 continue
             t = s["t"] - (t_end if span_s else 0.0) - shift_s
@@ -1282,14 +1282,14 @@ class AxialGraph(QWidget):
             vals.append(y[vis])
         self._reg_label.setText("  ".join(parts))
         v = np.concatenate(vals) if vals else np.array([])
-        if not len(v):
-            v = np.array([0.0])
-        y_min, y_max = float(min(v.min(), 0.0)), float(max(v.max(), 0.0))
-        y_margin = max((y_max - y_min) * 0.12, 0.05 if disp else 0.002)
+        # Symmetric about 0 (the median, or the mean of the displacement),
+        # 1.2 times the farthest point, as MM3: a spike does not off-centre it.
+        half = float(np.max(np.abs(v))) * 1.2 if len(v) else 0.0
+        half = max(half, 0.05 if disp else 0.002)
         vb = self._plot.getViewBox()
         vb.blockSignals(True)
         vb.setRange(xRange=(x0, max(x1, x0 + 1.0)),
-                    yRange=(y_min - y_margin, y_max + y_margin), padding=0)
+                    yRange=(-half, half), padding=0)
         vb.blockSignals(False)
         match_axes(self._plot)
         self._watermark.setPos((x0 + x1) / 2, 0)

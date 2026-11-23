@@ -79,7 +79,7 @@ def test_displacement_is_the_integral_of_the_speed_excess():
     reg = np.full_like(t, 15.0)
     reg[50:] = 15.1                              # 0.1"/s faster for 50 s
     d = displacement(t, reg, 15.0)
-    assert d[0] == 0 and abs(d[-1] - 0.1 * 49.5) < 1e-9
+    assert d[0] == 0 and abs(d[-1] - 0.1 * 50) < 1e-9   # rectangle rule, as MM3
     reg[:10] = np.nan
     d = displacement(t, reg, 15.0, start=20)
     assert np.all(np.isnan(d[:20])) and d[20] == 0

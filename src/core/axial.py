@@ -5,7 +5,7 @@ Three series per axis, in arc seconds per second (degrees per hour, the same
 number):
 - raw: from two consecutive samples. The angle has 4 decimals of a degree
   (0.36"), so at 1 Hz this one is noisy by construction;
-- avg: running mean of the last 6 raw speeds;
+- avg: raw speed smoothed as MM3 does, avg = (4 avg_prev + raw) / 5;
 - reg: slope of a straight line fitted to the angle over the last running
   range (Processing, "Running range"): the steady axis speed, smooth but
   late by about half that range. Until the data cover one range, the fit
@@ -22,8 +22,6 @@ import numpy as np
 
 #: MM3 default before the first speed is known
 RA_DEFAULT_SPEED = 15.02
-#: running mean length of the "avg" series (MM3)
-AVG_SAMPLES = 6
 #: regression values before which the first good one is repeated
 MIN_REG_SAMPLES = 10
 
@@ -59,11 +57,11 @@ def axial_speeds(t, angle_deg, range_s: float,
     if n > 1:
         raw[0] = raw[1]
 
-    # running mean of the last AVG_SAMPLES raw speeds
-    c = np.concatenate(([0.0], np.cumsum(raw)))
-    k = np.arange(1, n + 1)
-    lo = np.maximum(k - AVG_SAMPLES, 0)
-    avg = (c[k] - c[lo]) / (k - lo)
+    # smoothed raw speed, as MM3: avg_i = (4 avg_(i-1) + raw_i) / 5
+    avg = np.empty(n)
+    avg[0] = raw[0]
+    for i in range(1, n):
+        avg[i] = (avg[i - 1] * 4.0 + raw[i]) / 5.0
 
     # least-squares slope over [start_i, i], start_i = the latest sample at
     # least range_s older than i (none yet: the first one)
@@ -116,7 +114,8 @@ def displacement(t, reg, ref: float, start: int = 0) -> np.ndarray:
     if len(ok) < 2:
         return out
     i0 = ok[0]
+    # MM3: each step adds (speed now - reference) x (time since the
+    # previous sample), from 0 at the first point
     tt, vv = t[i0:], np.nan_to_num(v[i0:])
-    steps = np.diff(tt) * (vv[1:] + vv[:-1]) / 2.0
-    out[i0:] = np.concatenate(([0.0], np.cumsum(steps)))
+    out[i0:] = np.concatenate(([0.0], np.cumsum(vv[1:] * np.diff(tt))))
     return out
