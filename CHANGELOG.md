@@ -6,6 +6,18 @@ behaviour changes, the patch number when only a defect is fixed.
 
 Figures quoted below were measured on real sessions, not estimated.
 
+## Unreleased
+
+### Fixed
+- Slew: samples were recorded during the final approach. The "delay after
+  slew" was counted from the START of the slew (a 10 s slew with a 10 s
+  delay resumed recording the moment the slew ended), and a delay changed
+  in the preferences while connected was ignored until the next
+  connection. Now, as MountMonitor 3: nothing is recorded while the mount
+  slews, the graphs are cleared when the slew ends (reset mode "slewing"),
+  recording resumes `delay after slew` seconds after the END of the slew,
+  and the mount settings and target are read at that moment.
+
 ## 4.5.1 — 2026-11-23
 
 ### Fixed

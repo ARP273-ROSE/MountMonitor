@@ -59,6 +59,10 @@ TX = {
         "nl": "De ASCOM-driver herhaalt posities uit zijn cache: herhalingen worden overgeslagen, de echte bemonstering is de verversing van de driver"},
     "poller_slewing": {"en": "Mount is slewing...", "fr": "La monture pivote...",
                        "nl": "De montering zwenkt..."},
+    "poller_settling": {
+        "en": "Slew finished: waiting {s} s before recording.",
+        "fr": "Rotation terminée : attente de {s} s avant d'enregistrer.",
+        "nl": "Zwenken klaar: {s} s wachten voor het registreren."},
     "poller_checks_ok": {
         "en": "Mount settings checked after slew.",
         "fr": "Réglages de la monture vérifiés après la rotation.",
@@ -390,9 +394,9 @@ TX = {
         "fr": "Décoché : l'enregistrement démarre dès que la monture suit, de jour comme de nuit, et la session dure jusqu'à ce que vous l'arrêtiez. Coché : demande un site connu. Seul le jour termine une nuit : une monture qui parque à 02 h et repart à 03 h reste une seule nuit, un seul fichier, un seul rapport.",
         "nl": "Uitgevinkt: de registratie start zodra de montering volgt, dag of nacht, en de sessie loopt tot u haar stopt. Aangevinkt: vereist een bekende locatie. Alleen het daglicht beëindigt een nacht: een montering die om 02:00 parkeert en om 03:00 verdergaat, blijft één nacht, één bestand, één rapport."},
     "tt_delay_slew": {
-        "en": "Wait time after slew before logging resumes",
-        "fr": "Délai après rotation avant reprise",
-        "nl": "Wachttijd na een zwenkbeweging voordat de registratie hervat"},
+        "en": "Nothing is recorded while the mount slews; recording resumes this many seconds after the slew ENDS (the mount settings are checked at that moment)",
+        "fr": "Rien n'est enregistré pendant la rotation ; l'enregistrement reprend ce nombre de secondes après la FIN de la rotation (les réglages de la monture sont vérifiés à ce moment)",
+        "nl": "Tijdens het zwenken wordt niets geregistreerd; de registratie hervat dit aantal seconden na het EINDE van de zwenking (de instellingen van de montering worden dan gecontroleerd)"},
     "tt_axial": {
         "en": "Axial position monitoring mode",
         "fr": "Mode de surveillance position axiale",

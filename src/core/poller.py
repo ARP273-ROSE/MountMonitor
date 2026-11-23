@@ -47,6 +47,7 @@ class MountPoller(QThread):
     log_message = pyqtSignal(str)           # Log message for status panel
     connect_result = pyqtSignal(bool)       # First connection attempt, made in this thread
     request_done = pyqtSignal(object, object)  # (callback, result) of a submit()
+    slew_settled = pyqtSignal()             # slew over AND the delay after it elapsed
 
     # Reconnection: 2, 4, 8, 16, 32, then every 60 s, for as long as it takes.
     RECONNECT_MAX_S = 60.0
@@ -70,8 +71,11 @@ class MountPoller(QThread):
         self._last_mount_time_parsed: Optional[float] = None
         self._last_pc_time_for_loop: Optional[float] = None
         self._delay_after_slew = 0.0
-        self._slew_delay_active = False
-        self._slew_delay_start = 0.0
+        # Samples are dropped while the mount slews and for
+        # delay_after_slew seconds after the slew ENDS (as MountMonitor 3
+        # does): the final approach and the settling are not tracking.
+        self._slewing = False
+        self._settle_until: Optional[float] = None
         self._log_tracking_only = False
         self._axial_enabled = False
         self._last_env_poll: float = 0.0
@@ -194,21 +198,11 @@ class MountPoller(QThread):
                 sample = self._poll_sequence()
 
                 if sample is not None:
-                    # Check for slew delay
-                    if self._slew_delay_active:
-                        elapsed = time.time() - self._slew_delay_start
-                        if elapsed < self._delay_after_slew:
-                            # continue would skip the pacing sleep at the end
-                            # of the loop → polling the mount at full speed.
-                            # Sleep off the remainder first.
-                            self._sleep_remainder(loop_start, interval)
-                            continue
-                        else:
-                            self._slew_delay_active = False
-                            # The mount settings are checked after the slew by
-                            # the window (MainWindow._run_mount_checks), which
-                            # also raises the alert; a second check here only
-                            # duplicated the history lines.
+                    if self._skip_for_slew(sample.status):
+                        # continue would skip the pacing sleep at the end
+                        # of the loop -> polling the mount at full speed.
+                        self._sleep_remainder(loop_start, interval)
+                        continue
 
                     # Skip if only logging tracking and mount isn't tracking
                     if self._log_tracking_only and sample.status != MountStatus.TRACKING:
@@ -242,6 +236,29 @@ class MountPoller(QThread):
 
             # Precise timing
             self._sleep_remainder(loop_start, interval)
+
+    def _skip_for_slew(self, status, now: Optional[float] = None) -> bool:
+        """True while the sample must be dropped: mount slewing, or slew
+        ended less than delay_after_slew seconds ago. Emits slew_settled
+        once, when the delay is over (the window then checks the mount
+        settings and reads the target, as MountMonitor 3 does)."""
+        now = time.time() if now is None else now
+        if status == MountStatus.SLEWING:
+            self._slewing = True
+            self._settle_until = None
+            return True
+        if self._slewing:
+            self._slewing = False
+            delay = float(self._delay_after_slew or 0.0)
+            self._settle_until = now + delay
+            if delay > 0:
+                self.log_message.emit(T("poller_settling").format(s=f"{delay:g}"))
+        if self._settle_until is not None:
+            if now < self._settle_until:
+                return True
+            self._settle_until = None
+            self.slew_settled.emit()
+        return False
 
     def _sleep_remainder(self, loop_start: float, interval: float) -> None:
         """Sleep for what remains of the current polling interval."""
@@ -278,8 +295,6 @@ class MountPoller(QThread):
             self._last_status = status
             self.status_changed.emit(status)
             if status == MountStatus.SLEWING:
-                self._slew_delay_active = True
-                self._slew_delay_start = time.time()
                 self.log_message.emit(T("poller_slewing"))
 
         # Get mount time. The PC reference is taken in the MIDDLE of the

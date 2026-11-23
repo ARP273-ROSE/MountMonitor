@@ -628,6 +628,7 @@ class MainWindow(QMainWindow):
         self._poller.connection_lost.connect(self._on_connection_lost)
         self._poller.connection_restored.connect(self._on_connection_restored)
         self._poller.log_message.connect(self._on_log_message)
+        self._poller.slew_settled.connect(self._on_slew_settled)
         self._poller.mount_info_ready.connect(self._on_mount_info)
         self._poller.environment_ready.connect(self._on_environment)
         self._poller.connect_in_thread()
@@ -828,13 +829,15 @@ class MainWindow(QMainWindow):
 
         # Detect transition from slewing to tracking
         was_slewing = prev_status == MountStatus.SLEWING
-        now_tracking = status == MountStatus.TRACKING
 
-        # Auto-reset on slewing
-        if status == MountStatus.SLEWING:
+        # Auto-reset on slewing: when the slew ENDS, as MountMonitor 3 --
+        # the previous target's graph stays on screen during the slew, and
+        # no sample is recorded until delay_after_slew has elapsed.
+        if was_slewing and status != MountStatus.SLEWING:
             if self._settings.get("reset_mode") == "slewing":
                 self._reset_both()
 
+        if status == MountStatus.SLEWING:
             if self._settings.get("dump_mode") == "slewing":
                 self._dump_graphs()
 
@@ -856,11 +859,16 @@ class MainWindow(QMainWindow):
             if getattr(self, '_last_session', None) is not None:
                 self._auto_analyze_on_park()
 
-        # After slew ends and tracking resumes → run checks + get target coords
-        if was_slewing and now_tracking:
-            QTimer.singleShot(1000, self._run_mount_checks)
-            # Retrieve target coordinates for reference mode
-            self._refresh_target(status, force=True)
+
+    @pyqtSlot()
+    def _on_slew_settled(self):
+        """Slew over and delay_after_slew elapsed: check the mount settings
+        and read the new target, as MountMonitor 3 does at that moment."""
+        status = getattr(self, '_prev_mount_status', MountStatus.UNKNOWN)
+        if status != MountStatus.TRACKING:
+            return
+        self._run_mount_checks()
+        self._refresh_target(status, force=True)
 
     #: the target is read again this often while tracking (seconds)
     TARGET_REFRESH_S = 30.0
@@ -2194,6 +2202,9 @@ class MainWindow(QMainWindow):
             self._poller.set_frequency(self._settings.get("polling_frequency_hz"))
             self._poller.set_axial_enabled(self._settings.get("axial_mode") != "off")
             self._poller.set_log_tracking_only(self._settings.get("log_mode") == "tracking_only")
+            # Was only read at connection: a delay changed while connected
+            # was ignored until the next connection.
+            self._poller.set_delay_after_slew(self._settings.get("delay_after_slew_seconds"))
 
         if self._ntp_client and self._settings.get("ntp_enabled"):
             self._ntp_client.set_server(self._settings.get("ntp_server"))

@@ -2,6 +2,14 @@
 
 ## Resume note (2026-11-22, evening)
 
+**Unreleased on master (23/11, no tag yet, batch with the next fixes):** slew fix from the MM3
+author's video (4.4.15 recorded during the final approach): `MountPoller._skip_for_slew` drops
+samples while slewing and for delay_after_slew after the slew END, emits `slew_settled` ->
+`MainWindow._on_slew_settled` (mount checks + target); reset "slewing" at slew end; delay
+re-applied on preference change. tests/test_slew_settle.py.
+:Gmte# note: his 128 min to the flip on the Sun at 09:50 UTC does not prove the horizon is
+ignored (the Sun was rising, the flip limit comes first); label "tracking ends in" kept.
+
 **State:** master = tag **v4.5.1** (23/11: target reference read while tracking, :Gmte# =
 "tracking ends in", pure-ASCOM air text). Before: tag **v4.5.0** (22/11 afternoon: pure ASCOM by default + option
 "10Micron commands through the ASCOM driver", :GTMP1# = RA driver, :getain# fixed).
@@ -51,7 +59,7 @@ ASCOM through the 10Micron driver 1.7.2 shared with NINA; GUI of 4.4.11 and
 5. Pre-existing: `check_subprocesses.py` flags `reporting.py:218` (kit file).
 
 **How to work:**
-- Tests: `QT_QPA_PLATFORM=offscreen python -m pytest -q tests` (183 pass).
+- Tests: `QT_QPA_PLATFORM=offscreen python -m pytest -q tests` (186 pass).
 - Code must compile on Python 3.10 (the MM3 author runs from source).
 - Manuals: `cd docs/manuel && python compiler.py` (pdflatex), commit the
   three PDFs with the .tex.
