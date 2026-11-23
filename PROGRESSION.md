@@ -2,7 +2,7 @@
 
 ## Resume note (2026-11-22, evening)
 
-**Unreleased on master (23/11, no tag yet, batch with the next fixes):** slew fix from the MM3
+**Released as v4.5.2 (23/11):** slew fix from the MM3
 author's video (4.4.15 recorded during the final approach): `MountPoller._skip_for_slew` drops
 samples while slewing and for delay_after_slew after the slew END, emits `slew_settled` ->
 `MainWindow._on_slew_settled` (mount checks + target); reset "slewing" at slew end; delay

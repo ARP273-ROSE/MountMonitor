@@ -6,7 +6,7 @@ behaviour changes, the patch number when only a defect is fixed.
 
 Figures quoted below were measured on real sessions, not estimated.
 
-## Unreleased
+## 4.5.2 — 2026-11-23
 
 ### Fixed
 - Slew: samples were recorded during the final approach. The "delay after
