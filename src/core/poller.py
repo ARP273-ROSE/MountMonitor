@@ -459,6 +459,18 @@ class MountPoller(QThread):
         self._connection.abort()
         return self.wait(4000)
 
+    def request_stop(self) -> None:
+        """Ask the loop to end, without waiting (GUI thread): the caller
+        keeps the thread until `finished`, and calls abort_read() if it is
+        still in a read after a moment. stop() waited up to 5.5 s, window
+        frozen, whenever a driver was busy."""
+        self._running = False
+        self._wake.set()
+
+    def abort_read(self) -> None:
+        if self.isRunning() and self._connection is not None:
+            self._connection.abort()
+
     def pause(self):
         """Pause polling."""
         self._paused = True

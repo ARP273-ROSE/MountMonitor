@@ -12,9 +12,12 @@ Then the audit of 24/11 (see CHANGELOG "Unreleased"): `pixel_downsampling` and
 `density_antialias` in graph_widgets, timer lateness in `_adapt_rate`, `start_session` returns
 False, dumps under the log folder, KIT_RELANCE relaunch, DataBuffer CLOCK_JUMP_S, seismometer
 reopen + `_watch_seismometer`, background fsync, resets via `poller.submit`, crash dedupe.
-Benchmarks: scratch scripts loop_run.py / per_graph.py (not kept). Not done: FFT computed in a
-worker (46 ms every 2 s), asynchronous stop of poller/NTP on disconnect. Not checked: dependency
-CVEs (pip-audit refused here). 200 tests. Next release: 4.5.5.
+Benchmarks: scratch scripts loop_run.py / per_graph.py (not kept). Then: FFT in a thread
+(`fft_computed` signal), async poller release (`request_stop`/`abort_read`, `_closing` keeps the
+blocking path on exit), NTP stop not joined, packaged Python 3.14.10 everywhere with pinned SHA-256
+(build_package.PY_EMBED_SHA256, build_unix.PY_SHA256), CI on 3.14; OSV clean 24/11. Suite passes on
+3.12 and 3.14, compiles on 3.10. 202 tests. FIRST build on 3.14 = watch the release workflow (Windows
+pip wheels, macOS/Linux standalone). Next release: 4.5.5.
 
 **Released as v4.5.4 (23/11 evening):** after the MM3 author's side-by-side screenshots
 (figures agreed, look did not): axial graph draws only the regression speed vs its median;
@@ -86,7 +89,7 @@ ASCOM through the 10Micron driver 1.7.2 shared with NINA; GUI of 4.4.11 and
 5. Pre-existing: `check_subprocesses.py` flags `reporting.py:218` (kit file).
 
 **How to work:**
-- Tests: `QT_QPA_PLATFORM=offscreen python -m pytest -q tests` (196 pass).
+- Tests: `QT_QPA_PLATFORM=offscreen python -m pytest -q tests` (202 pass).
 - Code must compile on Python 3.10 (the MM3 author runs from source).
 - Manuals: `cd docs/manuel && python compiler.py` (pdflatex), commit the
   three PDFs with the .tex.

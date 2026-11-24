@@ -47,8 +47,16 @@ NOM_TECHNIQUE = KIT['nom_technique']
 NOM_AFFICHE = KIT.get('nom_affiche', NOM)
 POINT_ENTREE = KIT['point_entree']
 
-PY_VERSION = '3.12.14'
-PY_BUILD = '20260901'
+PY_VERSION = '3.14.10'      # same as the Windows package (build_package.py)
+PY_BUILD = '20261110'
+# SHA-256 of each archive, from the SHA256SUMS of that python-build-standalone
+# release: the interpreter shipped is checked before it is unpacked.
+PY_SHA256 = {
+    'aarch64-apple-darwin': '42031ed5f0d38777335252c8c77d64708c8010dd67c128246bdec25000672666',
+    'x86_64-apple-darwin': 'f6c82fcf867b4aaadd373ac97699ad95fbb9c96f9ecf9b25775943aa5458b87f',
+    'aarch64-unknown-linux-gnu': 'e59f83159984a55e719bb3805a0b2b5b281f645769222218084b78b92eedc07f',
+    'x86_64-unknown-linux-gnu': '3fe0d7c0538eb5d190c34582992d26230532551355cbd789fabc6591621cfc07',
+}
 DIST = ROOT / 'dist'
 PKG = DIST / NOM
 CACHE = ROOT / '.build_cache'
@@ -115,6 +123,16 @@ def step_python():
     url = (f'https://github.com/astral-sh/python-build-standalone/releases/'
            f'download/{PY_BUILD}/{nom}')
     archive = fetch(url, CACHE / nom)
+    import hashlib
+    h = hashlib.sha256()
+    with open(archive, 'rb') as f:
+        for bloc in iter(lambda: f.read(1 << 20), b''):
+            h.update(bloc)
+    attendue = PY_SHA256.get(cible)
+    if h.hexdigest() != attendue:
+        archive.unlink(missing_ok=True)
+        raise SystemExit(f'Empreinte inattendue pour {nom} : {h.hexdigest()}')
+    log(f'empreinte verifiee : {nom}')
 
     cible_dir = PKG / 'python'
     if cible_dir.exists():

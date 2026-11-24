@@ -55,6 +55,18 @@ Celeron/N100 NUC is 1.5 to 3 times slower.
 - Text from .log10m files escaped in the overview; desktop shortcut script in
   single-quoted PowerShell strings; infinite values from an ASCOM driver
   handled.
+- FFT spectra computed in a background thread (25 ms of frozen window every
+  2 s on a desktop CPU, 60-80 ms on a NUC).
+- Disconnecting no longer freezes the window while a driver is busy (up to
+  5.5 s for the poller, 5 s for the NTP client); a new connection waits for
+  the old thread to end.
+- Packaged Python 3.14.10 (Windows, macOS, Linux). Python 3.12 is
+  security-only and python.org stopped building its Windows embeddable zip at
+  3.12.10, so its later security fixes never reached the Windows package. The
+  downloaded interpreters are checked against pinned SHA-256 (python.org SBOM,
+  python-build-standalone SHA256SUMS). No known vulnerability (OSV, 24/11) in
+  the libraries shipped: PyQt6 6.9.1, Qt 6.9.2, numpy 2.5.5, requests 2.34.2,
+  urllib3 2.8.0, pyserial 3.5, ntplib 0.4.0, comtypes 1.5.0.
 
 ## 4.5.4 — 2026-11-23
 

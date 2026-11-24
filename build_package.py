@@ -51,9 +51,16 @@ DIST = ROOT / 'dist'
 PKG = DIST / NOM
 CACHE = ROOT / '.build_cache'
 
-PY_VERSION = '3.12.10'
+# 3.12 is security-only and python.org no longer builds its Windows
+# embeddable zip (3.12.10 was the last): its later security fixes never
+# reached the package. 3.14 is maintained with binaries; the whole test suite
+# passes on it with the wheels shipped (PyQt6 6.9.1 abi3, numpy 2.5.5).
+PY_VERSION = '3.14.10'
 PY_EMBED_URL = (f'https://www.python.org/ftp/python/{PY_VERSION}/'
                 f'python-{PY_VERSION}-embed-amd64.zip')
+# SHA-256 of that zip, from python.org's own SBOM (<zip>.spdx.json): the
+# interpreter shipped to every user is checked before it is unpacked.
+PY_EMBED_SHA256 = '90905e64a840557d8c1bc4f5b74db3d7ee85e3ffb217611cac1c7813acea4159'
 GET_PIP_URL = 'https://bootstrap.pypa.io/get-pip.py'
 
 # Ce qui entre dans le paquet est decrit explicitement plutot que copie en
@@ -112,10 +119,26 @@ def fetch(url, dest):
     return dest
 
 
+def verifier_empreinte(chemin, attendue):
+    """Refuse une archive dont l'empreinte n'est pas celle figee ici
+    (telechargement altere, miroir compromis, cache corrompu)."""
+    import hashlib
+    h = hashlib.sha256()
+    with open(chemin, 'rb') as f:
+        for bloc in iter(lambda: f.read(1 << 20), b''):
+            h.update(bloc)
+    if h.hexdigest() != attendue:
+        chemin.unlink(missing_ok=True)
+        raise SystemExit(f'Empreinte inattendue pour {chemin.name} : '
+                         f'{h.hexdigest()} au lieu de {attendue}')
+    log(f'empreinte verifiee : {chemin.name}')
+
+
 def step_python():
     """Deplie la distribution embeddable et lui rend l'acces a site-packages."""
     py_dir = PKG / 'python'
     zip_path = fetch(PY_EMBED_URL, CACHE / f'python-{PY_VERSION}-embed.zip')
+    verifier_empreinte(zip_path, PY_EMBED_SHA256)
     py_dir.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(zip_path) as z:
         z.extractall(py_dir)

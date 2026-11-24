@@ -1,4 +1,5 @@
 """Audit of 24/11/2026: freezes, long runs, small PCs."""
+from tests.test_feedback_4_x import window  # noqa: F401,E402  (fixture)
 import numpy as np
 
 from src.models.data_buffer import DataBuffer
@@ -60,3 +61,41 @@ def test_curves_drawn_at_two_points_per_pixel_and_dense_without_antialias():
     g.update_data(t[-200:], v[-200:], span_s=120)
     assert g._data_curve.curve.opts["antialias"] is True
     g.close()
+
+
+def test_fft_computed_off_the_gui_thread(window):
+    from PyQt6.QtWidgets import QApplication
+    w = window
+    p = w._processor
+    t0 = 1.9e9
+    for i in range(600):
+        p.ra_buffer.append(t0 + i, np.sin(i / 8.0))
+        p.dec_buffer.append(t0 + i, np.cos(i / 5.0))
+    w._show_fft()
+    w._update_fft()
+    w._fft_job.join(10)
+    for _ in range(5):
+        QApplication.processEvents()
+    x, y = w._fft_window._freq_ra.getData()
+    assert x is not None and len(x) > 10
+
+
+def test_disconnect_does_not_wait_for_a_busy_driver(window):
+    import time as _t
+    from src.core.poller import MountPoller
+    w = window
+
+    class Busy(MountPoller):
+        def run(self):
+            while self._running:
+                _t.sleep(0.05)
+            _t.sleep(3.0)                    # a driver call that will not return
+
+    p = Busy(connection=None, processor=None)
+    p._running = True
+    p.start()
+    a = _t.perf_counter()
+    w._release_poller(p)
+    assert _t.perf_counter() - a < 0.3
+    assert p in w._finishing_pollers
+    p.wait(5000)

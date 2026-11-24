@@ -49,9 +49,10 @@ class NTPClient:
     def stop(self):
         """Stop the NTP polling thread."""
         self._running = False
-        if self._thread:
-            self._thread.join(timeout=5.0)
-            self._thread = None
+        # Not joined: a query or a DNS lookup in flight (common offline)
+        # froze the window up to 5 s. The thread is a daemon, sleeps in
+        # 0.1 s steps and ends by itself after its current query.
+        self._thread = None
         logger.info("NTP client stopped")
 
     def _poll_loop(self):

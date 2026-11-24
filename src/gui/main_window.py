@@ -112,6 +112,7 @@ class MainWindow(QMainWindow):
     # queued signal. It used to call _on_seismic_data directly from that
     # thread, writing the .sei/.dat files the GUI thread was writing too.
     seismic_received = pyqtSignal(float, object)
+    fft_computed = pyqtSignal(object)        # spectra from the FFT thread
     update_progress = pyqtSignal(int)
     update_installed = pyqtSignal(bool, str)
 
@@ -189,6 +190,7 @@ class MainWindow(QMainWindow):
         # FFT timer (slower)
         self._fft_timer = QTimer()
         self._fft_timer.timeout.connect(self._update_fft)
+        self.fft_computed.connect(self._on_fft_computed)
         self._fft_timer.setInterval(2000)  # Every 2 seconds
 
         # Update check, in the background, at startup.
@@ -568,6 +570,17 @@ class MainWindow(QMainWindow):
         happens in _on_connect_result."""
         if self._connected or self._connecting:
             return
+        # The previous poller may still be ending (driver busy): never two
+        # threads on the same mount. Retried shortly, for 10 s at most.
+        busy = [p for p in self._finishing_pollers if p.isRunning()]
+        if busy:
+            tries = getattr(self, "_connect_waits", 0)
+            if tries < 20:
+                self._connect_waits = tries + 1
+                QTimer.singleShot(500, self._connect)
+                return
+            logger.warning("Previous poller still running; connecting anyway")
+        self._connect_waits = 0
 
         protocol = self._settings.get("mount_protocol")
 
@@ -650,13 +663,28 @@ class MainWindow(QMainWindow):
             self._poller.submit(fn, callback)
 
     def _release_poller(self, poller):
+        """End a poller without freezing the window: it is asked to stop,
+        kept until its thread ends, and its read cut after 1.5 s if a driver
+        holds it. On exit (closeEvent) it is waited for, as before."""
         if poller is None:
             return
-        if not poller.stop():
-            logger.warning("Poller thread still busy in the driver; kept until it ends")
-            self._finishing_pollers.append(poller)
-            poller.finished.connect(lambda p=poller: self._finishing_pollers.remove(p)
-                                    if p in self._finishing_pollers else None)
+        if getattr(self, "_closing", False):
+            if not poller.stop():
+                logger.warning("Poller thread still busy in the driver; kept until it ends")
+                self._keep_poller(poller)
+            return
+        poller.request_stop()
+        if poller.isFinished():
+            return
+        self._keep_poller(poller)
+        QTimer.singleShot(1500, poller.abort_read)
+
+    def _keep_poller(self, poller):
+        if poller in self._finishing_pollers:
+            return
+        self._finishing_pollers.append(poller)
+        poller.finished.connect(lambda p=poller: self._finishing_pollers.remove(p)
+                                if p in self._finishing_pollers else None)
 
     @pyqtSlot(bool)
     def _on_connect_result(self, ok: bool):
@@ -1230,41 +1258,64 @@ class MainWindow(QMainWindow):
         self._fft_timer.start()
 
     def _update_fft(self):
-        """Update FFT window with current data. Also logs FFT to file."""
-        fft_visible = self._fft_window and self._fft_window.isVisible()
+        """Every 2 s: spectra computed in a background thread, then shown
+        and logged by _on_fft_computed in this one.
+
+        The three spectra of 50,000 samples took 25 ms (desktop CPU) on the
+        GUI thread every 2 s, with or without the window; on a NUC, 60-80 ms
+        of frozen window each time. Only the copies of the buffers are made
+        here. A computation still running is not doubled."""
+        fft_visible = bool(self._fft_window and self._fft_window.isVisible())
         if not fft_visible and not self._logging_active:
             return
-
-        # On the real timestamps: the sampling rate is measured on the data
-        # (max(1, actual_frequency) forced 1 Hz on a 0.5 Hz poll), gaps are
-        # skipped, drift and dither steps removed (src/core/spectrum.py).
-        from ..core.spectrum import spectrum, regular_spectrum
-
-        def frequency(t):
-            if len(t) < 2:
-                return 0.0
-            d = np.diff(t)
-            d = d[d > 0]
-            return 1.0 / float(np.median(d)) if len(d) else 0.0
-
+        job = getattr(self, "_fft_job", None)
+        if job is not None and job.is_alive():
+            return
         ra_t, ra_data = self._processor.ra_buffer.get_arrays()
-        ra_freqs, ra_mags = spectrum(ra_t, ra_data) if len(ra_data) > 64 else (None, None)
         dec_t, dec_data = self._processor.dec_buffer.get_arrays()
-        dec_freqs, dec_mags = spectrum(dec_t, dec_data) if len(dec_data) > 64 else (None, None)
-        freq = frequency(ra_t)
-
         _, sei_data = self._processor.seismic_buffer.get_arrays()
         sei_rate = self._settings.get("seismometer_frequency_hz")
-        sei_freqs, sei_mags = (regular_spectrum(sei_data, sei_rate)
-                               if len(sei_data) > 64 else (None, None))
+        signal = self.fft_computed
 
-        if fft_visible:
+        def work():
+            # On the real timestamps: the sampling rate is measured on the
+            # data, gaps are skipped, drift and dither steps removed
+            # (src/core/spectrum.py).
+            from ..core.spectrum import spectrum, regular_spectrum
+            try:
+                d = np.diff(ra_t) if len(ra_t) > 1 else np.array([])
+                d = d[d > 0]
+                result = {
+                    "ra": spectrum(ra_t, ra_data) if len(ra_data) > 64 else (None, None),
+                    "dec": spectrum(dec_t, dec_data) if len(dec_data) > 64 else (None, None),
+                    "sei": (regular_spectrum(sei_data, sei_rate)
+                            if len(sei_data) > 64 else (None, None)),
+                    "freq": 1.0 / float(np.median(d)) if len(d) else 0.0,
+                    "sei_rate": sei_rate if len(sei_data) > 0 else None,
+                }
+            except Exception as e:
+                logger.warning(f"FFT not computed: {e}")
+                return
+            try:
+                signal.emit(result)
+            except RuntimeError:
+                pass                  # window closed meanwhile
+
+        import threading
+        self._fft_job = threading.Thread(target=work, daemon=True, name="FFT")
+        self._fft_job.start()
+
+    def _on_fft_computed(self, r):
+        (ra_freqs, ra_mags), (dec_freqs, dec_mags) = r["ra"], r["dec"]
+        sei_freqs, sei_mags = r["sei"]
+        freq = r["freq"]
+        if self._fft_window and self._fft_window.isVisible():
             self._fft_window.update_fft(
                 ra_freqs=ra_freqs, ra_mags=ra_mags,
                 dec_freqs=dec_freqs, dec_mags=dec_mags,
                 sei_freqs=sei_freqs, sei_mags=sei_mags,
                 ra_sample_rate=freq, dec_sample_rate=freq,
-                sei_sample_rate=sei_rate if len(sei_data) > 0 else None,
+                sei_sample_rate=r["sei_rate"],
             )
 
         # Log FFT data to .fft file
@@ -1274,7 +1325,8 @@ class MainWindow(QMainWindow):
             if dec_freqs is not None and len(dec_freqs) > 0:
                 self._file_logger.log_fft_snapshot("DEC", freq, dec_freqs, dec_mags)
             if sei_freqs is not None and len(sei_freqs) > 0:
-                self._file_logger.log_fft_snapshot("SEI", sei_rate, sei_freqs, sei_mags)
+                self._file_logger.log_fft_snapshot("SEI", self._settings.get(
+                    "seismometer_frequency_hz"), sei_freqs, sei_mags)
 
     # ── Logging ──────────────────────────────────────────────────
 
@@ -2970,6 +3022,7 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         """Handle window close: save settings, stop everything."""
+        self._closing = True        # pollers are waited for, not released
         # The alert box has no owner: closed by hand, or it would keep the
         # application alive after the main window.
         box = getattr(self, "_alert_box", None)
