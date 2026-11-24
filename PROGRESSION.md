@@ -2,6 +2,18 @@
 
 ## Resume note (2026-11-24)
 
+**Released as v4.5.7 (24/11):** remarks of the MM3 author on 4.5.6: FFT window
+*Analysed* duration (`fft_span_min`, 30 min default, same window for RA/DEC/seismometer,
+covered durations shown); graph dumps as MM3 (`dump_mode` full / parking / slewing all
+dump on filling, parking and slewing add their events; `_last_dump_time` reset by any
+dump); menus: File (connect, new files, export, open log, Settings, shortcut, quit),
+View (span, scale, FFT, Reset submenu), Language, Help; "Preferences" renamed Settings,
+no toolbar button; .log10m analysis withdrawn (parser, analyser, dialog removed) at the
+MM3 author's request. History rewritten on 24/11 (git filter-repo) to drop personal
+traces; backup mirror kept outside the repository. Open: log10m files of the MM3 author
+(embedded `>>> FILE` sections and `>S0`..`>S11` series) to look at; `>G`/`>H` blocks are
+high-entropy (encrypted or compressed), not decodable.
+
 **Released as v4.5.6 (24/11):** cold start at the observatory left the window minimised
 and unusable: the 4.5.0 copy started by the logon task had found an update and its modal
 dialog, owned by the main window, stayed hidden. The update offer is now modeless and
