@@ -39,6 +39,32 @@ def _meaningful_periods(freqs):
     return positive & (freqs >= 1.0 / longest)
 
 
+def _period_curve(freqs, mags, n_bins=3000):
+    """Period-domain curve, in INCREASING period order and already thinned.
+
+    1/f runs backwards and its points are very uneven: thousands of bins
+    below 10 s, a handful above 300 s. pyqtgraph's clip-to-view expects
+    increasing x, and its peak downsampling takes chunks of equal COUNT,
+    each drawn as a vertical min-max bar: at long periods one chunk spread
+    over a hundred seconds, hence the vertical lines and sawtooth reported
+    by N. de Hilster on a 30 min spectrum. Here the thinning is done on
+    bins of equal width in log(period): the peak of each bin is kept, and
+    the sparse long periods stay as they are."""
+    freqs = np.asarray(freqs, dtype=np.float64)
+    mags = np.asarray(mags, dtype=np.float64)
+    mask = _meaningful_periods(freqs)
+    p = 1.0 / freqs[mask][::-1]
+    m = mags[mask][::-1]
+    if len(p) <= n_bins:
+        return p, m
+    edges = np.geomspace(p[0], p[-1] * (1 + 1e-12), n_bins + 1)
+    idx = np.searchsorted(edges, p, side='right') - 1
+    starts = np.flatnonzero(np.r_[True, idx[1:] != idx[:-1]])
+    keep = np.array([s + int(np.argmax(c)) for s, c in
+                     zip(starts, np.split(m, starts[1:]))], dtype=int)
+    return p[keep], m[keep]
+
+
 class FFTWindow(QWidget):
     """Standalone FFT analysis window."""
 
@@ -97,9 +123,11 @@ class FFTWindow(QWidget):
         self._period_seismic = self._seismic_axis(self._period_plot)
 
         # Thousands of bins every 2 s: draw only what fits on screen.
+        # Only the frequency axis is evenly spaced; the period curve is
+        # thinned by _period_curve (see there).
+        self._freq_plot.setDownsampling(auto=True, mode='peak')
+        self._freq_plot.setClipToView(True)
         for plot in (self._freq_plot, self._period_plot):
-            plot.setDownsampling(auto=True, mode='peak')
-            plot.setClipToView(True)
             # The vertical scale follows what is shown horizontally, so a
             # zoom on a few peaks rescales to them.
             plot.getViewBox().setAutoVisible(y=True)
@@ -205,19 +233,15 @@ class FFTWindow(QWidget):
         """Update FFT graphs with new data."""
         if ra_freqs is not None and len(ra_freqs) > 0:
             self._freq_ra.setData(ra_freqs, ra_mags)
-            # Period domain: period = 1/freq (skip freq=0)
-            mask = _meaningful_periods(ra_freqs)
-            self._period_ra.setData(1.0 / ra_freqs[mask], ra_mags[mask])
+            self._period_ra.setData(*_period_curve(ra_freqs, ra_mags))
 
         if dec_freqs is not None and len(dec_freqs) > 0:
             self._freq_dec.setData(dec_freqs, dec_mags)
-            mask = _meaningful_periods(dec_freqs)
-            self._period_dec.setData(1.0 / dec_freqs[mask], dec_mags[mask])
+            self._period_dec.setData(*_period_curve(dec_freqs, dec_mags))
 
         if sei_freqs is not None and len(sei_freqs) > 0:
             self._freq_seismic.setData(sei_freqs, sei_mags)
-            mask = _meaningful_periods(sei_freqs)
-            self._period_seismic.setData(1.0 / sei_freqs[mask], sei_mags[mask])
+            self._period_seismic.setData(*_period_curve(sei_freqs, sei_mags))
 
         if self._full_x:
             self._fit_x()

@@ -115,3 +115,40 @@ def test_fft_span_same_window_for_all_series(window, monkeypatch):
     QApplication.processEvents()
     d = got["durations"]
     assert abs(d["ra"] - 600) < 2 and abs(d["sei"] - 600) < 2
+
+
+def test_period_curve_increasing_and_thinned_by_period():
+    """Vertical bars and sawtooth in the period domain (N. de Hilster,
+    24/11/2026, 30 min at 2 Hz): 1/f was handed to pyqtgraph backwards
+    and thinned by equal point counts."""
+    import numpy as np
+    from src.core.spectrum import spectrum
+    from src.gui.fft_window import _period_curve
+    t = np.arange(0, 1740, 0.5)
+    v = 0.3 * np.sin(2 * np.pi * t / 480) + 0.02 * np.random.default_rng(1).normal(size=len(t))
+    f, a = spectrum(t, v)
+    p, m = _period_curve(f, a)
+    assert np.all(np.diff(p) > 0)
+    assert len(p) <= 3000
+    assert abs(p[np.argmax(m)] - 480) < 25
+    # the long periods are kept point by point, not merged into bars
+    long_f = f[(f > 0) & (1 / f > 300) & (1 / f <= p[-1])]
+    assert np.sum(p > 300) == len(long_f)
+    # seismometer-sized spectrum: thinned, peak preserved
+    f2 = np.linspace(1e-4, 10, 131072)
+    a2 = np.zeros_like(f2); a2[5000] = 1.0
+    p2, m2 = _period_curve(f2, a2)
+    assert len(p2) <= 3000 and m2.max() == 1.0
+
+
+def test_period_plot_not_auto_downsampled(window):
+    from src.gui.fft_window import FFTWindow
+    w = FFTWindow()
+    for c in (w._period_ra, w._period_dec):
+        assert not c.opts.get('autoDownsample')
+        assert not c.opts.get('clipToView')
+    assert w._freq_ra.opts.get('autoDownsample')
+    from PyQt6.QtWidgets import QApplication
+    w.close()
+    w.deleteLater()
+    QApplication.processEvents()

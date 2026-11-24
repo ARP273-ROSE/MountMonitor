@@ -6,6 +6,14 @@ behaviour changes, the patch number when only a defect is fixed.
 
 Figures quoted below were measured on real sessions, not estimated.
 
+## Unreleased
+
+- FFT window, period domain: vertical bars and a sawtooth on long spectra
+  (30 min at 2 Hz). The periods were handed to the plot in decreasing order and
+  thinned by equal point counts, though they are very uneven (thousands below
+  10 s, a handful above 300 s). They are now in increasing order, and thinned
+  on bins of equal width in log(period), keeping each bin's peak.
+
 ## 4.5.7 — 2026-11-24
 
 Remarks of the MM3 author on 4.5.6, and menus tidied.
