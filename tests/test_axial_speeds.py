@@ -64,11 +64,15 @@ def test_axial_graph_draws_both_axes_on_one_scale():
     g.update_data(ra=ra, dec=dec, span_s=120)
     x, y = g._ra_reg_curve.getData()
     assert abs(np.nanmedian(y)) < 0.01           # drawn relative to its reference
-    assert "RA 15.04" in g._reg_label.text and "median 15.04" in g._reg_label.text
+    assert "RA 15.04" in g._ra_label.text and "median 15.04" in g._ra_label.text
     (x0, x1), (y0, y1) = g._plot.getViewBox().viewRange()
     assert (x0, x1) == (-120, 0) and y1 - y0 < 0.5  # scaled on the regression
     g.update_data(ra=ra, dec=dec, span_s=120, mode="displacement", dec_deg=60)
-    assert "sky" in g._reg_label.text
+    assert "sky" in g._ra_label.text
+    assert g._dec_label.text.startswith("DEC") and g._dec_label.color != g._ra_label.color
+    assert "DISPLACEMENT" in g._plot.getPlotItem().titleLabel.text.upper() or \
+        "VERPLAATSING" in g._plot.getPlotItem().titleLabel.text.upper() or \
+        "DÉPLACEMENT" in g._plot.getPlotItem().titleLabel.text.upper()
     x, y = g._ra_reg_curve.getData()
     assert x[0] >= -120.5 and abs(np.mean(y)) < 1e-9   # integrated over the view, around its mean
     g.reset()

@@ -401,6 +401,10 @@ TX = {
         "en": "Axial position monitoring mode",
         "fr": "Mode de surveillance position axiale",
         "nl": "Bewakingsmodus voor de aspositie"},
+    "tt_axial_ascom": {
+        "en": "Not available in pure ASCOM: the axis angles are 10Micron commands. Choose LX200, or tick \"10Micron commands through the ASCOM driver\".",
+        "fr": "Indisponible en ASCOM pur : les angles des axes sont des commandes 10Micron. Choisir LX200, ou cocher « Commandes 10Micron via le pilote ASCOM ».",
+        "nl": "Niet beschikbaar in zuiver ASCOM: de ashoeken zijn 10Micron-commando's. Kies LX200, of vink \"10Micron-commando's via de ASCOM-driver\" aan."},
     "tt_reset_mode": {
         "en": "When to automatically reset buffers",
         "fr": "Quand réinitialiser automatiquement les tampons",
@@ -691,13 +695,13 @@ TX = {
                          "nl": "Controle van de montering:"},
     "about_texte": {
         "en": "<h2>MountMonitor {v}</h2><p>Real-time telescope mount monitoring.</p>"
-              "<p>Successor of the original Java MountMonitor v3.37<br>by Nicolàs de Hilster "
+              "<p>Successor of the original Java MountMonitor v3.40<br>by Nicolàs de Hilster "
               "(2018-2021), developed jointly with him.</p><p>Python/PyQt6/pyqtgraph — © ARP273-ROSE, MIT License</p>",
         "fr": "<h2>MountMonitor {v}</h2><p>Surveillance de monture télescope en temps réel.</p>"
-              "<p>Successeur du MountMonitor v3.37 original (Java)<br>de Nicolàs de "
+              "<p>Successeur du MountMonitor v3.40 original (Java)<br>de Nicolàs de "
               "Hilster (2018-2021), développé avec lui.</p><p>Python/PyQt6/pyqtgraph — © ARP273-ROSE, licence MIT</p>",
         "nl": "<h2>MountMonitor {v}</h2><p>Realtime bewaking van een telescoopmontering.</p>"
-              "<p>Opvolger van het oorspronkelijke Java-programma MountMonitor v3.37<br>"
+              "<p>Opvolger van het oorspronkelijke Java-programma MountMonitor v3.40<br>"
               "van Nicolàs de Hilster (2018-2021), samen met hem ontwikkeld.</p><p>Python/PyQt6/pyqtgraph — © ARP273-ROSE, "
               "MIT-licentie</p>"},
     "menu_create_shortcut": {"en": "Create Desktop Shortcut", "fr": "Créer raccourci bureau", "nl": "Snelkoppeling maken"},
@@ -981,6 +985,10 @@ TX = {
 },
     "axial_disp_label": {"en": "Displacement", "fr": "Déplacement",
                          "nl": "Verplaatsing"},
+    "axial_velocity_title": {"en": "AXIAL VELOCITY", "fr": "VITESSE AXIALE",
+                             "nl": "AXIALE SNELHEID"},
+    "axial_displacement_title": {"en": "AXIAL DISPLACEMENT", "fr": "DÉPLACEMENT AXIAL",
+                                 "nl": "AXIALE VERPLAATSING"},
     "axial_dev_label": {"en": "Speed - reference", "fr": "Vitesse - référence",
                         "nl": "Snelheid - referentie"},
     "speed_label": {"en": "Speed", "fr": "Vitesse", "nl": "Snelheid"},
@@ -1106,7 +1114,7 @@ TX = {
 
 # Supported languages, in the order they appear in Preferences.
 # Dutch is there because MountMonitor started as a Dutch program: the original
-# v3.37 is by Nicolàs de Hilster (Starmountain Survey & Consultancy BV).
+# v3.40 is by Nicolàs de Hilster (Starmountain Survey & Consultancy BV).
 LANGUAGES = {
     'en': "English",
     'fr': "Français",

@@ -558,7 +558,8 @@ wind on the shelter), not to the mount.
 Optional (Preferences, Processing, \emph{Axial mode}). It shows the speed or
 the displacement of the mount's axes themselves, read with \texttt{:GaXa\#}
 and \texttt{:GaXb\#} on a 10Micron (LX200, or ASCOM with the 10Micron
-commands), computed as MountMonitor~3 does. \emph{Speed}: for each sample,
+commands; greyed out in pure ASCOM), computed as MountMonitor~3 does. The
+title names the mode chosen, and the figures of each axis are in its curve's colour. \emph{Speed}: for each sample,
 the slope of a straight line fitted to the axis angle over the running range,
 drawn relative to its median; the strip gives the speed, the median and the
 difference, in \arcsec/s (about 15.04 on the RA axis at the sidereal rate, 0
@@ -618,7 +619,8 @@ between 2 and 15 minutes is a worm periodic error; nothing sharp is good.
 
 \textbf{Edit > Preferences} (\texttt{Ctrl+,}) opens four tabs. Nothing is
 applied before \emph{OK}; \emph{Cancel} changes nothing. Fields that do not
-apply to the chosen protocol are greyed out.
+apply to the chosen protocol are greyed out. The dialog reopens on the last
+tab visited.
 
 \needspace{0.6\textheight}
 \section{General tab}
@@ -1034,11 +1036,11 @@ The detail of every change, with the measured figures behind it, is in the
 
 \section{Origin}
 
-MountMonitor is an independent Python and PyQt6 rewrite of MountMonitor v3.37
+MountMonitor is an independent Python and PyQt6 rewrite of MountMonitor v3.40
 by \textbf{Nicolàs de Hilster} (2018--2021), written in Java. No code from the
 original program appears in it. The MIT licence of the present program covers
 this rewrite only; the original work remains subject to its author's terms.
 
 With Nicolàs de Hilster's agreement, version 4.0 takes over from it: the
-numbering continues from v3.37, and the program is now developed jointly
+numbering continues from v3.40, and the program is now developed jointly
 with him.

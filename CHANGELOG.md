@@ -6,6 +6,25 @@ behaviour changes, the patch number when only a defect is fixed.
 
 Figures quoted below were measured on real sessions, not estimated.
 
+## Unreleased
+
+Remarks of the MountMonitor 3 author on 4.5.4.
+
+- Axial graph titled after the mode chosen ("AXIAL VELOCITY" or "AXIAL
+  DISPLACEMENT"); the figures of each axis in the strip are in its curve's colour.
+- Axial mode greyed out in pure ASCOM (the axis angles are 10Micron commands),
+  and ignored there if it was chosen before switching protocol: no polling, no
+  empty graph. The graph is also shown or hidden at once when the mode changes.
+- Preferences reopen on the last tab visited.
+- The time graph waits for the slew and its settling delay, as RA and DEC do.
+- Mouse wheel and drag no longer zoom the graphs (a touchpad scroll zoomed them
+  until the next refresh).
+- Graphs dumped automatically at the start of a slew or at parking keep their
+  colours (the curve had just been greyed).
+- Windows installer in English, French or Dutch after the language of Windows
+  (English otherwise); it was French only.
+- MountMonitor 3 is credited as v3.40, its last version.
+
 ## 4.5.4 — 2026-11-23
 
 ### Changed

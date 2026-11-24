@@ -456,9 +456,10 @@ class MainWindow(QMainWindow):
         graph_splitter.addWidget(self._dec_graph)
         graph_splitter.addWidget(self._time_graph)
 
-        # Show axial graph if enabled
-        if self._settings.get("axial_mode") != "off":
-            graph_splitter.addWidget(self._axial_graph)
+        # Axial graph: always in the splitter, shown when the mode is on
+        # (hidden when the protocol cannot read the axes, see _axial_mode)
+        graph_splitter.addWidget(self._axial_graph)
+        self._axial_graph.setVisible(self._axial_mode() != "off")
 
         # Show seismic graph only if enabled
         if self._settings.get("seismometer_enabled") or self._sim_mode in ("all", "seismometer"):
@@ -616,7 +617,7 @@ class MainWindow(QMainWindow):
             self._connection, self._processor,
             frequency_hz=self._settings.get("polling_frequency_hz"),
         )
-        self._poller.set_axial_enabled(self._settings.get("axial_mode") != "off")
+        self._poller.set_axial_enabled(self._axial_mode() != "off")
         self._poller.set_log_tracking_only(self._settings.get("log_mode") == "tracking_only")
         self._poller.set_delay_after_slew(self._settings.get("delay_after_slew_seconds"))
         self._poller.connect_result.connect(self._on_connect_result)
@@ -1154,7 +1155,7 @@ class MainWindow(QMainWindow):
 
         # Axial graph: speeds computed from the axis angles over the
         # visible span plus one running range (the regression needs it).
-        if self._settings.get("axial_mode") != "off":
+        if self._axial_mode() != "off":
             rng = float(self._settings.get("running_range_seconds") or 60)
             args = {}
             for name, b, dflt in (("ra", self._processor.ra_axis_buffer, RA_DEFAULT_SPEED),
@@ -1165,7 +1166,7 @@ class MainWindow(QMainWindow):
                     s["t"] = s["t"] + (float(t[0]) - float(t[-1]))
                 args[name] = s
             if args["ra"] or args["dec"]:
-                mode = self._settings.get("axial_mode")
+                mode = self._axial_mode()
                 shift = (rng if mode == "displacement" else rng / 2.0) if correct else 0.0
                 self._axial_graph.update_data(
                     span_s=span, mode=mode, shift_s=shift,
@@ -1834,6 +1835,19 @@ class MainWindow(QMainWindow):
                 int(g("seismometer_offset") or 0), int(g("seismometer_range") or 2000),
                 int(g("seismometer_baud") or 9600))
 
+    def _axial_mode(self) -> str:
+        """The axial mode in force: "off" when the axes cannot be read.
+
+        The axis angles come from 10Micron commands (:GaXa#, :GaXb#). In
+        pure ASCOM they are never sent, so the mode chosen before switching
+        to ASCOM must not poll nor show an empty graph."""
+        mode = self._settings.get("axial_mode") or "off"
+        if (self._settings.get("mount_protocol") == "ascom"
+                and not self._settings.get("ascom_10micron_commands")
+                and self._sim_mode == "none"):
+            return "off"
+        return mode
+
     def _apply_seismometer(self):
         """Start, restart or stop the seismometer to match the preferences,
         at once, and show or hide its graph.
@@ -1965,6 +1979,10 @@ class MainWindow(QMainWindow):
                        self._seismic_graph, self._axial_graph):
             plot = graph._plot
             plot.setMenuEnabled(False)
+            # No wheel or drag zoom: the next refresh undid it a moment
+            # later (a touchpad scroll zoomed the graphs for an instant).
+            # The span is set from the menus.
+            plot.setMouseEnabled(x=False, y=False)
             plot.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
             plot.customContextMenuRequested.connect(
                 lambda pos, g=graph: self._graph_menu(g, pos))
@@ -2193,11 +2211,13 @@ class MainWindow(QMainWindow):
 
         if self._poller:
             self._poller.set_frequency(self._settings.get("polling_frequency_hz"))
-            self._poller.set_axial_enabled(self._settings.get("axial_mode") != "off")
+            self._poller.set_axial_enabled(self._axial_mode() != "off")
             self._poller.set_log_tracking_only(self._settings.get("log_mode") == "tracking_only")
             # Was only read at connection: a delay changed while connected
             # was ignored until the next connection.
             self._poller.set_delay_after_slew(self._settings.get("delay_after_slew_seconds"))
+        self._axial_graph.setVisible(self._axial_mode() != "off")
+        self._expand_graphs()
 
         if self._ntp_client and self._settings.get("ntp_enabled"):
             self._ntp_client.set_server(self._settings.get("ntp_server"))
@@ -2260,7 +2280,7 @@ class MainWindow(QMainWindow):
         self._dec_graph.export_to_image("DEC_graphs")
         self._time_graph.export_to_image("Time_graphs")
         self._seismic_graph.export_to_image("Seismic_graphs")
-        if self._settings.get("axial_mode") != "off":
+        if self._axial_mode() != "off":
             self._axial_graph.export_to_image("Axial_graphs")
         if self._fft_window and self._fft_window.isVisible():
             self._fft_window.export_to_image("FFT_graphs")

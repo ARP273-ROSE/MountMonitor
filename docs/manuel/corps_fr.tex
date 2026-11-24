@@ -579,7 +579,8 @@ une vibration (un pas, une porte, le vent sur l'abri), pas la monture.
 Optionnel (Préférences, Traitement, \emph{Mode axial}). Il montre la vitesse
 ou le déplacement des axes de la monture eux-mêmes, lus par
 \texttt{:GaXa\#} et \texttt{:GaXb\#} sur une 10Micron (LX200, ou ASCOM avec les
-commandes 10Micron), calculés comme MountMonitor~3. \emph{Vitesse} : pour
+commandes 10Micron ; grisé en ASCOM pur), calculés comme MountMonitor~3. Le
+titre nomme le mode choisi, et les chiffres de chaque axe sont de la couleur de sa courbe. \emph{Vitesse} : pour
 chaque mesure, la pente d'une droite ajustée sur l'angle de l'axe pendant la
 plage glissante, tracée par rapport à sa médiane ; le bandeau donne la
 vitesse, la médiane et l'écart, en \arcsec/s (environ 15,04 sur l'axe AD au
@@ -643,7 +644,8 @@ c'est bien.
 
 \textbf{Édition > Préférences} (\texttt{Ctrl+,}) ouvre quatre onglets. Rien
 n'est appliqué avant \emph{OK} ; \emph{Annuler} ne change rien. Les champs qui
-ne concernent pas le protocole choisi sont grisés.
+ne concernent pas le protocole choisi sont grisés. La fenêtre rouvre sur le
+dernier onglet consulté.
 
 \needspace{0.6\textheight}
 \section{Onglet Général}
@@ -1075,11 +1077,11 @@ trouve dans le fichier \texttt{CHANGELOG.md} livré avec le programme.
 \section{Origine}
 
 MountMonitor est une réécriture indépendante en Python et PyQt6 du
-MountMonitor v3.37 de \textbf{Nicolàs de Hilster} (2018--2021), écrit en Java.
+MountMonitor v3.40 de \textbf{Nicolàs de Hilster} (2018--2021), écrit en Java.
 Aucun code du programme d'origine n'y figure. La licence MIT du présent
 programme ne couvre que cette réécriture ; l'\oe uvre originale reste soumise
 aux conditions de son auteur.
 
 Avec l'accord de Nicolàs de Hilster, la version 4.0 en prend la suite : la
-numérotation continue celle de la v3.37, et le programme est désormais
+numérotation continue celle de la v3.40, et le programme est désormais
 développé avec lui.

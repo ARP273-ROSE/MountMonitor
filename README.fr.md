@@ -4,7 +4,7 @@
 
 **Surveillance en temps réel d'une monture de télescope pour l'astrophotographie : écarts en
 ascension droite et en déclinaison, exactitude des horloges, vibrations, analyse de Fourier et
-rapport de nuit. MountMonitor 4 succède à MountMonitor v3.37 (Java) de Nicolàs de Hilster : réécrit en
+rapport de nuit. MountMonitor 4 succède à MountMonitor v3.40 (Java) de Nicolàs de Hilster : réécrit en
 Python/PyQt6, il est désormais développé avec son auteur.
 Interface en anglais, français et néerlandais ; Windows, macOS et Linux.**
 

@@ -754,6 +754,12 @@ class TrackingGraph(QWidget):
         dir_path.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         filename = dir_path / f"{self._title}_{timestamp}.png"
+        # The automatic dumps happen as the slew starts or the mount parks,
+        # when the curve has just been greyed: the image is of the tracking
+        # that ended, so it is drawn in its colours.
+        greyed = not self._tracking
+        if greyed:
+            self.set_tracking(True)
         try:
             export = pg.exporters.ImageExporter(self._plot.plotItem)
             export.parameters()['width'] = 1600
@@ -761,6 +767,9 @@ class TrackingGraph(QWidget):
             logger.info(f"Graph exported: {filename}")
         except Exception as e:
             logger.warning(f"Failed to export graph: {e}")
+        finally:
+            if greyed:
+                self.set_tracking(False)
 
     def _update_time_fixes(self, t0: float, rel_times: np.ndarray,
                            mount_times: list = None):
@@ -1177,7 +1186,8 @@ class AxialGraph(QWidget):
         self._right_axis = align_axes(self._plot)
         self._plot.setBackground(Colors.BG_GRAPH)
         self._plot.showGrid(x=False, y=True, alpha=0.1)
-        self._plot.setTitle(T("axial_title"), color='#aaaaaa', size='11pt')
+        self._mode = None
+        self._set_title("velocity")
         self._plot.setLabel('left', T('axial_dev_label'), units='"/s',
                             color=Colors.TEXT_SECONDARY.name())
         self._plot.setLabel('bottom', T('time_label'), units='s',
@@ -1204,20 +1214,29 @@ class AxialGraph(QWidget):
 
         # Watermark
         self._watermark = pg.TextItem(
-            text=T("axial_title").split("—")[0].strip(), color=Colors.TEXT_MUTED, anchor=(0.5, 0.5)
+            text="AXIAL", color=Colors.TEXT_MUTED, anchor=(0.5, 0.5)
         )
         self._watermark.setFont(QFont('Arial', 24, QFont.Weight.Bold))
         self._watermark.setOpacity(0.15)
         self._plot.addItem(self._watermark)
         self._watermark.setVisible(False)   # the title above says it already
 
-        # Regression annotation
-        self._reg_label = _Slot(self._header, Colors.GRAPH_SPEED_REG)
-        self._reg_label.setFont(QFont('Source Code Pro', 9))
+        # Figures in the strip, each axis in its curve's colour
+        self._ra_label = _Slot(self._header, Colors.GRAPH_RA)
+        self._dec_label = _Slot(self._header, Colors.GRAPH_DEC)
 
         self._plot.getViewBox().disableAutoRange()
         layout.addWidget(self._header)
         layout.addWidget(self._plot)
+
+    def _set_title(self, mode):
+        """Title after the chosen mode only: AXIAL VELOCITY or AXIAL
+        DISPLACEMENT (the old "Speed / Displacement" left it to guess)."""
+        if mode == self._mode:
+            return
+        self._mode = mode
+        key = "axial_displacement_title" if mode == "displacement" else "axial_velocity_title"
+        self._plot.setTitle(T(key), color='#aaaaaa', size='11pt')
 
     def update_data(self, ra=None, dec=None, span_s=None, mode="velocity",
                     dec_deg=0.0, shift_s=0.0):
@@ -1238,6 +1257,7 @@ class AxialGraph(QWidget):
                   self._dec_raw_curve, self._dec_avg_curve):
             c.setData([], [])
         disp = mode == "displacement"
+        self._set_title(mode)
         self._plot.setLabel('left', T('axial_disp_label' if disp else 'axial_dev_label'),
                             units='"' if disp else '"/s',
                             color=Colors.TEXT_SECONDARY.name())
@@ -1249,9 +1269,11 @@ class AxialGraph(QWidget):
         x0 = -float(span_s) if span_s else min(float(s["t"][0]) for s in (ra, dec)
                                                 if s and len(s["t"]) > 1)
         cos_d = abs(np.cos(np.radians(dec_deg or 0.0)))
-        parts, vals = [], []
-        for name, s, curve, sky in (("RA", ra, self._ra_reg_curve, cos_d),
-                                    ("DEC", dec, self._dec_reg_curve, 1.0)):
+        vals = []
+        for name, s, curve, sky, label in (
+                ("RA", ra, self._ra_reg_curve, cos_d, self._ra_label),
+                ("DEC", dec, self._dec_reg_curve, 1.0, self._dec_label)):
+            label.setText("")
             if not s or len(s["t"]) < 30:      # MM3: not drawn below 30 points
                 curve.setData([], [])
                 continue
@@ -1270,17 +1292,17 @@ class AxialGraph(QWidget):
                 avg = float(np.mean(y[ok]))
                 y = y - avg
                 pp = float(np.ptp(y[ok]))
-                parts.append(f'{name} {y[ok][-1] + avg:+.2f}" = avg {avg:+.2f}" '
+                figures = (f'{name} {y[ok][-1] + avg:+.2f}" = avg {avg:+.2f}" '
                              f'{y[ok][-1]:+.2f}" ({pp:.2f}" p-p, {pp * sky:.2f}" sky)')
             else:
                 y = s["reg"] - ref
                 ok = ~np.isnan(y)
-                parts.append(f'{name} {s["reg"][ok][-1]:.4f}"/s = median {ref:.4f} '
+                figures = (f'{name} {s["reg"][ok][-1]:.4f}"/s = median {ref:.4f} '
                              f'{y[ok][-1]:+.4f}')
+            label.setText(figures)        # figures and units, no words to translate
             curve.setData(t[ok], y[ok])
             vis = ok & (t >= x0) & (t <= x1)
             vals.append(y[vis])
-        self._reg_label.setText("  ".join(parts))
         v = np.concatenate(vals) if vals else np.array([])
         # Symmetric about 0 (the median, or the mean of the displacement),
         # 1.2 times the farthest point, as MM3: a spike does not off-centre it.
@@ -1314,3 +1336,5 @@ class AxialGraph(QWidget):
                       self._ra_avg_curve, self._dec_avg_curve,
                       self._ra_reg_curve, self._dec_reg_curve]:
             curve.setData([], [])
+        self._ra_label.setText("")
+        self._dec_label.setText("")

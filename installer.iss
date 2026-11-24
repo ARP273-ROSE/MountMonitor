@@ -1,4 +1,4 @@
-; ---------------------------------------------------------------------------
+﻿; ---------------------------------------------------------------------------
 ; Installeur Windows — gabarit commun du kit.
 ;
 ; Rien ici n'est propre a une application : toutes les valeurs arrivent en
@@ -71,7 +71,10 @@ SolidCompression=yes
 InternalCompressLevel=max
 
 WizardStyle=modern
+; Language of Windows (English, French, Dutch), English otherwise: the
+; first entry of [Languages] is the fallback.
 ShowLanguageDialog=no
+LanguageDetectionMethod=uilanguage
 AllowNoIcons=yes
 ; Windows 10 1809 minimum, impose par Qt 6.11.
 MinVersion=10.0.17763
@@ -86,11 +89,30 @@ CloseApplications=yes
 RestartApplications=no
 
 [Languages]
+Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "french"; MessagesFile: "compiler:Languages\French.isl"
+Name: "dutch"; MessagesFile: "compiler:Languages\Dutch.isl"
+
+[CustomMessages]
+english.DesktopIcon=Create a desktop shortcut
+english.Shortcuts=Shortcuts:
+english.Uninstall=Uninstall
+english.Start=Start
+english.DataKept=Uninstallation complete.%n%nYour data has been kept in:%n%1%n%nIf you reinstall this application you will find it as it was. To erase everything, delete this folder by hand.
+french.DesktopIcon=Créer un raccourci sur le Bureau
+french.Shortcuts=Raccourcis :
+french.Uninstall=Désinstaller
+french.Start=Démarrer
+french.DataKept=La désinstallation est terminée.%n%nVos données ont été conservées dans :%n%1%n%nSi vous réinstallez cette application, vous les retrouverez telles quelles. Pour tout effacer, supprimez ce dossier à la main.
+dutch.DesktopIcon=Snelkoppeling op het bureaublad maken
+dutch.Shortcuts=Snelkoppelingen:
+dutch.Uninstall=Verwijderen
+dutch.Start=Starten
+dutch.DataKept=Het verwijderen is voltooid.%n%nUw gegevens zijn bewaard in:%n%1%n%nAls u deze toepassing opnieuw installeert, vindt u ze ongewijzigd terug. Om alles te wissen, verwijdert u deze map handmatig.
 
 [Tasks]
-Name: "desktopicon"; Description: "Créer un raccourci sur le Bureau"; \
-    GroupDescription: "Raccourcis :"; Flags: checkedonce
+Name: "desktopicon"; Description: "{cm:DesktopIcon}"; \
+    GroupDescription: "{cm:Shortcuts}"; Flags: checkedonce
 
 [InstallDelete]
 ; L'ancienne version est effacee avant la copie.
@@ -118,7 +140,7 @@ Name: "{group}\{#AppDisplayName}"; Filename: "{app}\python\pythonw.exe"; \
 ; l'erreur. Le guide d'installation y renvoie.
 Name: "{group}\Diagnostic"; Filename: "{app}\Diagnostic.bat"; \
     WorkingDir: "{app}"; IconFilename: "{app}\app\{#IconFile}"
-Name: "{group}\Désinstaller {#AppDisplayName}"; Filename: "{uninstallexe}"
+Name: "{group}\{cm:Uninstall} {#AppDisplayName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#AppDisplayName}"; Filename: "{app}\python\pythonw.exe"; \
     Parameters: """{app}\app\{#Entry}"""; \
     WorkingDir: "{app}\app"; IconFilename: "{app}\app\{#IconFile}"; \
@@ -127,7 +149,7 @@ Name: "{autodesktop}\{#AppDisplayName}"; Filename: "{app}\python\pythonw.exe"; \
 [Run]
 Filename: "{app}\python\pythonw.exe"; Parameters: """{app}\app\{#Entry}"""; \
     WorkingDir: "{app}\app"; \
-    Description: "Démarrer {#AppDisplayName}"; \
+    Description: "{cm:Start} {#AppDisplayName}"; \
     Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
@@ -148,13 +170,8 @@ begin
   begin
     DataDir := ExpandConstant('{localappdata}\{#AppName}');
     if DirExists(DataDir) then
-      // Le nom de l'application n'apparait pas dans ce message, et c'est
-      // volontaire : une apostrophe dans le nom (« Machine d'Anticythere »)
-      // terminerait la chaine Pascal et le script ne compilerait plus.
-      MsgBox('La desinstallation est terminee.' + #13#10 + #13#10 +
-             'Vos donnees ont ete conservees dans :' + #13#10 + DataDir + #13#10 + #13#10 +
-             'Si vous reinstallez cette application, vous les retrouverez ' +
-             'telles quelles. Pour tout effacer, supprimez ce dossier a la main.',
+      // Text in [CustomMessages], in the installer's language (%1 = folder)
+      MsgBox(FmtMessage(CustomMessage('DataKept'), [DataDir]),
              mbInformation, MB_OK);
   end;
 end;

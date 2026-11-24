@@ -78,6 +78,7 @@ class MountPoller(QThread):
         self._settle_until: Optional[float] = None
         self._log_tracking_only = False
         self._axial_enabled = False
+        self._pending_time = None     # TimeSample of the cycle, sent by the loop
         self._last_env_poll: float = 0.0
         self._env_poll_interval: float = 30.0  # Poll environment every 30 seconds
         self._wake = threading.Event()         # interrupts every wait (stop)
@@ -195,14 +196,25 @@ class MountPoller(QThread):
 
             try:
                 # Poll sequence: status, time, RA, DEC (+ optional axial)
+                self._pending_time = None
                 sample = self._poll_sequence()
+                pending_time, self._pending_time = self._pending_time, None
 
-                if sample is not None:
+                if sample is None:
+                    # (a repeated RA answer from a cache): the clock is still
+                    # shown, unless a slew or its settling delay is under way
+                    if (pending_time is not None and not self._slewing
+                            and self._settle_until is None):
+                        self.time_sample_ready.emit(pending_time)
+                else:
                     if self._skip_for_slew(sample.status):
                         # continue would skip the pacing sleep at the end
                         # of the loop -> polling the mount at full speed.
                         self._sleep_remainder(loop_start, interval)
                         continue
+
+                    if pending_time is not None:
+                        self.time_sample_ready.emit(pending_time)
 
                     # Skip if only logging tracking and mount isn't tracking
                     if self._log_tracking_only and sample.status != MountStatus.TRACKING:
@@ -345,7 +357,9 @@ class MountPoller(QThread):
                     pc_loop_time_ms=pc_loop_ms,
                     mount_loop_time_ms=mount_loop_ms,
                 )
-                self.time_sample_ready.emit(time_sample)
+                # Emitted by the loop, once it knows whether the sample is
+                # dropped for a slew: the time graph waits like RA/DEC.
+                self._pending_time = time_sample
 
                 self._last_mount_time_parsed = mount_seconds
 

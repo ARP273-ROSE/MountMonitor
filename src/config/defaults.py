@@ -39,6 +39,8 @@ DEFAULTS = {
     # pushed to the mount.
     # Splitter positions, base64 of QSplitter.saveState()
     "splitter_graphs": "",
+    # Last tab shown in Preferences, reopened there next time (as MM3)
+    "preferences_tab": 0,
     "splitter_main": "",
     "site_latitude": "",
     "site_longitude": "",

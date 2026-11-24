@@ -2,7 +2,7 @@
 """Three languages, and no empty label.
 
 Dutch is there because MountMonitor is originally a Dutch program: version
-3.37 is by Nicolàs de Hilster (Starmountain Survey & Consultancy BV).
+3.40 is by Nicolàs de Hilster (Starmountain Survey & Consultancy BV).
 """
 import importlib.util
 import os

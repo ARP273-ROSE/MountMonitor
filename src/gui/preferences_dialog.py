@@ -63,7 +63,16 @@ class PreferencesDialog(QDialog):
         tabs.addTab(self._scrollable(self._create_processing_tab()), T("pref_processing"))
         tabs.addTab(self._scrollable(self._create_auxiliary_tab()), T("pref_auxiliary"))
         tabs.addTab(self._scrollable(self._create_misc_tab()), T("pref_misc"))
+        # Reopened on the last tab visited, as MountMonitor 3 does
+        try:
+            last = int(self._settings.get("preferences_tab") or 0)
+        except (TypeError, ValueError):
+            last = 0
+        tabs.setCurrentIndex(min(max(last, 0), tabs.count() - 1))
+        tabs.currentChanged.connect(lambda i: self._settings.set("preferences_tab", int(i)))
+        self._tabs = tabs
         layout.addWidget(tabs)
+        self._update_axial_enabled()
 
         # OK / Cancel buttons
         buttons = QDialogButtonBox(
@@ -167,6 +176,7 @@ class PreferencesDialog(QDialog):
         self._ascom_10micron = QCheckBox(T("pref_ascom_10micron"))
         self._ascom_10micron.setToolTip(T("tt_ascom_10micron"))
         self._ascom_10micron.setChecked(bool(self._settings.get("ascom_10micron_commands")))
+        self._ascom_10micron.toggled.connect(lambda _on: self._update_axial_enabled())
         conn_form.addRow("", self._ascom_10micron)
 
         layout.addWidget(conn_group)
@@ -384,6 +394,7 @@ class PreferencesDialog(QDialog):
         self._axial_mode.setCurrentIndex(mode_map.get(self._settings.get("axial_mode"), 0))
         self._axial_mode.setToolTip(T("tt_axial"))
         log_form.addRow(T("pref_axial_mode"), self._axial_mode)
+        self._axial_form = log_form
 
         self._reset_mode = QComboBox()
         self._reset_mode.addItems([T("mode_manual"), T("mode_slewing")])
@@ -659,6 +670,22 @@ class PreferencesDialog(QDialog):
             label = self._conn_form.labelForField(field)
             if label is not None:
                 label.setEnabled(on)
+        self._update_axial_enabled()
+
+    def _update_axial_enabled(self):
+        """The axis angles are 10Micron commands: in pure ASCOM there is no
+        axial measurement, so its choice is greyed out (the saved mode is
+        kept, and ignored while the protocol is pure ASCOM)."""
+        combo = getattr(self, "_axial_mode", None)
+        if combo is None:            # Processing tab not built yet
+            return
+        pure_ascom = (self._protocol.currentIndex() == 2
+                      and not self._ascom_10micron.isChecked())
+        combo.setEnabled(not pure_ascom)
+        combo.setToolTip(T("tt_axial_ascom") if pure_ascom else T("tt_axial"))
+        label = self._axial_form.labelForField(combo)
+        if label is not None:
+            label.setEnabled(not pure_ascom)
 
     def _on_ascom_choose(self):
         """Open the ASCOM Chooser dialog."""
