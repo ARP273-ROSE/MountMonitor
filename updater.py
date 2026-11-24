@@ -365,15 +365,22 @@ def download_and_apply(update, progress=None):
 
 
 def restart():
-    """Relance l'application avec l'interpreteur embarque, puis rend la main."""
+    """Relance l'application avec l'interpreteur embarque, puis rend la main.
+
+    Les arguments de la ligne de commande sont repris (--connect : un poste
+    sans surveillance doit se reconnecter apres la mise a jour), et la
+    variable KIT_RELANCE dit a la nouvelle instance d'attendre que
+    l'ancienne ait fini de fermer au lieu d'annoncer « deja ouvert »."""
     try:
         base = app_dir().parent
         pyw = base / 'python' / 'pythonw.exe'
         script = app_dir() / (_kit().get('point_entree') or '')
+        env = dict(os.environ, KIT_RELANCE='1')
+        args = [str(script)] + sys.argv[1:]
         if pyw.exists():
-            os.spawnv(os.P_NOWAIT, str(pyw), [str(pyw), str(script)])
+            os.spawnve(os.P_NOWAIT, str(pyw), [str(pyw)] + args, env)
         else:
-            os.spawnv(os.P_NOWAIT, sys.executable, [sys.executable, str(script)])
+            os.spawnve(os.P_NOWAIT, sys.executable, [sys.executable] + args, env)
         return True
     except Exception:
         log.exception("Redemarrage automatique impossible")

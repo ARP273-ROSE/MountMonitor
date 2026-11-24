@@ -8,7 +8,13 @@ greyed in Preferences), preferences reopen on the last tab (`preferences_tab`), 
 sample held by the poller loop and dropped during slew + settle, no mouse zoom on the
 graphs, automatic dumps drawn in colour, installer EN/FR/NL after the Windows language
 (installer.iss now differs from the kit template; UTF-8 BOM added), MM3 credited as v3.40.
-196 tests. Next release: 4.5.5.
+Then the audit of 24/11 (see CHANGELOG "Unreleased"): `pixel_downsampling` and
+`density_antialias` in graph_widgets, timer lateness in `_adapt_rate`, `start_session` returns
+False, dumps under the log folder, KIT_RELANCE relaunch, DataBuffer CLOCK_JUMP_S, seismometer
+reopen + `_watch_seismometer`, background fsync, resets via `poller.submit`, crash dedupe.
+Benchmarks: scratch scripts loop_run.py / per_graph.py (not kept). Not done: FFT computed in a
+worker (46 ms every 2 s), asynchronous stop of poller/NTP on disconnect. Not checked: dependency
+CVEs (pip-audit refused here). 200 tests. Next release: 4.5.5.
 
 **Released as v4.5.4 (23/11 evening):** after the MM3 author's side-by-side screenshots
 (figures agreed, look did not): axial graph draws only the regression speed vs its median;

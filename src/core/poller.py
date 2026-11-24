@@ -254,7 +254,9 @@ class MountPoller(QThread):
         ended less than delay_after_slew seconds ago. Emits slew_settled
         once, when the delay is over (the window then checks the mount
         settings and reads the target, as MountMonitor 3 does)."""
-        now = time.time() if now is None else now
+        # monotonic: a PC clock set back during the delay lengthened it
+        # by the size of the jump
+        now = time.monotonic() if now is None else now
         if status == MountStatus.SLEWING:
             self._slewing = True
             self._settle_until = None

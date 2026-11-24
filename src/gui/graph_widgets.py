@@ -54,8 +54,61 @@ def _setup_pyqtgraph():
 _setup_pyqtgraph()
 
 
+#: points drawn per pixel of width at most (pyqtgraph's default is 5 x 2 in
+#: peak mode: a 1 h span took a whole core of a desktop CPU to paint)
+DOWNSAMPLE_FACTOR = 1.0
 
-def monotone_curve(x, y, factor: int = 8, max_points: int = 1500):
+
+def pixel_downsampling(plot, *extra):
+    """Every curve of the graph clipped to the view and reduced to about two
+    points (min and max) per pixel before it is drawn.
+
+    Painting, not the computation, was the cost: antialiased lines through
+    every sample. Measured (audit 24/11/2026, 50k samples, desktop Ryzen):
+    1 h span 102 % of a core and the event loop 0.4-0.6 s late; a NUC is
+    2-3 times slower. Extremes are kept by the peak mode."""
+    items = list(plot.getPlotItem().listDataItems()) + list(extra)
+    for item in items:
+        if isinstance(item, pg.PlotDataItem):
+            item.setDownsampling(auto=True, method='peak')
+            item.setClipToView(True)
+            item.opts['autoDownsampleFactor'] = DOWNSAMPLE_FACTOR
+
+
+def density_antialias(plot, *extra):
+    """Antialiasing only where it shows: on curves with fewer points than
+    half the pixels of the graph. On a dense, noisy curve it multiplied the
+    paint cost by ten (1 h span: 98 ms for one graph, 7 ms without) and
+    changes nothing to the eye -- the line is a band of zigzags anyway."""
+    vb = plot.getViewBox()
+    width = max(1.0, float(vb.width()))
+    try:
+        x0, x1 = vb.viewRange()[0]
+    except Exception:
+        return
+    # The range is set with the view's signals blocked (no cascade): the
+    # curves' clipping kept the previous span for one frame after a change.
+    moved = getattr(plot, "_mm_last_x", None) != (x0, x1)
+    plot._mm_last_x = (x0, x1)
+    for item in list(plot.getPlotItem().listDataItems()) + list(extra):
+        if moved and hasattr(item, "viewRangeChanged"):
+            item.viewRangeChanged()
+        # the samples, not the points of a rounded curve drawn through them
+        x = getattr(item, "_mm_samples_x", None)
+        if x is None:
+            x = getattr(item, "xData", None)
+        if x is None or not len(x):
+            continue
+        n = int(np.searchsorted(x, x1, side="right") - np.searchsorted(x, x0))
+        aa = n <= width / 2
+        curve = getattr(item, "curve", None)
+        if curve is not None and curve.opts.get("antialias") != aa:
+            curve.opts["antialias"] = aa
+            curve.update()
+
+
+
+def monotone_curve(x, y, factor: int = 8, max_points: int = 1500, width_px: int = 0):
     """Rounded DISPLAY of a series that never overshoots the samples.
 
     Monotone cubic (Fritsch-Carlson, the PCHIP of SciPy and d3's
@@ -70,6 +123,12 @@ def monotone_curve(x, y, factor: int = 8, max_points: int = 1500):
     x = np.asarray(x, dtype=np.float64)
     y = np.asarray(y, dtype=np.float64)
     n = len(x)
+    if width_px and n:
+        # No more points than two per pixel: beyond, the rounding cannot be
+        # seen and only costs painting (1200 samples x 8 on a 600 px graph)
+        factor = min(factor, int(2 * width_px // n))
+        if factor < 2:
+            return x, y
     if n < 3 or n > max_points or len(y) != n:
         return x, y
     keep = np.concatenate(([True], np.diff(x) > 0))     # strictly increasing
@@ -586,6 +645,7 @@ class TrackingGraph(QWidget):
         self._fix_label_font = QFont('Source Code Pro', 7)
 
         layout.addWidget(self._header)
+        pixel_downsampling(self._plot, self._stdev_curve)
         layout.addWidget(self._plot)
 
     def update_data(self, timestamps: np.ndarray, values: np.ndarray,
@@ -617,10 +677,13 @@ class TrackingGraph(QWidget):
         vb.blockSignals(True)
 
         if self._smooth:
-            xs, ys = monotone_curve(rel_times, values)
+            xs, ys = monotone_curve(rel_times, values,
+                                    width_px=max(1, int(self._plot.width())))
             self._data_curve.setData(xs, ys)
+            self._data_curve._mm_samples_x = rel_times
         else:
             self._data_curve.setData(rel_times, values)
+            self._data_curve._mm_samples_x = None
         if self._smooth and len(rel_times) <= MARKERS_MAX:
             self._markers.setData(rel_times, values)
             self._markers.setVisible(True)
@@ -675,6 +738,7 @@ class TrackingGraph(QWidget):
         vb.setRange(xRange=(x0, x1), yRange=(y_low, y_high), padding=0)
         vb.blockSignals(False)
         match_axes(self._plot)
+        density_antialias(self._plot, self._stdev_curve)
 
         # Sigma scale: 0 at the bottom, top from the largest sigma seen.
         sd_max = float(max_stdev or 0.0)
@@ -956,6 +1020,7 @@ class TimeGraph(QWidget):
         self._plot.getViewBox().disableAutoRange()
 
         layout.addWidget(self._header)
+        pixel_downsampling(self._plot)
         layout.addWidget(self._plot)
 
     def update_data(self, diff_t, diff_v, pc_loop_t=None, pc_loop_v=None,
@@ -1004,6 +1069,7 @@ class TimeGraph(QWidget):
                         yRange=(y_min - y_margin, y_max + y_margin), padding=0)
             vb.blockSignals(False)
             match_axes(self._plot)
+            density_antialias(self._plot)
             # The right axis follows the same range (signals were blocked) and
             # must redraw its labels when only the offset changed.
             self._right_axis.setRange(y_min - y_margin, y_max + y_margin)
@@ -1103,6 +1169,7 @@ class SeismicGraph(QWidget):
         self._plot.getViewBox().disableAutoRange()
 
         layout.addWidget(self._header)
+        pixel_downsampling(self._plot, self._stdev_curve)
         layout.addWidget(self._plot)
 
     def update_data(self, timestamps: np.ndarray, values: np.ndarray,
@@ -1137,6 +1204,7 @@ class SeismicGraph(QWidget):
                         yRange=(y_min - y_margin, y_max + y_margin), padding=0)
             vb.blockSignals(False)
             match_axes(self._plot)
+            density_antialias(self._plot, self._stdev_curve)
 
             # Position watermark
             self._watermark.setPos((x0 + x1) / 2, (y_min + y_max) / 2)
@@ -1227,6 +1295,7 @@ class AxialGraph(QWidget):
 
         self._plot.getViewBox().disableAutoRange()
         layout.addWidget(self._header)
+        pixel_downsampling(self._plot)
         layout.addWidget(self._plot)
 
     def _set_title(self, mode):
@@ -1314,6 +1383,7 @@ class AxialGraph(QWidget):
                     yRange=(-half, half), padding=0)
         vb.blockSignals(False)
         match_axes(self._plot)
+        density_antialias(self._plot)
         self._watermark.setPos((x0 + x1) / 2, 0)
 
     def export_to_image(self, directory: str):

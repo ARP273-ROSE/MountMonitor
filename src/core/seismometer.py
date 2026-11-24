@@ -50,6 +50,7 @@ class Seismometer:
         self._data_buffer: deque[float] = deque(maxlen=int(frequency_hz * 60))
         self._lock = threading.Lock()
         self._actual_frequency: float = 0.0
+        self.lost = False               # port gone (unplugged): retried in the background
 
     @property
     def offset(self) -> int:
@@ -67,18 +68,49 @@ class Seismometer:
         """Set callback function for new data: callback(timestamp, values_list)."""
         self._callback = callback
 
+    def _open(self):
+        import serial
+        return serial.Serial(
+            port=self._port,
+            baudrate=self._baudrate,
+            timeout=1.0,
+            bytesize=serial.EIGHTBITS,
+            parity=serial.PARITY_NONE,
+            stopbits=serial.STOPBITS_ONE,
+        )
+
+    def _reopen(self) -> bool:
+        """After a read error: close the port, wait, open it again (USB
+        adapter unplugged and plugged back). Ten errors a second were logged
+        forever, flushing the night's diagnostics out of the rotating log."""
+        try:
+            if self._serial is not None:
+                self._serial.close()
+        except Exception:
+            pass
+        self._serial = None
+        delay = 2.0
+        while self._running:
+            end = time.monotonic() + delay
+            while self._running and time.monotonic() < end:
+                time.sleep(0.2)
+            if not self._running:
+                return False
+            try:
+                self._serial = self._open()
+                self.lost = False
+                self.error = ""
+                logger.info(f"Seismometer port {self._port} open again")
+                return True
+            except Exception as e:
+                self.error = str(e)
+                delay = min(60.0, delay * 2)
+        return False
+
     def start(self) -> bool:
         """Start reading from serial port."""
         try:
-            import serial
-            self._serial = serial.Serial(
-                port=self._port,
-                baudrate=self._baudrate,
-                timeout=1.0,
-                bytesize=serial.EIGHTBITS,
-                parity=serial.PARITY_NONE,
-                stopbits=serial.STOPBITS_ONE,
-            )
+            self._serial = self._open()
             self._running = True
             self._thread = threading.Thread(
                 target=self._read_loop, daemon=True, name="Seismometer"
@@ -119,6 +151,8 @@ class Seismometer:
 
         while self._running and self._serial:
             try:
+                if self.lost and not self._reopen():
+                    break
                 data = self._serial.read(self._serial.in_waiting or 1)
                 if not data:
                     continue
@@ -168,8 +202,12 @@ class Seismometer:
                         freq_count = 0
 
             except Exception as e:
-                logger.error(f"Seismometer read error: {e}")
-                time.sleep(0.1)
+                if not self._running:
+                    break
+                logger.error(f"Seismometer read error: {e} -- port closed, retried")
+                self.error = str(e)
+                self.lost = True
+                buffer, values = b'', []
 
     def get_recent_data(self, n: int = 100) -> list[float]:
         """Get the last N data points."""

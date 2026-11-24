@@ -602,7 +602,7 @@ class MainWindow(QMainWindow):
                     )
                     return
                 self._settings.set("ascom_driver", driver_id)
-                self._settings.save()
+                self._save_settings()
             self._connection = ASCOMConnection(
                 driver_id=driver_id,
                 tenmicron_commands=bool(self._settings.get("ascom_10micron_commands")))
@@ -696,6 +696,7 @@ class MainWindow(QMainWindow):
             self._settings.get("tolerance_dec_arcsec"),
         )
 
+        self._last_refresh_tick = None
         self._refresh_timer.start()
 
         # Start NTP if enabled
@@ -1064,15 +1065,24 @@ class MainWindow(QMainWindow):
     def _refresh_graphs(self):
         """Timer slot: skip when nobody can see the window, adapt the cadence."""
         if self.isMinimized() or not self.isVisible():
+            self._last_refresh_tick = None
             return
         t0 = time.perf_counter()
+        # Lateness of this tick: the painting of the previous refresh
+        # happens after the slot, in the event loop, and is not timed by it;
+        # a saturated loop shows as ticks arriving late.
+        last = getattr(self, "_last_refresh_tick", None)
+        self._last_refresh_tick = t0
+        late_ms = 0.0
+        if last is not None:
+            late_ms = max(0.0, (t0 - last) * 1000.0 - self._refresh_timer.interval())
+            if late_ms > 3000.0:             # a sleep, a modal dialog: not a cost
+                late_ms = 0.0
         try:
             self._refresh_graphs_now()
         finally:
-            # Drawing happens after this slot, in the event loop; it costs
-            # about as much as the update itself: count it twice.
-            cost = 2.0 * (time.perf_counter() - t0) * 1000.0
-            self._adapt_rate(cost)
+            slot_ms = (time.perf_counter() - t0) * 1000.0
+            self._adapt_rate(max(2.0 * slot_ms, slot_ms + late_ms))
 
     def _adapt_rate(self, cost_ms: float):
         current_cfg = self._refresh_timer.interval()
@@ -1316,7 +1326,7 @@ class MainWindow(QMainWindow):
 
     def _auto_option(self, key: str, active: bool):
         self._settings.set(key, bool(active))
-        self._settings.save()
+        self._save_settings()
         if self._logging_armed:
             # « Night only » just switched off while the mount tracks in
             # daylight: start now rather than at the next minute's check.
@@ -1494,7 +1504,12 @@ class MainWindow(QMainWindow):
             session.latitude = f"{_site[0]:.5f}"
             session.longitude = f"{_site[1]:.5f}"
             session.elevation = f"{_site[2]:.0f}"
-        self._file_logger.start_session(session)
+        self._write_error_reported = False
+        if self._file_logger.start_session(session) is False:
+            error = getattr(self._file_logger, "write_error", "") or ""
+            self._status_panel.add_message(
+                f"\u26a0 {T('log_start_failed')} : {error}", Colors.STATUS_ERROR)
+            return
         self._logging_active = True
         self._logging_paused = False
         self._night_seen = False
@@ -1848,6 +1863,15 @@ class MainWindow(QMainWindow):
             return "off"
         return mode
 
+    def _save_settings(self):
+        """Settings written to disk; a full disk or a read-only folder is
+        logged, not raised: in a slot it counted as a crash, and on exit it
+        stopped closeEvent before the night's files were closed."""
+        try:
+            self._settings.save()
+        except OSError as e:
+            logger.error(f"Settings not saved: {e}")
+
     def _apply_seismometer(self):
         """Start, restart or stop the seismometer to match the preferences,
         at once, and show or hide its graph.
@@ -1907,6 +1931,27 @@ class MainWindow(QMainWindow):
             self._status_panel.add_message(
                 T("sei_muet").format(port=self._settings.get("seismometer_port")),
                 Colors.STATUS_WARNING)
+        self._sei_lost_shown = False
+        QTimer.singleShot(60_000, lambda s=sei: self._watch_seismometer(s))
+
+    def _watch_seismometer(self, sei):
+        """Every minute: a port lost in the night (adapter unplugged) is
+        said once, and so is its return -- it was only checked 15 s after
+        the start."""
+        if sei is not self._seismometer:
+            return
+        lost = bool(getattr(sei, "lost", False))
+        if lost != getattr(self, "_sei_lost_shown", False):
+            self._sei_lost_shown = lost
+            port = self._settings.get("seismometer_port")
+            if lost:
+                self._status_panel.add_message(
+                    T("sei_perdu").format(port=port, e=sei.error), Colors.STATUS_ERROR)
+            else:
+                self._status_panel.add_message(
+                    T("sei_demarre").format(port=port, baud=self._seismometer_config()[4]),
+                    Colors.STATUS_OK)
+        QTimer.singleShot(60_000, lambda s=sei: self._watch_seismometer(s))
 
     def _displayed_ra_tolerance(self) -> float:
         """RA tolerance in the displayed unit: the setting is in arcseconds
@@ -1936,7 +1981,7 @@ class MainWindow(QMainWindow):
 
     def _set_span(self, seconds: float):
         self._settings.set("time_span_s", float(seconds))
-        self._settings.save()
+        self._save_settings()
         self._refresh_graphs_now()
 
     def _fill_span_menu(self, menu):
@@ -2001,7 +2046,7 @@ class MainWindow(QMainWindow):
         stored, and the display took no account of it.
         """
         self._settings.set("horizontal_zoom", zoom)
-        self._settings.save()
+        self._save_settings()
         self._apply_horizontal_zoom(zoom)
 
     def _apply_horizontal_zoom(self, zoom: int):
@@ -2014,15 +2059,30 @@ class MainWindow(QMainWindow):
         self._dec_graph.set_vertical_zoom(mode)
         if save:
             self._settings.set("vertical_zoom_mode", mode)
-            self._settings.save()
+            self._save_settings()
             self._refresh_graphs_now()
 
     def _reset_minmax(self):
         self._processor.reset_minmax()
         self._status_panel.add_message(T("reset_minmax"))
 
-    def _reset_buffers(self):
-        self._processor.reset_buffers()
+    def _reset_buffers(self, minmax: bool = False):
+        """Empty the graphs' buffers. While the poller runs, done in its
+        thread between two samples: from the GUI thread a reset falling
+        between the append and the median of a sample gave a reference of
+        0 and a 10^5" spike that pinned min/max for the night."""
+        processor = self._processor
+
+        def reset(_connection=None):
+            processor.reset_buffers()
+            if minmax:
+                processor.reset_minmax()
+
+        poller = self._poller
+        if poller is not None and poller.isRunning():
+            poller.submit(reset)
+        else:
+            reset()
         self._ra_graph.reset()
         self._dec_graph.reset()
         self._time_graph.reset()
@@ -2031,8 +2091,7 @@ class MainWindow(QMainWindow):
         self._status_panel.add_message(T("reset_buffers"))
 
     def _reset_both(self):
-        self._reset_buffers()
-        self._processor.reset_minmax()
+        self._reset_buffers(minmax=True)
         self._status_panel.add_message(T("reset_both"))
 
     # ── Preferences ──────────────────────────────────────────────
@@ -2085,7 +2144,7 @@ class MainWindow(QMainWindow):
         self._settings.set("site_longitude", f"{lon:.5f}")
         self._settings.set("site_elevation_m", f"{elev:.0f}")
         try:
-            self._settings.save()
+            self._save_settings()
         except OSError as exc:
             logger.warning(f"Could not save the site: {exc}")
 
@@ -2135,7 +2194,7 @@ class MainWindow(QMainWindow):
         if code == self._settings.get("language"):
             return
         self._settings.set("language", code)
-        self._settings.save()
+        self._save_settings()
         set_language(code)
         self._warn_restart()
 
@@ -2165,11 +2224,12 @@ class MainWindow(QMainWindow):
         import subprocess
         try:
             self.close()
+            env = dict(os.environ, KIT_RELANCE='1')
             if getattr(sys, 'frozen', False):
-                subprocess.Popen([sys.executable])
+                subprocess.Popen([sys.executable] + sys.argv[1:], env=env)
             else:
                 subprocess.Popen([sys.executable, os.path.abspath(sys.argv[0])]
-                                 + sys.argv[1:])
+                                 + sys.argv[1:], env=env)
         except Exception as exc:
             logger.error(f"Restart failed: {exc}")
             return
@@ -2275,16 +2335,32 @@ class MainWindow(QMainWindow):
             self._dump_graphs()
 
     def _dump_graphs(self):
-        """Export all graph images to their respective directories."""
-        self._ra_graph.export_to_image("RA_graphs")
-        self._dec_graph.export_to_image("DEC_graphs")
-        self._time_graph.export_to_image("Time_graphs")
-        self._seismic_graph.export_to_image("Seismic_graphs")
+        """Export all graph images, in folders next to the log files.
+
+        They went to the current directory: in the installed program that
+        is the application folder, wiped by every update, and from the Task
+        Scheduler it is System32, where mkdir raised -- inside the parking
+        handler, which then never closed the night. Each export is now
+        guarded on its own."""
+        base = Path(self._file_logger.log_dir)
+        jobs = [(self._ra_graph, "RA_graphs"), (self._dec_graph, "DEC_graphs"),
+                (self._time_graph, "Time_graphs"), (self._seismic_graph, "Seismic_graphs")]
         if self._axial_mode() != "off":
-            self._axial_graph.export_to_image("Axial_graphs")
+            jobs.append((self._axial_graph, "Axial_graphs"))
         if self._fft_window and self._fft_window.isVisible():
-            self._fft_window.export_to_image("FFT_graphs")
-        self._status_panel.add_message(T("graphs_exported"))
+            jobs.append((self._fft_window, "FFT_graphs"))
+        failed = None
+        for graph, folder in jobs:
+            try:
+                graph.export_to_image(str(base / folder))
+            except Exception as e:          # disk full, folder not writable
+                failed = e
+                logger.warning(f"Graph export to {folder} failed: {e}")
+        if failed is not None:
+            self._status_panel.add_message(f"\u26a0 {T('graphs_exported')} : {failed}",
+                                           Colors.STATUS_WARNING)
+        else:
+            self._status_panel.add_message(T("graphs_exported"))
 
     # ── Mount checks ────────────────────────────────────────────
 
@@ -2831,9 +2907,15 @@ class MainWindow(QMainWindow):
         # stops the poller, writes the session summary and closes the six
         # files of the night. Quitting without going through it would
         # leave a truncated .dat.
-        if updater.restart():
-            self.close()
-            QApplication.quit()
+        # Closed FIRST, then relaunched: the new instance used to start while
+        # this one was still in closeEvent, found the lock taken and stopped
+        # on « already open » -- an unattended PC was left without
+        # MountMonitor. The new one also waits for the lock (KIT_RELANCE).
+        self.close()
+        if self.isVisible():                 # closing was refused
+            return
+        updater.restart()
+        QApplication.quit()
 
     def _create_desktop_shortcut(self):
         """Create a desktop shortcut for MountMonitor."""
@@ -2902,7 +2984,9 @@ class MainWindow(QMainWindow):
             self._settings.set("fft_width", self._fft_window.width())
             self._settings.set("fft_height", self._fft_window.height())
         self._save_panels()
-        self._settings.save()
+        # Disk full: the settings are lost, the night must not be --
+        # stopping the poller and closing the files comes next.
+        self._save_settings()
 
         # Stop everything
         self._disconnect()

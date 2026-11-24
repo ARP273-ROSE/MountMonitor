@@ -285,7 +285,7 @@ class ASCOMConnection(MountConnection):
             return None
         try:
             return _hours_to_hms(float(ra_hours))
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, OverflowError):
             logger.warning(f"Invalid RA value from ASCOM: {ra_hours}")
             return None
 
@@ -300,7 +300,7 @@ class ASCOMConnection(MountConnection):
             return None
         try:
             return _degrees_to_dms(float(dec_deg))
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, OverflowError):
             logger.warning(f"Invalid DEC value from ASCOM: {dec_deg}")
             return None
 
@@ -418,7 +418,7 @@ class ASCOMConnection(MountConnection):
                 return PierSide.EAST
             elif side_int == _ASCOM_PIER_WEST:
                 return PierSide.WEST
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, OverflowError):
             pass
         return PierSide.UNKNOWN
 
@@ -429,7 +429,7 @@ class ASCOMConnection(MountConnection):
             return None
         try:
             return float(az)
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, OverflowError):
             return None
 
     def get_altitude(self) -> Optional[float]:
@@ -439,7 +439,7 @@ class ASCOMConnection(MountConnection):
             return None
         try:
             return float(alt)
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, OverflowError):
             return None
 
     # ── Optional methods ─────────────────────────────────────────
@@ -454,7 +454,7 @@ class ASCOMConnection(MountConnection):
             return None
         try:
             return _hours_to_hms(float(ra_hours))
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, OverflowError):
             return None
 
     def get_target_dec(self) -> Optional[str]:
@@ -467,7 +467,7 @@ class ASCOMConnection(MountConnection):
             return None
         try:
             return _degrees_to_dms(float(dec_deg))
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, OverflowError):
             return None
 
     def is_refraction_enabled(self) -> Optional[bool]:
@@ -514,7 +514,7 @@ class ASCOMConnection(MountConnection):
         try:
             rate_int = int(rate)
             return _TRACKING_RATES.get(rate_int, f"Unknown ({rate_int})")
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, OverflowError):
             return str(rate)
 
     def get_latitude(self) -> Optional[str]:
@@ -527,7 +527,7 @@ class ASCOMConnection(MountConnection):
             return None
         try:
             return _degrees_to_dms_lat(float(lat))
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, OverflowError):
             return None
 
     def get_longitude(self) -> Optional[str]:
@@ -548,7 +548,7 @@ class ASCOMConnection(MountConnection):
             return None
         try:
             return _degrees_to_dms_lon(-float(lon))
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, OverflowError):
             return None
 
     def get_elevation(self) -> Optional[float]:
@@ -558,7 +558,7 @@ class ASCOMConnection(MountConnection):
             return None
         try:
             return float(elev)
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, OverflowError):
             return None
 
     def get_ra_axis_position(self) -> Optional[float]:

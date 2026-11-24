@@ -96,6 +96,7 @@ class CrashReporter:
         self._app_dir = app_dir
         self._crash_file = app_dir / _CRASH_FILE
         self._original_excepthook = sys.excepthook
+        self._seen = set()          # signatures already reported in this run
 
     def install(self):
         """Install the crash handler as sys.excepthook."""
@@ -106,8 +107,29 @@ class CrashReporter:
         """Restore the original excepthook."""
         sys.excepthook = self._original_excepthook
 
+    #: different exceptions reported in one run, at most
+    MAX_PER_RUN = 5
+
     def _handle_exception(self, exc_type, exc_value, exc_tb):
-        """Custom exception handler that saves crash report."""
+        """Custom exception handler that saves crash report.
+
+        An exception in a Qt slot does not stop the application, and the
+        same one can come back at every refresh: each used to rewrite the
+        crash file and queue one more report (240 a night for a graph
+        export failing in « full » mode). Each signature is now reported
+        once per run, and a few of them at most."""
+        try:
+            frames = traceback.extract_tb(exc_tb)
+            last = frames[-1] if frames else None
+            signature = (exc_type.__name__,
+                         (Path(last.filename).name, last.lineno) if last else None)
+        except Exception:
+            signature = (getattr(exc_type, "__name__", "?"), None)
+        if signature in self._seen or len(self._seen) >= self.MAX_PER_RUN:
+            logger.error("Exception again (not reported again): %s: %s",
+                         signature[0], anonymize_path(str(exc_value)))
+            return
+        self._seen.add(signature)
         # Save crash report
         try:
             tb_lines = traceback.format_exception(exc_type, exc_value, exc_tb)

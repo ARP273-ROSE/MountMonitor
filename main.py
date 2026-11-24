@@ -269,7 +269,10 @@ def main():
     from PyQt6.QtCore import QLockFile, QDir
     _lock_file = QLockFile(str(Path(QDir.tempPath()) / 'mountmonitor.lock'))
     _lock_file.setStaleLockTime(30000)
-    if not _lock_file.tryLock(200):
+    # Relaunched by an update or a language change: the old instance may
+    # still be closing (night report, poller): wait for it, up to a minute.
+    _wait_ms = 60000 if os.environ.pop('KIT_RELANCE', None) else 200
+    if not _lock_file.tryLock(_wait_ms):
         from PyQt6.QtWidgets import QMessageBox
         from src.utils.i18n import T
         QMessageBox.information(None, "MountMonitor", T("deja_ouvert"))

@@ -9,6 +9,7 @@ Displays comprehensive analysis of mount log data:
 All text is bilingual FR/EN.
 """
 
+import html as _html
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
@@ -34,6 +35,12 @@ from ..core.log10m_analyzer import (
 from .theme import Colors
 
 logger = logging.getLogger(__name__)
+
+
+def _esc(value) -> str:
+    """Text read from a .log10m file, made inert in the HTML pages: a
+    crafted file could otherwise lay out or spoof the overview."""
+    return _html.escape(str(value)) if value else ""
 
 
 #: Dutch for this dialog, keyed by the English text (the dialog was written
@@ -358,19 +365,19 @@ class Log10mAnalysisDialog(QDialog):
         <h3>{_tr("Mount Information", "Informations monture")}</h3>
         <table>
             <tr><td class="label">{_tr("Model", "Modèle")}:</td>
-                <td class="value">{s.mount_model or '—'}</td></tr>
+                <td class="value">{_esc(s.mount_model) or '—'}</td></tr>
             <tr><td class="label">{_tr("Firmware", "Firmware")}:</td>
-                <td class="value">{s.mount_firmware or '—'}</td></tr>
+                <td class="value">{_esc(s.mount_firmware) or '—'}</td></tr>
             <tr><td class="label">{_tr("Logger version", "Version logger")}:</td>
-                <td class="value">{s.logger_version or '—'}</td></tr>
+                <td class="value">{_esc(s.logger_version) or '—'}</td></tr>
             <tr><td class="label">{_tr("RA encoder steps", "Steps encodeur RA")}:</td>
                 <td class="value">{s.ra_steps:,.0f}</td></tr>
             <tr><td class="label">{_tr("DEC encoder steps", "Steps encodeur DEC")}:</td>
                 <td class="value">{s.dec_steps:,.0f}</td></tr>
             <tr><td class="label">{_tr("IP address", "Adresse IP")}:</td>
-                <td class="value">{s.ip_address or '—'}</td></tr>
+                <td class="value">{_esc(s.ip_address) or '—'}</td></tr>
             <tr><td class="label">{_tr("MAC address", "Adresse MAC")}:</td>
-                <td class="value">{s.mac_address or '—'}</td></tr>
+                <td class="value">{_esc(s.mac_address) or '—'}</td></tr>
         </table>
 
         <h3>{_tr("Session Timing", "Timing de la session")}</h3>

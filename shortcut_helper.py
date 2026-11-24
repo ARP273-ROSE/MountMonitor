@@ -166,16 +166,24 @@ def _create_windows_shortcut(app_name: str, main_script: str, icon_file: str,
 
     # Sanitize all values for PowerShell string interpolation
     def _ps_escape(val):
-        return str(val).replace('"', '`"').replace("'", "''")
+        # Single-quoted PowerShell strings: nothing inside is evaluated
+        # ($(), backticks); the only escape is a doubled apostrophe. In
+        # double quotes, a folder named with $( ) ran as a command.
+        # PowerShell also closes a single-quoted string on the typographic
+        # apostrophes: each is doubled the same way.
+        out = str(val)
+        for q in ("'", "\u2018", "\u2019", "\u201a", "\u201b"):
+            out = out.replace(q, q + q)
+        return out
 
     ps_script = (
         f'$s = (New-Object -ComObject WScript.Shell)'
-        f'.CreateShortcut("{_ps_escape(shortcut_path)}");'
-        f'$s.TargetPath = "{_ps_escape(launch_bat)}";'
-        f'$s.Arguments = "";'
-        f'$s.WorkingDirectory = "{_ps_escape(project)}";'
-        f'$s.IconLocation = "{_ps_escape(icon_path)},0";'
-        f'$s.Description = "{_ps_escape(app_name)}";'
+        f".CreateShortcut('{_ps_escape(shortcut_path)}');"
+        f"$s.TargetPath = '{_ps_escape(launch_bat)}';"
+        f"$s.Arguments = '';"
+        f"$s.WorkingDirectory = '{_ps_escape(project)}';"
+        f"$s.IconLocation = '{_ps_escape(icon_path)},0';"
+        f"$s.Description = '{_ps_escape(app_name)}';"
         f'$s.WindowStyle = 7;'
         f'$s.Save()'
     )

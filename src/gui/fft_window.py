@@ -103,6 +103,14 @@ class FFTWindow(QWidget):
         # user zooms or pans; the reset button brings it back.
         self._full_x = True
 
+        # About two bins per pixel, no antialiasing: 131,072-bin spectra
+        # took 190 ms of painting every 2 s on the GUI thread (audit
+        # 24/11/2026), on a desktop CPU.
+        for curve in (self._freq_ra, self._freq_dec, self._freq_seismic,
+                      self._period_ra, self._period_dec, self._period_seismic):
+            curve.opts['autoDownsampleFactor'] = 1.0
+            curve.opts['antialias'] = False
+            curve.curve.opts['antialias'] = False
         splitter.addWidget(self._freq_plot)
         splitter.addWidget(self._period_plot)
         layout.addWidget(splitter)

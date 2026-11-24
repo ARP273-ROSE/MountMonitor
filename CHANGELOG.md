@@ -25,6 +25,37 @@ Remarks of the MountMonitor 3 author on 4.5.4.
   (English otherwise); it was French only.
 - MountMonitor 3 is credited as v3.40, its last version.
 
+Audit for small observatory PCs (24/11/2026). Timings on a desktop Ryzen 5
+8500G, buffers full (50,000 samples), seismometer and axial graph on; a
+Celeron/N100 NUC is 1.5 to 3 times slower.
+
+- Graph painting: curves clipped to the view and reduced to two points per
+  pixel, antialiasing only on sparse curves, rounding limited to what the
+  width can show. 1 h span: 102 % of a core and the window 0.4-0.6 s late,
+  now 29 % and on time; 10 min: 78 % -> 24 %. The refresh cadence now also
+  counts the painting (lateness of its timer).
+- FFT window: 245 -> 46 ms every 2 s (two bins per pixel, no antialiasing).
+- Log files that cannot be created (disk full, folder missing) are said, and
+  logging does not pretend to run; write errors are reported again each night.
+- Dumped graphs go next to the log files, each export guarded: they went to
+  the current folder (wiped by updates; System32 from the Task Scheduler,
+  where the error stopped the parking handler before the night was closed).
+- Update and language restart: the window closes first, the new instance
+  waits for the old one (up to a minute) and keeps the command line
+  (--connect).
+- PC clock set back: the graph series restarts instead of drawing an hour as
+  two minutes; the settling delay after a slew uses a monotonic clock.
+- Seismometer unplugged in the night: the port is reopened in the background
+  and its loss and return are shown (10 errors a second were logged forever).
+- Disk fsync of the log files moved off the GUI thread.
+- Buffer resets run in the poller thread (a reset between two steps of a
+  sample gave a 10^5" spike).
+- The same exception is reported once per run (it rewrote the crash file at
+  every refresh); settings that cannot be saved no longer stop the closing.
+- Text from .log10m files escaped in the overview; desktop shortcut script in
+  single-quoted PowerShell strings; infinite values from an ASCOM driver
+  handled.
+
 ## 4.5.4 — 2026-11-23
 
 ### Changed

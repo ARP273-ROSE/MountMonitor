@@ -12,7 +12,9 @@ Files are named: MountMonitor_YYYYMMDD-HHMMSS.ext
 Stored in a Logs/ subdirectory.
 """
 
+import errno
 import os
+import threading
 import tempfile
 import time
 import logging
@@ -56,7 +58,12 @@ class FileLogger:
             from ..config.paths import logs_folder
             base_dir = logs_folder()
         self._base_dir = base_dir
-        self._base_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            self._base_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            # Folder on a share that is not there yet, or not writable: the
+            # window must still open; start_session says it when logging.
+            logger.warning(f"Log folder {base_dir} not available: {e}")
 
         self._log_file: Optional[TextIO] = None
         self._dat_file: Optional[TextIO] = None
@@ -144,7 +151,7 @@ class FileLogger:
             self._write_count += 1
             now = time.monotonic()
             if now - self._last_flush >= FLUSH_S:
-                self._flush_all(to_disk=True)
+                self._flush_all(to_disk=True, background=True)
                 self._write_count = 0
                 self._last_flush = now
             elif self._write_count >= self._flush_interval:
@@ -165,18 +172,42 @@ class FileLogger:
             self._io_error_logged = True
             self.write_error = str(e)
 
-    def _flush_all(self, to_disk: bool = False):
-        """Flush all open log files; with `to_disk`, to the disk itself."""
+    def _flush_all(self, to_disk: bool = False, background: bool = False):
+        """Flush all open log files; with `to_disk`, to the disk itself.
+
+        With `background`, the fsync runs in a short-lived thread: six
+        fsyncs every 5 s on the GUI thread stalled the window on slow eMMC
+        or a network share. The flush (Python's buffer to the OS) stays here,
+        in the writing thread; a sync still running is not doubled."""
+        fds = []
         for f in [self._log_file, self._dat_file, self._dti_file,
                   self._sei_file, self._fft_file, self._env_file]:
             if f:
                 try:
                     f.flush()
                     if to_disk:
-                        os.fsync(f.fileno())
+                        if background:
+                            fds.append(f.fileno())
+                        else:
+                            os.fsync(f.fileno())
                 except (OSError, ValueError) as e:
                     if isinstance(e, OSError):
                         self._report_error(e)
+        if fds:
+            worker = getattr(self, "_sync_thread", None)
+            if worker is not None and worker.is_alive():
+                return
+
+            def sync(fds=fds):
+                for fd in fds:
+                    try:
+                        os.fsync(fd)
+                    except OSError as e:
+                        if e.errno != errno.EBADF:   # EBADF: closed meanwhile
+                            self._report_error(e)
+            self._sync_thread = threading.Thread(target=sync, daemon=True,
+                                                 name="LogSync")
+            self._sync_thread.start()
 
     def _reset_minmax(self):
         """Reset running min/max statistics."""
@@ -263,14 +294,20 @@ class FileLogger:
         elif sample.status == MountStatus.PARKED:
             self._parked_count += 1
 
-    def start_session(self, session_info: SessionInfo):
-        """Open new log files for a monitoring session."""
+    def start_session(self, session_info: SessionInfo) -> bool:
+        """Open new log files for a monitoring session. False (and
+        write_error set) when they cannot be created: disk full, folder
+        not writable. The window said « logging started » and wrote nothing
+        for the whole night."""
+        self._io_error_logged = False      # a new night reports its own errors
+        self.write_error = None
         self._session_start = datetime.now().strftime("%Y%m%d-%H%M%S")
         prefix = f"MountMonitor_{self._session_start}"
         self._reset_minmax()
         self._session_info = session_info
 
         try:
+            self._base_dir.mkdir(parents=True, exist_ok=True)
             # .log file
             self._log_file = open(
                 self._base_dir / f"{prefix}.log", 'w', encoding='utf-8'
@@ -309,10 +346,13 @@ class FileLogger:
             self._active = True
             self.log_event("Logging started.")
             logger.info(f"Log files created: {prefix}.*")
+            return True
 
         except OSError as e:
             logger.error(f"Failed to create log files: {e}")
+            self.write_error = str(e)
             self.close()
+            return False
 
     def _write_log_header(self, info: SessionInfo):
         """Write .log file header. All user-supplied fields are sanitized."""
@@ -755,6 +795,9 @@ class FileLogger:
         The files are closed whatever happens: an error while writing the
         summary (disk full) used to leave all six open and the logger
         marked active."""
+        worker = getattr(self, "_sync_thread", None)
+        if worker is not None and worker.is_alive():
+            worker.join(10.0)        # never close a file under a running fsync
         try:
             if self._log_file:
                 self.write_session_summary()

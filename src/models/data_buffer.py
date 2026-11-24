@@ -36,6 +36,10 @@ def running_stdev(t: np.ndarray, v: np.ndarray, window_seconds: float) -> np.nda
     return out
 
 
+#: a timestamp this far before the last one is a clock change, not jitter
+CLOCK_JUMP_S = 5.0
+
+
 class DataBuffer:
     """Thread-safe circular buffer for time-series data with running statistics.
 
@@ -102,6 +106,20 @@ class DataBuffer:
         timestamp = float(timestamp)
         value = float(value)
         with self._lock:
+            if self._end > self._start:
+                last = self._t[self._end - 1]
+                if timestamp < last - CLOCK_JUMP_S:
+                    # The PC clock went back (set by hand, NTP step): the
+                    # series is no longer sorted and every search on it
+                    # (get_tail, the graphs) went wrong for as long as the
+                    # jump -- an hour drawn as two minutes, an hour to paint.
+                    # The time series restarts; the night's min/max stay.
+                    self._start = self._end = 0
+                    self._sd = np.array([], dtype=np.float64)
+                    self._sd_t = np.array([], dtype=np.float64)
+                    self._median_valid = False
+                elif timestamp < last:
+                    timestamp = float(last)   # jitter: kept in order
             if self._end == len(self._t):
                 # Slide the newest max_size-1 samples to the front (amortised O(1)).
                 keep = self._max_size - 1
