@@ -6,7 +6,7 @@ behaviour changes, the patch number when only a defect is fixed.
 
 Figures quoted below were measured on real sessions, not estimated.
 
-## Unreleased
+## 4.5.8 — 2026-11-24
 
 - FFT window, period domain: vertical bars and a sawtooth on long spectra
   (30 min at 2 Hz). The periods were handed to the plot in decreasing order and
