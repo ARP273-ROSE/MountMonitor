@@ -404,11 +404,14 @@ class PreferencesDialog(QDialog):
         log_form.addRow(T("pref_reset_mode"), self._reset_mode)
 
         self._dump_mode = QComboBox()
+        # As MountMonitor 3: the graphs are dumped each time they fill, and
+        # in addition, if chosen, at parking or at every slew (a fresh,
+        # properly scaled image of the target that ends).
         self._dump_mode.addItems([
-            T("mode_manual"), T("mode_slewing"), T("mode_parking"),
-            T("mode_full"),
+            T("mode_manual"), T("dump_full"), T("dump_full_park"),
+            T("dump_full_slew"),
         ])
-        dump_mode_map = {"manual": 0, "slewing": 1, "parking": 2, "full": 3}
+        dump_mode_map = {"manual": 0, "full": 1, "parking": 2, "slewing": 3}
         self._dump_mode.setCurrentIndex(dump_mode_map.get(self._settings.get("dump_mode"), 0))
         self._dump_mode.setToolTip(T("tt_dump_mode"))
         log_form.addRow(T("pref_dump_graphs"), self._dump_mode)
@@ -748,7 +751,7 @@ class PreferencesDialog(QDialog):
         s.set("axial_mode", axial_map.get(self._axial_mode.currentIndex(), "off"))
         reset_map = {0: "manual", 1: "slewing"}
         s.set("reset_mode", reset_map.get(self._reset_mode.currentIndex(), "manual"))
-        dump_map = {0: "manual", 1: "slewing", 2: "parking", 3: "full"}
+        dump_map = {0: "manual", 1: "full", 2: "parking", 3: "slewing"}
         s.set("dump_mode", dump_map.get(self._dump_mode.currentIndex(), "manual"))
         close_map = {0: "manual", 1: "slewing", 2: "parking"}
         s.set("close_files_mode", close_map.get(self._close_files_mode.currentIndex(), "manual"))

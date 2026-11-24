@@ -439,19 +439,17 @@ The numbers refer to the sections that follow.
 \textbf{Item} & \textbf{Purpose} \\
 \midrule
 \emph{Connect / Disconnect} & Opens or closes the link to the mount, with the
-protocol chosen in Preferences. \\
+protocol chosen in Settings. \\
 \emph{Start log / Stop log} & Arms the logger (it starts when the mount tracks)
 or stops it. A right click gives the unattended-operation settings. \\
 \emph{FFT} & Opens the Fourier analysis window (chapter~\ref{ch:fftwin}). \\
-\emph{Preferences} & All settings (chapter~\ref{ch:config}). \\
-File & Connect, disconnect; \emph{Open log} replays a recorded session and
-rebuilds its report; \emph{Analyse mount logs (.log10m)} reads a 10Micron's
-internal logs; Quit. \\
+File & Connect, disconnect; \emph{New files} closes the session and opens
+another; \emph{Export graphs} saves the graphs as PNG images; \emph{Open log}
+replays a recorded session and rebuilds its report; \emph{Analyse mount logs
+(.log10m)} reads a 10Micron's internal logs; Settings; desktop shortcut; Quit. \\
 View & \emph{Time span} (30~s to 1~h), \emph{Vertical scale} (see below), FFT
-window. Also on a right click on a graph. \\
-Reset & Resets the min/max, the graph buffers, or both; \emph{New files}
-closes the session and opens another; \emph{Export graphs} saves the graphs as
-PNG images. \\
+window; \emph{Reset} clears the min/max, the graph buffers, or both. Span and
+scale also on a right click on a graph. \\
 Language, Help & Interface language; help, manual, updates, reporting a
 problem. \\
 \bottomrule
@@ -547,7 +545,7 @@ mount's clock.
 \section{The SEISMIC graph}
 \label{sec:seismic}
 
-Shown when a seismometer is enabled (Preferences, Auxiliary). White curve: the
+Shown when a seismometer is enabled (Settings, Auxiliary). White curve: the
 sensor's signal in ADC counts, re-centred by the offset setting; blue curve:
 its running standard deviation; green lines: the seismic tolerance. A burst at
 the same moment as RA or DEC excursions points to a vibration (a step, a door,
@@ -555,7 +553,7 @@ wind on the shelter), not to the mount.
 
 \section{The axial graph}
 
-Optional (Preferences, Processing, \emph{Axial mode}). It shows the speed or
+Optional (Settings, Processing, \emph{Axial mode}). It shows the speed or
 the displacement of the mount's axes themselves, read with \texttt{:GaXa\#}
 and \texttt{:GaXb\#} on a 10Micron (LX200, or ASCOM with the 10Micron
 commands; greyed out in pure ASCOM), computed as MountMonitor~3 does. The
@@ -610,6 +608,12 @@ counts. Amplitudes are \emph{peak} arcseconds. The \emph{+} and \emph{-}
 buttons zoom horizontally, \emph{<} and \emph{>} shift, and the circular
 arrow brings back the full range; the vertical scale follows the zoom.
 
+\emph{Analysed} (30~min by default) limits the three spectra to the same last
+minutes: over the whole buffer the mount would cover about 7~h (50,000 samples
+at 2~Hz) and the seismometer 41~min (at 20~Hz), and their lines could no longer
+be compared. For a line of period $P$, take at least $3P$ to $4P$. The top line
+gives the duration each spectrum really covers.
+
 What to look for is explained in chapter~\ref{ch:fft}: a sharp, stable peak
 between 2 and 15 minutes is a worm periodic error; nothing sharp is good.
 
@@ -617,7 +621,7 @@ between 2 and 15 minutes is a worm periodic error; nothing sharp is good.
 \chapter{Settings}
 \label{ch:config}
 
-\textbf{Edit > Preferences} (\texttt{Ctrl+,}) opens four tabs. Nothing is
+\textbf{File > Settings} (\texttt{Ctrl+,}) opens four tabs. Nothing is
 applied before \emph{OK}; \emph{Cancel} changes nothing. Fields that do not
 apply to the chosen protocol are greyed out. The dialog reopens on the last
 tab visited.
@@ -708,8 +712,10 @@ the mount reports it. Type it only if the mount does not; longitude
 Delay after slew & Seconds ignored after a slew, while the mount settles. \\
 Axial mode & Axial graph: off, speed or displacement. \\
 Reset mode & When to clear the graphs: by hand, or at every slew. \\
-Dump graphs & When to save the graphs as images: by hand, at every slew, at
-parking, or when the graph is full. \\
+Dump graphs & When to save the graphs as images. As in MountMonitor~3, every
+automatic choice saves them each time the graph has filled with new data; an
+image at parking, or at every slew and parking, can be added. \emph{Manual}:
+only through \emph{File > Export graphs}. \\
 Close files & When to close the session and open a new one: by hand, at every
 slew or at parking. \\
 History lines & Size of the history on screen. \\
@@ -777,7 +783,7 @@ seconds.
 \chapter{The mount checks}
 \label{ch:checks}
 
-They run at connection, after every slew, when the Preferences are accepted and
+They run at connection, after every slew, when the Settings are accepted and
 every 5~minutes. The results go into the history under the line ``\#\#\# MOUNT
 SETTINGS CHECK \#\#\#''; the periodic check only writes what changed. The
 rate-related checks only run while the mount is tracking.
@@ -887,7 +893,7 @@ prefer the network. \\
 0.5~Hz rate with ASCOM & Normal: it is the driver's refresh rate. \\
 Grey curves & The mount is not tracking (parked, idle, slewing). \\
 No ephemeris & The site is unknown: the mount does not report it and the
-Preferences are empty. \\
+Settings are empty. \\
 Poor rating, quiet mount & Read chapter~\ref{ch:stats}: the reading is often
 wrong, not the mount. \\
 \bottomrule
@@ -1003,7 +1009,7 @@ periodic error, over 90~\% tracking, no recommendation.
 \textbf{Keys} & \textbf{Action} \\
 \midrule
 \texttt{F1} & Help \\
-\texttt{Ctrl+,} & Preferences \\
+\texttt{Ctrl+,} & Settings \\
 \texttt{Ctrl+O} & Open a log \\
 \texttt{Ctrl+Q} & Quit \\
 \bottomrule

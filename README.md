@@ -207,7 +207,7 @@ update never touches them.
 The interface speaks **English, French and Dutch**, and picks your system
 language on its own. Dutch is there because MountMonitor began as a Dutch
 program: the original v3.40 is by Nicolàs de Hilster. You can force a language
-in *Preferences → Language*.
+in the *Language* menu.
 
 ### From source, with the launcher
 

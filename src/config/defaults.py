@@ -78,6 +78,11 @@ DEFAULTS = {
     "seismometer_port": "",
     "seismometer_baud": 9600,
     "seismometer_frequency_hz": 20,
+    # Duration analysed by the FFT, in minutes, the same for RA, DEC and the
+    # seismometer (0 = all the buffer holds). 30 min fits in the seismometer
+    # buffer (50,000 samples at 20 Hz = 41 min), so the three spectra cover
+    # the same stretch of time and can be compared.
+    "fft_span_min": 30,
     "seismometer_offset": 300,
     "seismometer_range": 2000,
 

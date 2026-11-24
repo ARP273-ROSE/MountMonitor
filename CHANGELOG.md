@@ -6,6 +6,32 @@ behaviour changes, the patch number when only a defect is fixed.
 
 Figures quoted below were measured on real sessions, not estimated.
 
+## 4.5.7 — 2026-11-24
+
+Remarks of the MM3 author on 4.5.6, and menus tidied.
+
+- FFT window: *Analysed* duration (5 min to 4 h, or the whole buffer; 30 min by
+  default), the same for RA, DEC and the seismometer. Over the whole buffer the
+  mount spectrum covered about 7 h (50,000 samples at 2 Hz) and the
+  seismometer's 41 min (at 20 Hz): their lines could not be compared. The top
+  line gives the duration each spectrum really covers. Also applies to the
+  spectra written in the log.
+- Automatic graph dumps as in MountMonitor 3: every automatic choice dumps the
+  graphs each time they have filled, and an image at parking, or at each slew
+  and parking, can be added. Choices: Manual, When the graph fills, + at
+  parking, + at each slew and parking. A dump made for a slew or a park restarts
+  the count to the next full graph (no near-duplicate).
+
+- File gathers the session and the application: connect, disconnect, new
+  files, export graphs, open a log, analyse mount logs, Settings (Ctrl+,),
+  desktop shortcut, quit. The Edit menu, which held Preferences alone, is gone.
+- The resets (min/max, graph buffers, both) are a submenu of View; New files and
+  Export graphs, which are not resets, moved to File.
+- "Preferences" is now called "Settings" everywhere, and opens from the File
+  menu only (no toolbar button any more).
+- The File menu entries said "Connecting" and "Disconnected" (a state):
+  they now read "Connect" and "Disconnect".
+
 ## 4.5.6 — 2026-11-24
 
 Unattended start (observatory logon task, `--connect`).

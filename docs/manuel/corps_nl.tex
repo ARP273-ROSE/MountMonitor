@@ -453,21 +453,22 @@ nummers verwijzen naar de paragrafen hieronder.
 \textbf{Onderdeel} & \textbf{Functie} \\
 \midrule
 \emph{Verbinden / Verbinding verbreken} & Opent of sluit de verbinding met de
-montering, met het protocol uit de Voorkeuren. \\
+montering, met het protocol uit de Instellingen. \\
 \emph{Log starten / Log stoppen} & Zet de logger gereed (hij start zodra de
 montering volgt) of stopt hem. Een rechtsklik geeft de instellingen voor
 onbemande werking. \\
 \emph{FFT} & Opent het venster voor Fourier-analyse
 (hoofdstuk~\ref{ch:fftwin}). \\
-\emph{Voorkeuren} & Alle instellingen (hoofdstuk~\ref{ch:config}). \\
-Bestand & Verbinden, verbreken; \emph{Log openen} speelt een opgeslagen sessie
-af en maakt het rapport opnieuw; \emph{Monteringlogs analyseren (.log10m)}
-leest de interne logboeken van een 10Micron; Afsluiten. \\
+Bestand & Verbinden, verbreken; \emph{Nieuwe bestanden} sluit de sessie en
+opent een nieuwe; \emph{Grafieken exporteren} slaat de grafieken op als
+PNG-afbeeldingen; \emph{Log openen} speelt een opgeslagen sessie af en maakt
+het rapport opnieuw; \emph{Monteringlogs analyseren (.log10m)} leest de interne
+logboeken van een 10Micron; Instellingen; snelkoppeling op het bureaublad;
+Afsluiten. \\
 Beeld & \emph{Getoonde tijdspanne} (30~s tot 1~u), \emph{Verticale schaal}
-(zie hieronder), FFT-venster. Ook met een rechtsklik op een grafiek. \\
-Resetten & Zet min/max, de buffers van de grafieken of beide terug;
-\emph{Nieuwe bestanden} sluit de sessie en opent een nieuwe;
-\emph{Grafieken exporteren} slaat de grafieken op als PNG-afbeeldingen. \\
+(zie hieronder), FFT-venster; \emph{Resetten} zet min/max, de buffers van de
+grafieken of beide terug. Tijdspanne en schaal ook met een rechtsklik op een
+grafiek. \\
 Taal, Help & Taal van de interface; help, handleiding, updates, een probleem
 melden. \\
 \bottomrule
@@ -568,7 +569,7 @@ uit zijn geheugen, niet vanaf de klok van de montering.
 \section{De grafiek SEISMISCH}
 \label{sec:seismic}
 
-Zichtbaar als een seismometer is ingeschakeld (Voorkeuren, Hulpapparatuur).
+Zichtbaar als een seismometer is ingeschakeld (Instellingen, Hulpapparatuur).
 Witte curve: het signaal van de sensor in ADC-tellingen, rond nul gelegd met de
 ingestelde offset; blauwe curve: de lopende standaardafwijking; groene lijnen:
 de seismische tolerantie. Een uitbarsting op hetzelfde moment als uitschieters in
@@ -577,7 +578,7 @@ de montering.
 
 \section{De axiale grafiek}
 
-Optioneel (Voorkeuren, Verwerking, \emph{Axiale modus}). Ze toont de snelheid of
+Optioneel (Instellingen, Verwerking, \emph{Axiale modus}). Ze toont de snelheid of
 de verplaatsing van de assen van de montering zelf, op een 10Micron gelezen met
 \texttt{:GaXa\#} en \texttt{:GaXb\#} (LX200, of ASCOM met de
 10Micron-commando's; grijs in zuiver ASCOM), berekend zoals MountMonitor~3 doet.
@@ -636,6 +637,12 @@ De amplitudes zijn \emph{piek}-boogseconden. De knoppen \emph{+} en \emph{-}
 zoomen horizontaal, \emph{<} en \emph{>} verschuiven, en de ronde pijl herstelt
 het volledige bereik; de verticale schaal volgt de zoom.
 
+\emph{Geanalyseerd} (standaard 30~min) beperkt de drie spectra tot dezelfde
+laatste minuten: over de hele buffer zou de montering ongeveer 7~uur beslaan
+(50.000 punten bij 2~Hz) en de seismometer 41~min (bij 20~Hz), en hun lijnen
+zouden niet meer te vergelijken zijn. Neem voor een lijn met periode $P$ minstens
+$3P$ tot $4P$. De bovenste regel geeft de werkelijk bestreken duur per spectrum.
+
 Waar u naar zoekt, staat in hoofdstuk~\ref{ch:fft}: een scherpe, stabiele piek
 tussen 2 en 15 minuten is een periodieke fout van de wormschroef; niets scherps
 is goed.
@@ -644,7 +651,7 @@ is goed.
 \chapter{Instellingen}
 \label{ch:config}
 
-\textbf{Bewerken > Voorkeuren} (\texttt{Ctrl+,}) opent vier tabbladen. Niets
+\textbf{Bestand > Instellingen} (\texttt{Ctrl+,}) opent vier tabbladen. Niets
 wordt toegepast vóór \emph{OK}; \emph{Annuleren} verandert niets. Velden die
 niet bij het gekozen protocol horen, zijn grijs. Het venster opent weer op
 het laatst bekeken tabblad.
@@ -742,8 +749,11 @@ de montering tot rust komt. \\
 Axiale modus & Axiale grafiek: uit, snelheid of verplaatsing. \\
 Resetmodus & Wanneer de grafieken leegmaken: met de hand, of bij elke
 zwenking. \\
-Grafieken exporteren & Wanneer de grafieken als afbeelding opslaan: met de hand,
-bij elke zwenking, bij het parkeren, of als de grafiek vol is. \\
+Grafieken exporteren & Wanneer de grafieken als afbeelding opslaan. Zoals in
+MountMonitor~3 slaat elke automatische keuze ze op telkens als de grafiek met
+nieuwe gegevens gevuld is; daarbij kan een afbeelding bij het parkeren komen, of
+bij elke zwenking en het parkeren. \emph{Handmatig}: alleen via
+\emph{Bestand > Grafieken exporteren}. \\
 Bestanden sluiten & Wanneer de sessie sluiten en een nieuwe openen: met de hand,
 bij elke zwenking of bij het parkeren. \\
 Regels historie & Grootte van de historie op het scherm. \\
@@ -816,7 +826,7 @@ kost maar een paar seconden.
 \label{ch:checks}
 
 Ze lopen bij het verbinden, na elke zwenking, bij het bevestigen van de
-Voorkeuren en elke 5~minuten. De resultaten komen in de historie onder de regel
+Instellingen en elke 5~minuten. De resultaten komen in de historie onder de regel
 ,,\#\#\# CONTROLE INSTELLINGEN MONTERING \#\#\#''; de periodieke controle
 schrijft alleen wat veranderd is. De controles die met de snelheid te maken
 hebben, lopen alleen als de montering volgt.
@@ -929,7 +939,7 @@ nodeloos draait, verkies het netwerk. \\
 0,5~Hz met ASCOM & Normaal: dat is de verversing van het stuurprogramma. \\
 Grijze curven & De montering volgt niet (geparkeerd, stil, zwenkend). \\
 Geen efemeriden & De locatie is onbekend: de montering geeft haar niet door en
-de Voorkeuren zijn leeg. \\
+de Instellingen zijn leeg. \\
 Matig oordeel, rustige montering & Lees hoofdstuk~\ref{ch:stats}: vaak is de
 lezing fout, niet de montering. \\
 \bottomrule
@@ -1049,7 +1059,7 @@ typische periodieke fout, meer dan 90~\% volgend, geen aanbeveling.
 \textbf{Toetsen} & \textbf{Handeling} \\
 \midrule
 \texttt{F1} & Hulp \\
-\texttt{Ctrl+,} & Voorkeuren \\
+\texttt{Ctrl+,} & Instellingen \\
 \texttt{Ctrl+O} & Logbestand openen \\
 \texttt{Ctrl+Q} & Afsluiten \\
 \bottomrule

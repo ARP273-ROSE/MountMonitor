@@ -76,3 +76,42 @@ def test_update_offer_returns_at_once(window):
     assert dlg.parent() is None and window.isEnabled()
     dlg.reject()
     assert window._update_offer is None
+
+
+def test_menus_tidied(window):
+    from PyQt6.QtWidgets import QPushButton, QToolBar
+    from src.utils.i18n import T
+    titles = [a.text() for a in window.menuBar().actions()]
+    assert titles == [T("menu_file"), T("menu_view"), T("menu_language"), T("menu_help")]
+    file_menu = window.menuBar().actions()[0].menu()
+    texts = [a.text() for a in file_menu.actions() if a.text()]
+    assert T("menu_preferences") in texts and T("btn_connect") in texts
+    assert T("btn_disconnect") in texts and T("dump_graphs_action") in texts
+    for bar in window.findChildren(QToolBar):
+        assert T("menu_preferences") not in [b.text() for b in bar.findChildren(QPushButton)]
+
+
+def test_fft_span_same_window_for_all_series(window, monkeypatch):
+    """Nicolas, 24/11: over the whole buffer the mount spectrum covered hours
+    and the seismometer's 41 min. The chosen span applies to all three."""
+    import numpy as np, time as _t
+    p = window._processor
+    for b in (p.ra_buffer, p.dec_buffer, p.seismic_buffer):
+        b.clear() if hasattr(b, "clear") else None
+    t0 = 1_000_000.0
+    for i in range(7200):                    # 1 h at 2 Hz
+        p.ra_buffer.append(t0 + i / 2.0, np.sin(i / 50.0))
+        p.dec_buffer.append(t0 + i / 2.0, np.cos(i / 50.0))
+    for i in range(20 * 1200):               # 20 min at 20 Hz
+        p.seismic_buffer.append(t0 + i / 20.0, np.sin(i / 7.0))
+    window._settings.set("fft_span_min", 10)
+    got = {}
+    window.fft_computed.disconnect()
+    window.fft_computed.connect(lambda r: got.update(r))
+    window._logging_active = True
+    window._update_fft()
+    window._fft_job.join(10)
+    from PyQt6.QtWidgets import QApplication
+    QApplication.processEvents()
+    d = got["durations"]
+    assert abs(d["ra"] - 600) < 2 and abs(d["sei"] - 600) < 2

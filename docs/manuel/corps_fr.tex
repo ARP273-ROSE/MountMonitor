@@ -453,21 +453,21 @@ Les numéros renvoient aux sections qui suivent.
 \textbf{Élément} & \textbf{Rôle} \\
 \midrule
 \emph{Connecter / Déconnecter} & Ouvre ou ferme la liaison avec la monture,
-selon le protocole choisi dans les Préférences. \\
+selon le protocole choisi dans les Paramètres. \\
 \emph{Démarrer log / Arrêter log} & Arme l'enregistreur (il démarre quand la
 monture suit) ou l'arrête. Un clic droit donne les réglages de
 fonctionnement sans surveillance. \\
 \emph{FFT} & Ouvre la fenêtre d'analyse de Fourier
 (chapitre~\ref{ch:fftwin}). \\
-\emph{Préférences} & Tous les réglages (chapitre~\ref{ch:config}). \\
-Fichier & Connecter, déconnecter ; \emph{Ouvrir un log} relit une session
-enregistrée et refait son rapport ; \emph{Analyser logs monture (.log10m)} lit
-les journaux internes d'une 10Micron ; Quitter. \\
+Fichier & Connecter, déconnecter ; \emph{Nouveaux fichiers} ferme la session
+et en ouvre une autre ; \emph{Exporter graphes} enregistre les graphes en
+images PNG ; \emph{Ouvrir un log} relit une session enregistrée et refait son
+rapport ; \emph{Analyser logs monture (.log10m)} lit les journaux internes
+d'une 10Micron ; Paramètres ; raccourci sur le bureau ; Quitter. \\
 Affichage & \emph{Durée affichée} (30~s à 1~h), \emph{Échelle verticale}
-(voir plus bas), fenêtre FFT. Aussi au clic droit sur un graphe. \\
-Réinitialiser & Remet à zéro les min/max, les tampons des graphes, les deux ;
-\emph{Nouveaux fichiers} ferme la session et en ouvre une autre ;
-\emph{Exporter graphes} enregistre les graphes en images PNG. \\
+(voir plus bas), fenêtre FFT ; \emph{Réinitialiser} remet à zéro les min/max,
+les tampons des graphes, ou les deux. Durée et échelle aussi au clic droit sur
+un graphe. \\
 Langue, Aide & Langue de l'interface ; aide, manuel, mises à jour, signaler un
 problème. \\
 \bottomrule
@@ -568,7 +568,7 @@ depuis sa mémoire, pas depuis l'horloge de la monture.
 \section{Le graphe SISMIQUE}
 \label{sec:seismic}
 
-Visible quand un sismomètre est activé (Préférences, Auxiliaire). Courbe
+Visible quand un sismomètre est activé (Paramètres, Auxiliaire). Courbe
 blanche : le signal du capteur en coups ADC, recentré par le décalage réglé ;
 courbe bleue : son écart-type glissant ; lignes vertes : la tolérance sismique.
 Une salve au même instant que des sorties de tolérance en AD ou en DÉC désigne
@@ -576,7 +576,7 @@ une vibration (un pas, une porte, le vent sur l'abri), pas la monture.
 
 \section{Le graphe axial}
 
-Optionnel (Préférences, Traitement, \emph{Mode axial}). Il montre la vitesse
+Optionnel (Paramètres, Traitement, \emph{Mode axial}). Il montre la vitesse
 ou le déplacement des axes de la monture eux-mêmes, lus par
 \texttt{:GaXa\#} et \texttt{:GaXb\#} sur une 10Micron (LX200, ou ASCOM avec les
 commandes 10Micron ; grisé en ASCOM pur), calculés comme MountMonitor~3. Le
@@ -634,6 +634,12 @@ L'amplitude est en secondes d'arc \emph{crête}. Les boutons \emph{+} et
 \emph{-} zooment horizontalement, \emph{<} et \emph{>} décalent, et la flèche
 circulaire revient à la vue complète ; l'échelle verticale suit le zoom.
 
+\emph{Durée analysée} (30~min par défaut) limite les trois spectres aux mêmes
+dernières minutes : sur tout le tampon, la monture couvrirait environ 7~h
+(50\,000 points à 2~Hz) et le sismomètre 41~min (à 20~Hz), et leurs raies ne se
+compareraient plus. Pour une raie de période $P$, prendre au moins $3P$ à $4P$.
+La ligne du haut indique la durée réellement couverte par chaque spectre.
+
 Ce qu'il faut y chercher est expliqué au chapitre~\ref{ch:fft} : un pic net et
 stable entre 2 et 15 minutes est une erreur périodique de vis ; rien de net,
 c'est bien.
@@ -642,7 +648,7 @@ c'est bien.
 \chapter{Réglages}
 \label{ch:config}
 
-\textbf{Édition > Préférences} (\texttt{Ctrl+,}) ouvre quatre onglets. Rien
+\textbf{Fichier > Paramètres} (\texttt{Ctrl+,}) ouvre quatre onglets. Rien
 n'est appliqué avant \emph{OK} ; \emph{Annuler} ne change rien. Les champs qui
 ne concernent pas le protocole choisi sont grisés. La fenêtre rouvre sur le
 dernier onglet consulté.
@@ -739,8 +745,11 @@ monture se stabilise. \\
 Mode axial & Graphe axial : désactivé, vitesse ou déplacement. \\
 Mode réinitialisation & Quand remettre les graphes à zéro : à la main, ou à
 chaque pointage. \\
-Export graphes & Quand enregistrer les graphes en images : à la main, à chaque
-pointage, au parcage, ou quand le graphe est plein. \\
+Export graphes & Quand enregistrer les graphes en images. Comme dans
+MountMonitor~3, tout choix automatique les enregistre chaque fois que le graphe
+s'est rempli de nouvelles données ; on peut y ajouter une image au parcage, ou
+à chaque pointage et au parcage. \emph{Manuel} : seulement par
+\emph{Fichier > Exporter graphes}. \\
 Fermer fichiers & Quand clore la session et en ouvrir une nouvelle : à la main,
 à chaque pointage ou au parcage. \\
 Lignes d'historique & Taille de l'historique à l'écran. \\
@@ -811,7 +820,7 @@ courant ne coûte que quelques secondes.
 \label{ch:checks}
 
 Ils sont faits à la connexion, après chaque pointage, à la validation des
-Préférences et toutes les 5~minutes. Les résultats s'écrivent dans l'historique
+Paramètres et toutes les 5~minutes. Les résultats s'écrivent dans l'historique
 sous la ligne « \#\#\# CONTRÔLE DES RÉGLAGES DE LA MONTURE \#\#\# » ; le
 contrôle périodique n'écrit que ce qui a changé. Les contrôles liés à la vitesse
 ne sont faits que si la monture suit.
@@ -923,7 +932,7 @@ tourne inutilement, préférer le réseau. \\
 Cadence 0,5~Hz en ASCOM & Normal : c'est le rafraîchissement du pilote. \\
 Courbes grises & La monture ne suit pas (parquée, à l'arrêt, pointage). \\
 Pas d'éphémérides & Le site n'est pas connu : la monture ne le donne pas et
-les Préférences sont vides. \\
+les Paramètres sont vides. \\
 Note du rapport médiocre, monture calme & Lire le chapitre~\ref{ch:stats} :
 c'est souvent la lecture qui est fausse, pas la monture. \\
 \bottomrule
@@ -1042,7 +1051,7 @@ périodique typique, plus de 90~\% en suivi, pas de recommandation.
 \textbf{Touches} & \textbf{Action} \\
 \midrule
 \texttt{F1} & Aide \\
-\texttt{Ctrl+,} & Préférences \\
+\texttt{Ctrl+,} & Paramètres \\
 \texttt{Ctrl+O} & Ouvrir un log \\
 \texttt{Ctrl+Q} & Quitter \\
 \bottomrule

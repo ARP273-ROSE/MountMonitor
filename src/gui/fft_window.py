@@ -14,9 +14,12 @@ import pyqtgraph.exporters
 
 logger = logging.getLogger(__name__)
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QSplitter
+    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QSplitter, QComboBox
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
+
+# Choices of the analysed duration, in minutes (0 = whole buffer).
+FFT_SPANS_MIN = (5, 10, 15, 30, 60, 120, 240, 0)
 from PyQt6.QtGui import QFont
 
 from .theme import Colors
@@ -38,6 +41,8 @@ def _meaningful_periods(freqs):
 
 class FFTWindow(QWidget):
     """Standalone FFT analysis window."""
+
+    span_changed = pyqtSignal(int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -128,7 +133,39 @@ class FFTWindow(QWidget):
             ctrl_layout.addWidget(btn)
         btn.setToolTip(T("tt_fft_reset"))
         ctrl_layout.addStretch()
+        # Duration analysed: the last N minutes, the same for the three
+        # series, so that a line in the mount spectrum can be compared with
+        # the seismometer's over the same stretch of time.
+        from ..config.settings import Settings
+        self._span_label = QLabel(T("fft_span"))
+        ctrl_layout.addWidget(self._span_label)
+        self._span = QComboBox()
+        for m in FFT_SPANS_MIN:
+            self._span.addItem(T("fft_span_all") if m == 0 else
+                               (f"{m} min" if m < 60 else f"{m // 60} h"), m)
+        current = Settings().get("fft_span_min")
+        i = self._span.findData(int(current) if current is not None else 30)
+        self._span.setCurrentIndex(i if i >= 0 else FFT_SPANS_MIN.index(30))
+        self._span.setToolTip(T("tt_fft_span"))
+        self._span.currentIndexChanged.connect(self._on_span)
+        ctrl_layout.addWidget(self._span)
         layout.addLayout(ctrl_layout)
+
+    def set_span_visible(self, visible: bool):
+        """Hidden for a replayed log: the whole session is analysed."""
+        self._span_label.setVisible(visible)
+        self._span.setVisible(visible)
+
+    def _on_span(self, _index):
+        from ..config.settings import Settings
+        minutes = int(self._span.currentData())
+        s = Settings()
+        s.set("fft_span_min", minutes)
+        try:
+            s.save()
+        except Exception:
+            logger.debug("FFT span not saved", exc_info=True)
+        self.span_changed.emit(minutes)
 
     def _seismic_axis(self, plot, name=None):
         """Seismic curve on its OWN scale (right axis, ADC counts).
@@ -164,7 +201,7 @@ class FFTWindow(QWidget):
                    dec_freqs=None, dec_mags=None,
                    sei_freqs=None, sei_mags=None,
                    ra_sample_rate=None, dec_sample_rate=None,
-                   sei_sample_rate=None):
+                   sei_sample_rate=None, durations=None):
         """Update FFT graphs with new data."""
         if ra_freqs is not None and len(ra_freqs) > 0:
             self._freq_ra.setData(ra_freqs, ra_mags)
@@ -186,13 +223,22 @@ class FFTWindow(QWidget):
             self._fit_x()
 
         # Update frequency info
+        # With the stretch of time each spectrum really covers: less than
+        # the chosen duration while the buffer fills, or when it holds less.
+        durations = durations or {}
+
+        def covered(key):
+            d = durations.get(key)
+            if not d:
+                return ""
+            return f", {d / 60:.0f} min" if d < 5400 else f", {d / 3600:.1f} h"
         parts = []
         if ra_sample_rate:
-            parts.append(f"RA: {ra_sample_rate:.1f} Hz")
+            parts.append(f"RA: {ra_sample_rate:.1f} Hz{covered('ra')}")
         if dec_sample_rate:
-            parts.append(f"DEC: {dec_sample_rate:.1f} Hz")
+            parts.append(f"DEC: {dec_sample_rate:.1f} Hz{covered('dec')}")
         if sei_sample_rate:
-            parts.append(f"Seismic: {sei_sample_rate:.1f} Hz")
+            parts.append(f"Seismic: {sei_sample_rate:.1f} Hz{covered('sei')}")
         self._freq_label.setText("  |  ".join(parts))
 
     def _zoom_in(self):

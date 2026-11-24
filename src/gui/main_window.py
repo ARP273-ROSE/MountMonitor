@@ -239,26 +239,41 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(800, 500)
 
     def _create_menus(self):
-        """Create menu bar."""
+        """Create menu bar.
+
+        File holds everything about the session and the application (connect,
+        recording files, logs to replay, settings, quit); View what is shown
+        and its resets. A one-entry Edit menu and a Reset menu mixing resets
+        with file actions went away in 4.5.7."""
         menubar = self.menuBar()
 
         # File menu
         file_menu = menubar.addMenu(T("menu_file"))
 
-        connect_action = QAction(T("connecting").rstrip("..."), self)
+        connect_action = QAction(T("btn_connect"), self)
         connect_action.setShortcut(QKeySequence("Ctrl+K"))
         connect_action.setToolTip(T("tt_connect"))
         connect_action.triggered.connect(self._connect)
         file_menu.addAction(connect_action)
         self._connect_action = connect_action
 
-        disconnect_action = QAction(T("disconnected"), self)
+        disconnect_action = QAction(T("btn_disconnect"), self)
         disconnect_action.setShortcut(QKeySequence("Ctrl+D"))
         disconnect_action.setToolTip(T("tt_disconnect"))
         disconnect_action.triggered.connect(self._disconnect)
         disconnect_action.setEnabled(False)
         file_menu.addAction(disconnect_action)
         self._disconnect_action = disconnect_action
+
+        file_menu.addSeparator()
+
+        for label, slot in [
+            (T("reset_new_files"), self._new_log_files),
+            (T("dump_graphs_action"), self._dump_graphs),
+        ]:
+            action = QAction(label, self)
+            action.triggered.connect(slot)
+            file_menu.addAction(action)
 
         file_menu.addSeparator()
 
@@ -273,6 +288,18 @@ class MainWindow(QMainWindow):
         open_log10m_action.setToolTip(T("tt_open_log10m"))
         open_log10m_action.triggered.connect(self._open_log10m_files)
         file_menu.addAction(open_log10m_action)
+
+        file_menu.addSeparator()
+
+        pref_action = QAction(T("menu_preferences"), self)
+        pref_action.setShortcut(QKeySequence("Ctrl+,"))
+        pref_action.setToolTip(T("tt_prefs"))
+        pref_action.triggered.connect(self._show_preferences)
+        file_menu.addAction(pref_action)
+
+        shortcut_action = QAction(T("menu_create_shortcut"), self)
+        shortcut_action.triggered.connect(self._create_desktop_shortcut)
+        file_menu.addAction(shortcut_action)
 
         file_menu.addSeparator()
 
@@ -297,27 +324,18 @@ class MainWindow(QMainWindow):
         fft_action.triggered.connect(self._show_fft)
         view_menu.addAction(fft_action)
 
-        # Reset menu
-        reset_menu = menubar.addMenu(T("menu_reset"))
+        view_menu.addSeparator()
 
+        # Resets: what is displayed (min/max, graph buffers).
+        reset_menu = view_menu.addMenu(T("menu_reset"))
         for label, slot in [
             (T("reset_minmax"), self._reset_minmax),
             (T("reset_buffers"), self._reset_buffers),
             (T("reset_both"), self._reset_both),
-            (T("reset_new_files"), self._new_log_files),
-            (T("dump_graphs_action"), self._dump_graphs),
         ]:
             action = QAction(label, self)
             action.triggered.connect(slot)
             reset_menu.addAction(action)
-
-        # Edit menu
-        edit_menu = menubar.addMenu(T("menu_edit"))
-        pref_action = QAction(T("menu_preferences"), self)
-        pref_action.setShortcut(QKeySequence("Ctrl+,"))
-        pref_action.setToolTip(T("tt_prefs"))
-        pref_action.triggered.connect(self._show_preferences)
-        edit_menu.addAction(pref_action)
 
         # Language menu.
         #
@@ -390,12 +408,6 @@ class MainWindow(QMainWindow):
         update_action.triggered.connect(self._check_updates_manual)
         help_menu.addAction(update_action)
 
-        help_menu.addSeparator()
-
-        shortcut_action = QAction(T("menu_create_shortcut"), self)
-        shortcut_action.triggered.connect(self._create_desktop_shortcut)
-        help_menu.addAction(shortcut_action)
-
     def _create_toolbar(self):
         """Create toolbar with main action buttons."""
         toolbar = QToolBar()
@@ -425,11 +437,7 @@ class MainWindow(QMainWindow):
         btn_fft.setToolTip(T("tt_fft"))
         btn_fft.clicked.connect(self._show_fft)
         toolbar.addWidget(btn_fft)
-
-        btn_prefs = QPushButton(T("menu_preferences"))
-        btn_prefs.setToolTip(T("tt_preferences"))
-        btn_prefs.clicked.connect(self._show_preferences)
-        toolbar.addWidget(btn_prefs)
+        # Settings: File menu only (Ctrl+,), no second copy in the toolbar.
 
     def _create_central_widget(self):
         """Create the central widget with graphs and status panel."""
@@ -1250,6 +1258,7 @@ class MainWindow(QMainWindow):
         """Show FFT analysis window."""
         if self._fft_window is None:
             self._fft_window = FFTWindow()
+            self._fft_window.span_changed.connect(lambda _m: self._update_fft())
             w = self._settings.get("fft_width")
             h = self._settings.get("fft_height")
             self._fft_window.resize(w, h)
@@ -1276,6 +1285,23 @@ class MainWindow(QMainWindow):
         _, sei_data = self._processor.seismic_buffer.get_arrays()
         sei_rate = self._settings.get("seismometer_frequency_hz")
         signal = self.fft_computed
+        # The last N minutes only, the same for the three series (chosen in
+        # the FFT window): over the whole buffer, the mount spectrum
+        # covered hours (50,000 samples at 2 Hz) and the seismometer's 41
+        # minutes (at 20 Hz), and the two could no longer be compared.
+        try:
+            span_s = float(self._settings.get("fft_span_min") or 0) * 60.0
+        except (TypeError, ValueError):
+            span_s = 1800.0
+        if span_s > 0:
+            if len(ra_t):
+                keep = ra_t >= ra_t[-1] - span_s
+                ra_t, ra_data = ra_t[keep], ra_data[keep]
+            if len(dec_t):
+                keep = dec_t >= dec_t[-1] - span_s
+                dec_t, dec_data = dec_t[keep], dec_data[keep]
+            if sei_rate and sei_rate > 0:
+                sei_data = sei_data[-int(span_s * sei_rate):]
 
         def work():
             # On the real timestamps: the sampling rate is measured on the
@@ -1292,6 +1318,12 @@ class MainWindow(QMainWindow):
                             if len(sei_data) > 64 else (None, None)),
                     "freq": 1.0 / float(np.median(d)) if len(d) else 0.0,
                     "sei_rate": sei_rate if len(sei_data) > 0 else None,
+                    "durations": {
+                        "ra": float(ra_t[-1] - ra_t[0]) if len(ra_t) > 1 else 0.0,
+                        "dec": float(dec_t[-1] - dec_t[0]) if len(dec_t) > 1 else 0.0,
+                        "sei": (len(sei_data) / float(sei_rate)
+                                if sei_rate and len(sei_data) else 0.0),
+                    },
                 }
             except Exception as e:
                 logger.warning(f"FFT not computed: {e}")
@@ -1316,6 +1348,7 @@ class MainWindow(QMainWindow):
                 sei_freqs=sei_freqs, sei_mags=sei_mags,
                 ra_sample_rate=freq, dec_sample_rate=freq,
                 sei_sample_rate=r["sei_rate"],
+                durations=r.get("durations"),
             )
 
         # Log FFT data to .fft file
@@ -1827,6 +1860,8 @@ class MainWindow(QMainWindow):
         if ra_freqs is not None or dec_freqs is not None:
             if self._fft_window is None:
                 self._fft_window = FFTWindow()
+                self._fft_window.span_changed.connect(lambda _m: self._update_fft())
+            self._fft_window.set_span_visible(False)
             self._fft_window.update_fft(
                 ra_freqs=ra_freqs, ra_mags=ra_mags,
                 dec_freqs=dec_freqs, dec_mags=dec_mags,
@@ -2368,7 +2403,9 @@ class MainWindow(QMainWindow):
         and capped at 50,000: once full, its size no longer changes, and
         the log stopped in the middle of the night without a word.
         """
-        if self._settings.get("dump_mode") != "full":
+        # Every automatic mode dumps on filling, as MountMonitor 3; parking
+        # and slewing only add their own dumps on top.
+        if self._settings.get("dump_mode") not in ("full", "parking", "slewing"):
             return
         try:
             t, _ = self._processor.ra_buffer.get_arrays()
@@ -2408,6 +2445,14 @@ class MainWindow(QMainWindow):
             except Exception as e:          # disk full, folder not writable
                 failed = e
                 logger.warning(f"Graph export to {folder} failed: {e}")
+        # The next dump on filling comes one full width after this one,
+        # whatever triggered it (slew, park, by hand): no near-duplicate.
+        try:
+            t, _ = self._processor.ra_buffer.get_arrays()
+            if len(t):
+                self._last_dump_time = float(t[-1])
+        except Exception:
+            pass
         if failed is not None:
             self._status_panel.add_message(f"\u26a0 {T('graphs_exported')} : {failed}",
                                            Colors.STATUS_WARNING)

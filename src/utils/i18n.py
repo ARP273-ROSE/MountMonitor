@@ -15,7 +15,6 @@ TX = {
                         "nl": "Gegevensbestanden (*.dat);;Alle bestanden (*)"},
     "app_title": {"en": "MountMonitor", "fr": "MountMonitor", "nl": "MountMonitor"},
     "menu_file": {"en": "File", "fr": "Fichier", "nl": "Bestand"},
-    "menu_edit": {"en": "Edit", "fr": "Édition", "nl": "Bewerken"},
     "menu_view": {"en": "View", "fr": "Affichage", "nl": "Beeld"},
     "menu_reset": {"en": "Reset", "fr": "Réinitialiser", "nl": "Resetten"},
     "menu_help": {"en": "Help", "fr": "Aide", "nl": "Help"},
@@ -25,9 +24,9 @@ TX = {
         "fr": "Afficher l'ascension droite en degrés plutôt qu'en heures",
         "nl": "De rechte klimming in graden tonen in plaats van in uren"},
     "mount_alert_disable": {
-        "en": "This window can be switched off in Preferences > Miscellaneous.",
-        "fr": "Cette fenêtre peut être désactivée dans Préférences > Divers.",
-        "nl": "Dit venster kan worden uitgeschakeld in Voorkeuren > Overig."},
+        "en": "This window can be switched off in Settings > Miscellaneous.",
+        "fr": "Cette fenêtre peut être désactivée dans Paramètres > Divers.",
+        "nl": "Dit venster kan worden uitgeschakeld in Instellingen > Overig."},
     "pref_alert_popup": {
         "en": "Show an alert window when a mount setting is wrong",
         "fr": "Afficher une fenêtre d'alerte quand un réglage de la monture est faux",
@@ -35,9 +34,9 @@ TX = {
     "pref_check_interval": {"en": "Check again every", "fr": "Revérifier toutes les",
                             "nl": "Opnieuw controleren elke"},
     "sei_pas_de_port": {
-        "en": "Seismometer enabled but no serial port chosen (Preferences > Auxiliary).",
-        "fr": "Sismomètre activé mais aucun port série choisi (Préférences > Auxiliaire).",
-        "nl": "Seismometer ingeschakeld maar geen seriële poort gekozen (Voorkeuren > Hulpapparatuur)."},
+        "en": "Seismometer enabled but no serial port chosen (Settings > Auxiliary).",
+        "fr": "Sismomètre activé mais aucun port série choisi (Paramètres > Auxiliaire).",
+        "nl": "Seismometer ingeschakeld maar geen seriële poort gekozen (Instellingen > Hulpapparatuur)."},
     "sei_echec": {
         "en": "Seismometer: cannot open {port} ({e}). Is another program (JamaSeis?) using it?",
         "fr": "Sismomètre : impossible d'ouvrir {port} ({e}). Un autre programme (JamaSeis ?) l'utilise-t-il ?",
@@ -129,9 +128,9 @@ TX = {
     "fft_seismic_axis": {"en": "Seismic (ADC counts)", "fr": "Sismique (coups ADC)",
                          "nl": "Seismisch (ADC-tellingen)"},
     "chk_prefs_pure_ascom": {
-        "en": "Follow object, tracking correction and speed not checked: no ASCOM equivalent (pure ASCOM; tick \"10Micron commands through the ASCOM driver\" in Preferences, or connect in LX200 TCP/IP)",
-        "fr": "Suivi d'objet, correction et vitesse de suivi non vérifiés : pas d'équivalent ASCOM (ASCOM pur ; cocher « Commandes 10Micron via le pilote ASCOM » dans les Préférences, ou se connecter en LX200 TCP/IP)",
-        "nl": "Object volgen, volgcorrectie en -snelheid niet gecontroleerd: geen ASCOM-equivalent (zuiver ASCOM; vink \"10Micron-commando's via de ASCOM-driver\" aan in Voorkeuren, of verbind via LX200 TCP/IP)"},
+        "en": "Follow object, tracking correction and speed not checked: no ASCOM equivalent (pure ASCOM; tick \"10Micron commands through the ASCOM driver\" in Settings, or connect in LX200 TCP/IP)",
+        "fr": "Suivi d'objet, correction et vitesse de suivi non vérifiés : pas d'équivalent ASCOM (ASCOM pur ; cocher « Commandes 10Micron via le pilote ASCOM » dans les Paramètres, ou se connecter en LX200 TCP/IP)",
+        "nl": "Object volgen, volgcorrectie en -snelheid niet gecontroleerd: geen ASCOM-equivalent (zuiver ASCOM; vink \"10Micron-commando's via de ASCOM-driver\" aan in Instellingen, of verbind via LX200 TCP/IP)"},
     "pref_ascom_10micron": {
         "en": "10Micron commands through the ASCOM driver",
         "fr": "Commandes 10Micron via le pilote ASCOM",
@@ -258,9 +257,9 @@ TX = {
         "fr": "Ouvrir la fenêtre d'analyse FFT",
         "nl": "Het FFT-analysevenster openen"},
     "tt_prefs": {
-        "en": "Open preferences",
-        "fr": "Ouvrir les préférences",
-        "nl": "De voorkeuren openen"},
+        "en": "Open the settings",
+        "fr": "Ouvrir les paramètres",
+        "nl": "De instellingen openen"},
     "tt_doc_online": {
         "en": "Open online documentation",
         "fr": "Ouvrir la documentation en ligne",
@@ -410,9 +409,9 @@ TX = {
         "fr": "Quand réinitialiser automatiquement les tampons",
         "nl": "Wanneer de buffers automatisch worden gewist"},
     "tt_dump_mode": {
-        "en": "When to automatically dump graphs to files",
-        "fr": "Quand exporter automatiquement les graphes",
-        "nl": "Wanneer de grafieken automatisch worden weggeschreven"},
+        "en": "When to save the graphs as images on their own. Every automatic choice saves them each time the graph has filled with new data (a continuous record of the night); parking, or each slew and parking, add an image at those moments, with the target's vertical scale.",
+        "fr": "Quand enregistrer les graphes en images d'office. Tout choix automatique les enregistre chaque fois que le graphe s'est rempli de nouvelles données (un relevé continu de la nuit) ; le parcage, ou chaque pointage et le parcage, ajoutent une image à ces moments-là, à l'échelle verticale de la cible.",
+        "nl": "Wanneer de grafieken vanzelf als afbeelding worden opgeslagen. Elke automatische keuze slaat ze op telkens als de grafiek met nieuwe gegevens gevuld is (een doorlopend verslag van de nacht); parkeren, of elke zwenking en parkeren, voegen op die momenten een afbeelding toe, met de verticale schaal van het object."},
     "tt_close_mode": {
         "en": "When to automatically close log files",
         "fr": "Quand fermer automatiquement les fichiers log",
@@ -578,9 +577,9 @@ TX = {
     "nuit_apres": {"en": "recorded after dawn", "fr": "enregistré après l'aube",
                    "nl": "opgenomen na het ochtendgloren"},
     "nuit_pas_de_site": {
-        "en": "No site known: set it in Preferences to get the twilights.",
-        "fr": "Site inconnu : renseignez-le dans les préférences pour avoir les crépuscules.",
-        "nl": "Locatie onbekend: stel deze in bij Voorkeuren voor de schemeringen."},
+        "en": "No site known: set it in Settings to get the twilights.",
+        "fr": "Site inconnu : renseignez-le dans les paramètres pour avoir les crépuscules.",
+        "nl": "Locatie onbekend: stel deze in bij Instellingen voor de schemeringen."},
     "btn_armed_log": {"en": "Armed: starts when the mount tracks",
                       "fr": "Armé : démarre quand la monture suit",
                       "nl": "Gereed: start zodra de montering volgt"},
@@ -592,9 +591,9 @@ TX = {
         "fr": "Rien n'est encore enregistré. Le journal s'ouvrira seul quand la monture suivra (et, en mode « La nuit seulement », que le Soleil sera couché). Cliquer pour désarmer ; clic droit pour les options automatiques.",
         "nl": "Er wordt nog niets opgenomen. Het log opent vanzelf zodra de montering volgt (en, in de modus \"Alleen 's nachts\", de zon onder is). Klik om uit te schakelen; rechtsklik voor de automatische opties."},
     "logging_armed_day": {
-        "en": "The mount tracks, but the Sun is up: recording will start at nightfall. To record by day too, untick \"Night only\" (right click on the log button, or Preferences).",
-        "fr": "La monture suit, mais il fait jour : l'enregistrement démarrera à la nuit. Pour enregistrer aussi de jour, décocher « La nuit seulement » (clic droit sur le bouton d'enregistrement, ou Préférences).",
-        "nl": "De montering volgt, maar de zon is op: de registratie start bij het invallen van de nacht. Om ook overdag op te nemen: \"Alleen 's nachts\" uitvinken (rechtsklik op de logknop, of Voorkeuren)."},
+        "en": "The mount tracks, but the Sun is up: recording will start at nightfall. To record by day too, untick \"Night only\" (right click on the log button, or Settings).",
+        "fr": "La monture suit, mais il fait jour : l'enregistrement démarrera à la nuit. Pour enregistrer aussi de jour, décocher « La nuit seulement » (clic droit sur le bouton d'enregistrement, ou Paramètres).",
+        "nl": "De montering volgt, maar de zon is op: de registratie start bij het invallen van de nacht. Om ook overdag op te nemen: \"Alleen 's nachts\" uitvinken (rechtsklik op de logknop, of Instellingen)."},
     "logging_armed": {
         "en": "Logger armed: recording starts when the mount begins tracking.",
         "fr": "Enregistreur armé : l'enregistrement démarrera quand la monture suivra.",
@@ -658,7 +657,7 @@ TX = {
         "en": "Logging is running: the restart is not offered so the night is not cut short.",
         "fr": "L'enregistrement est en cours : le redémarrage n'est pas proposé, pour ne pas couper la nuit.",
         "nl": "De registratie loopt: herstarten wordt niet aangeboden om de nacht niet af te breken."},
-    "menu_preferences": {"en": "Preferences", "fr": "Préférences", "nl": "Voorkeuren"},
+    "menu_preferences": {"en": "Settings", "fr": "Paramètres", "nl": "Instellingen"},
     "menu_quit": {"en": "Quit", "fr": "Quitter", "nl": "Afsluiten"},
     "menu_about": {"en": "About", "fr": "À propos", "nl": "Over"},
     "menu_help_contents": {"en": "Help Contents", "fr": "Contenu de l'aide", "nl": "Helponderwerpen"},
@@ -704,7 +703,7 @@ TX = {
               "<p>Opvolger van het oorspronkelijke Java-programma MountMonitor v3.40<br>"
               "van Nicolàs de Hilster (2018-2021), samen met hem ontwikkeld.</p><p>Python/PyQt6/pyqtgraph — © ARP273-ROSE, "
               "MIT-licentie</p>"},
-    "menu_create_shortcut": {"en": "Create Desktop Shortcut", "fr": "Créer raccourci bureau", "nl": "Snelkoppeling maken"},
+    "menu_create_shortcut": {"en": "Create Desktop Shortcut", "fr": "Créer un raccourci sur le bureau", "nl": "Snelkoppeling maken"},
 
     # Connection
     "connecting": {"en": "Connecting...", "fr": "Connexion...", "nl": "Verbinden..."},
@@ -743,6 +742,12 @@ TX = {
 
     # FFT
     "fft_title": {"en": "FFT Analysis", "fr": "Analyse FFT", "nl": "FFT-analyse"},
+    "fft_span": {"en": "Analysed:", "fr": "Durée analysée :", "nl": "Geanalyseerd:"},
+    "fft_span_all": {"en": "Whole buffer", "fr": "Tout le tampon", "nl": "Hele buffer"},
+    "tt_fft_span": {
+        "en": "The spectra are computed on the last minutes chosen here, the same stretch of time for RA, DEC and the seismometer, so that their lines can be compared. \"Whole buffer\": everything held in memory (50,000 samples: about 7 h of mount data at 2 Hz, 41 min of seismometer at 20 Hz). Also applies to the spectra written in the log.",
+        "fr": "Les spectres portent sur les dernières minutes choisies ici, la même durée pour AD, DEC et le sismomètre, pour pouvoir comparer leurs raies. « Tout le tampon » : tout ce qui est en mémoire (50 000 points : environ 7 h de monture à 2 Hz, 41 min de sismomètre à 20 Hz). S'applique aussi aux spectres écrits dans le log.",
+        "nl": "De spectra worden berekend over de hier gekozen laatste minuten, dezelfde tijdspanne voor RA, DEC en de seismometer, zodat hun lijnen te vergelijken zijn. \"Hele buffer\": alles in het geheugen (50.000 punten: ongeveer 7 uur montering bij 2 Hz, 41 min seismometer bij 20 Hz). Geldt ook voor de spectra in de log."},
     "frequency_domain": {"en": "Frequency Domain", "fr": "Domaine fréquentiel", "nl": "Frequentiedomein"},
     "period_domain": {"en": "Period Domain", "fr": "Domaine temporel", "nl": "Periodedomein"},
 
@@ -1032,7 +1037,12 @@ TX = {
     "mode_manual": {"en": "Manual", "fr": "Manuel", "nl": "Handmatig"},
     "mode_slewing": {"en": "When slewing", "fr": "En pointage", "nl": "Bij het zwenken"},
     "mode_parking": {"en": "When parking", "fr": "Au parcage", "nl": "Bij het parkeren"},
-    "mode_full": {"en": "When the graph fills", "fr": "Quand le graphe est plein", "nl": "Wanneer de grafiek vol is"},
+    "dump_full": {"en": "When the graph fills", "fr": "Quand le graphe est plein", "nl": "Wanneer de grafiek vol is"},
+    "dump_full_park": {"en": "When the graph fills + at parking", "fr": "Graphe plein + au parcage",
+                       "nl": "Grafiek vol + bij het parkeren"},
+    "dump_full_slew": {"en": "When the graph fills + at each slew and parking",
+                       "fr": "Graphe plein + à chaque pointage et au parcage",
+                       "nl": "Grafiek vol + bij elke zwenking en het parkeren"},
 
     # Mount checks labels
     "check_refr_status_label": {
@@ -1110,15 +1120,10 @@ TX = {
         "fr": "Ouvrir la fenêtre d'analyse FFT",
     "nl": "Het FFT-analysevenster openen",
 },
-    "tt_preferences": {
-        "en": "Open preferences dialog",
-        "fr": "Ouvrir les préférences",
-    "nl": "Het voorkeurenvenster openen",
-},
 }
 
 
-# Supported languages, in the order they appear in Preferences.
+# Supported languages, in the order they appear in Settings.
 # Dutch is there because MountMonitor started as a Dutch program: the original
 # v3.40 is by Nicolàs de Hilster (Starmountain Survey & Consultancy BV).
 LANGUAGES = {
