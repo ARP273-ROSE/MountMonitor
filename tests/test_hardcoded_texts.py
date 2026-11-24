@@ -74,20 +74,6 @@ def test_no_hardcoded_displayed_text():
     assert not faults, "Displayed texts without translation:\n  " + "\n  ".join(faults)
 
 
-def test_log10m_dialog_speaks_dutch():
-    from src.gui import log10m_dialog
-    missing = []
-    tree = ast.parse((ROOT / 'src' / 'gui' / 'log10m_dialog.py').read_text(encoding='utf-8'))
-    for n in ast.walk(tree):
-        if isinstance(n, ast.Call) and getattr(n.func, 'id', '') == '_tr':
-            en = n.args[0]
-            if not (isinstance(en, ast.Constant) and isinstance(en.value, str)):
-                missing.append(f"ligne {n.lineno} : texte calculé (f-string)")
-            elif en.value not in log10m_dialog._NL:
-                missing.append(f"ligne {n.lineno} : {en.value!r}")
-    assert not missing, missing
-
-
 def test_help_menu_texts_in_three_languages():
     import kit_aide
     for key, text_set in kit_aide.TEXTES.items():

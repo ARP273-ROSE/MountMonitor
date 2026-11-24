@@ -30,7 +30,6 @@ from .graph_widgets import (TrackingGraph, TimeGraph, SeismicGraph, AxialGraph,
                             SPANS_S)
 from .fft_window import FFTWindow
 from .analysis_dialog import AnalysisDialog, save_report
-from .log10m_dialog import Log10mAnalysisDialog
 from .status_panel import StatusPanel
 from .preferences_dialog import PreferencesDialog
 from .theme import Colors
@@ -283,11 +282,6 @@ class MainWindow(QMainWindow):
         open_log_action.triggered.connect(self._open_log_file)
         file_menu.addAction(open_log_action)
 
-        open_log10m_action = QAction(T("menu_open_log10m"), self)
-        open_log10m_action.setShortcut(QKeySequence("Ctrl+Shift+O"))
-        open_log10m_action.setToolTip(T("tt_open_log10m"))
-        open_log10m_action.triggered.connect(self._open_log10m_files)
-        file_menu.addAction(open_log10m_action)
 
         file_menu.addSeparator()
 
@@ -1682,12 +1676,6 @@ class MainWindow(QMainWindow):
             self._status_panel.add_message(T("new_log_files"))
 
     # ── Log replay & analysis ───────────────────────────────────
-
-    def _open_log10m_files(self):
-        """Open and analyze 10micron mount .log10m internal log files."""
-        dialog = Log10mAnalysisDialog(self)
-        dialog.exec()
-        dialog.deleteLater()
 
     def _open_log_file(self):
         """Open a previous log file for replay and analysis."""

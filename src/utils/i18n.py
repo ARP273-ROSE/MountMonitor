@@ -248,10 +248,6 @@ TX = {
         "en": "Open and analyze a previous log file",
         "fr": "Ouvrir et analyser un fichier log précédent",
         "nl": "Een eerder logbestand openen en analyseren"},
-    "tt_open_log10m": {
-        "en": "Analyze 10micron mount internal log files (.log10m)",
-        "fr": "Analyser les fichiers log internes de la monture 10micron (.log10m)",
-        "nl": "Interne logbestanden van de 10Micron-montering analyseren (.log10m)"},
     "tt_fft_win": {
         "en": "Open FFT analysis window",
         "fr": "Ouvrir la fenêtre d'analyse FFT",
@@ -806,7 +802,6 @@ TX = {
 
     # Log replay & analysis
     "menu_open_log": {"en": "Open Log...", "fr": "Ouvrir un log...", "nl": "Log openen..."},
-    "menu_open_log10m": {"en": "Analyze Mount Logs (.log10m)...", "fr": "Analyser logs monture (.log10m)...", "nl": "Monteringlogs analyseren (.log10m)..."},
     "open_log_title": {"en": "Open Log File", "fr": "Ouvrir un fichier log", "nl": "Logbestand openen"},
     "replay_loaded": {
         "en": "Log loaded: {samples} samples, duration {duration}",

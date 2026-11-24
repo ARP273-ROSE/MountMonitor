@@ -21,10 +21,11 @@ Remarks of the MM3 author on 4.5.6, and menus tidied.
   and parking, can be added. Choices: Manual, When the graph fills, + at
   parking, + at each slew and parking. A dump made for a slew or a park restarts
   the count to the next full graph (no near-duplicate).
+- The analysis of the mount's internal logs (.log10m) is withdrawn: those files
+  belong to the mount maker's support.
 
 - File gathers the session and the application: connect, disconnect, new
-  files, export graphs, open a log, analyse mount logs, Settings (Ctrl+,),
-  desktop shortcut, quit. The Edit menu, which held Preferences alone, is gone.
+  files, export graphs, open a log, Settings (Ctrl+,), desktop shortcut, quit. The Edit menu, which held Preferences alone, is gone.
 - The resets (min/max, graph buffers, both) are a submenu of View; New files and
   Export graphs, which are not resets, moved to File.
 - "Preferences" is now called "Settings" everywhere, and opens from the File
