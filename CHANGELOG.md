@@ -6,6 +6,17 @@ behaviour changes, the patch number when only a defect is fixed.
 
 Figures quoted below were measured on real sessions, not estimated.
 
+## 4.5.6 — 2026-11-24
+
+Unattended start (observatory logon task, `--connect`).
+
+- The "update available" dialog no longer blocks the main window: it is
+  modeless, has its own taskbar button and comes to the front. Modal and owned
+  by the window, it could stay hidden at logon and leave the window unusable,
+  with the taskbar button opening nothing.
+- A second copy started with `--connect` while MountMonitor is already running
+  ends quietly instead of leaving an "already running" box behind.
+
 ## 4.5.5 — 2026-11-24
 
 Remarks of the MountMonitor 3 author on 4.5.4.

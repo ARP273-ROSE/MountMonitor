@@ -2,6 +2,14 @@
 
 ## Resume note (2026-11-24)
 
+**Released as v4.5.6 (24/11):** cold start at the observatory left the window minimised
+and unusable: the 4.5.0 copy started by the logon task had found an update and its modal
+dialog, owned by the main window, stayed hidden. The update offer is now modeless and
+owner-less (`_update_offer`, closed in closeEvent); a second copy with `--connect` exits
+without the "already running" box. The logon task (observatory-scripts) re-checks for a
+running copy just before launching. Freeze reports are on the NAS collection point, not
+in the PC's `_rapports` (consent given: they are sent, not queued).
+
 **Released as v4.5.5 (24/11):** remarks of the MM3 author on 4.5.4: axial title per
 mode, RA/DEC figures coloured, `MainWindow._axial_mode()` = "off" in pure ASCOM (combo
 greyed in Preferences), preferences reopen on the last tab (`preferences_tab`), time
