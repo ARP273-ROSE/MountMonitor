@@ -1,4 +1,5 @@
 """Remarks of the MM3 author on 4.5.4 (24/11/2026)."""
+from pathlib import Path
 import pytest
 
 from tests.test_feedback_4_x import window  # noqa: F401  (fixture)
@@ -50,3 +51,28 @@ def test_graphs_ignore_wheel_and_dumps_keep_colours(window, tmp_path):
     finally:
         ex.ImageExporter.export = orig
     assert seen == [True] and g._tracking is False
+
+
+def test_update_offer_is_modeless_and_ownerless():
+    """24/11/2026: a modal update dialog owned by the window, hidden at an
+    unattended start, left the window unusable."""
+    src = (Path(__file__).resolve().parent.parent / 'src' / 'gui' / 'main_window.py').read_text(encoding='utf-8')
+    body = src.split('def _show_update_dialog', 1)[1].split('\n    def ', 1)[0]
+    assert 'QDialog(None)' in body and 'dlg.exec()' not in body and 'dlg.show()' in body
+    close = src.split('def closeEvent', 1)[1].split('\n    def ', 1)[0]
+    assert '_update_offer' in close
+
+
+def test_unattended_second_instance_shows_no_box():
+    src = (Path(__file__).resolve().parent.parent / 'main.py').read_text(encoding='utf-8')
+    block = src.split('if not _lock_file.tryLock(_wait_ms):', 1)[1].split('app._instance_lock', 1)[0]
+    assert block.index('args.connect') < block.index('QMessageBox')
+
+
+def test_update_offer_returns_at_once(window):
+    window._show_update_dialog({"version": "9.9.9", "notes": "x", "size": 0})
+    dlg = window._update_offer
+    assert dlg is not None and dlg.isVisible() and not dlg.isModal()
+    assert dlg.parent() is None and window.isEnabled()
+    dlg.reject()
+    assert window._update_offer is None

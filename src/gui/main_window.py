@@ -2854,9 +2854,22 @@ class MainWindow(QMainWindow):
         body = release_info.get("notes", "") or ""
         size = release_info.get("size", 0)
 
-        dlg = QDialog(self)
+        # Neither modal nor owned by the window. At the observatory the check
+        # runs at logon, unattended (--connect): a modal dialog owned by the
+        # main window, left behind it, minimised with it or on another
+        # virtual desktop, disabled the window without anything to show for
+        # it -- the taskbar button then opened nothing and MountMonitor had
+        # to be killed (24/11/2026). Owner-less, the dialog has its own
+        # taskbar button and the window stays usable while it waits.
+        old = getattr(self, "_update_offer", None)
+        if old is not None:
+            old.close()
+        dlg = QDialog(None)
         dlg.setWindowTitle(T("update_available"))
         dlg.setMinimumSize(500, 400)
+        dlg.setModal(False)
+        dlg.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
+        self._update_offer = dlg
         layout = QVBoxLayout(dlg)
 
         # Version info
@@ -2897,9 +2910,22 @@ class MainWindow(QMainWindow):
             dlg.accept()
             self._apply_update(release_info)
 
+        def forget(*_):
+            if getattr(self, "_update_offer", None) is dlg:
+                self._update_offer = None
+
         buttons.accepted.connect(on_download)
         buttons.rejected.connect(dlg.reject)
-        dlg.exec()
+        dlg.finished.connect(forget)
+        dlg.show()
+        dlg.raise_()
+        dlg.activateWindow()
+        QApplication.alert(dlg, 0)
+        try:
+            from ..utils.win_desktop import bring_alert_to_user
+            bring_alert_to_user(int(dlg.winId()))
+        except Exception:
+            logger.debug("Update dialog not brought to the user", exc_info=True)
 
     def _apply_update(self, info: dict):
         """Download the application archive and install it, then restart.
@@ -3025,9 +3051,10 @@ class MainWindow(QMainWindow):
         self._closing = True        # pollers are waited for, not released
         # The alert box has no owner: closed by hand, or it would keep the
         # application alive after the main window.
-        box = getattr(self, "_alert_box", None)
-        if box is not None:
-            box.close()
+        for box in (getattr(self, "_alert_box", None),
+                    getattr(self, "_update_offer", None)):
+            if box is not None:
+                box.close()
         # Save window geometry
         self._settings.set("window_width", self.width())
         self._settings.set("window_height", self.height())

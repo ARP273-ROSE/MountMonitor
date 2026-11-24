@@ -273,6 +273,12 @@ def main():
     # still be closing (night report, poller): wait for it, up to a minute.
     _wait_ms = 60000 if os.environ.pop('KIT_RELANCE', None) else 200
     if not _lock_file.tryLock(_wait_ms):
+        # Unattended start (--connect, the observatory's logon task): nobody
+        # is there to click, and a box left open behind the real window is
+        # what the user then finds at the next look. Log only.
+        if args.connect:
+            logger.info("Already running: unattended start (--connect) ends here")
+            return 0
         from PyQt6.QtWidgets import QMessageBox
         from src.utils.i18n import T
         QMessageBox.information(None, "MountMonitor", T("deja_ouvert"))
