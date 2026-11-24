@@ -6,7 +6,7 @@ behaviour changes, the patch number when only a defect is fixed.
 
 Figures quoted below were measured on real sessions, not estimated.
 
-## Unreleased
+## 4.5.5 — 2026-11-24
 
 Remarks of the MountMonitor 3 author on 4.5.4.
 

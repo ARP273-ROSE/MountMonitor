@@ -2,7 +2,7 @@
 
 ## Resume note (2026-11-24)
 
-**On master, not released (24/11):** remarks of the MM3 author on 4.5.4: axial title per
+**Released as v4.5.5 (24/11):** remarks of the MM3 author on 4.5.4: axial title per
 mode, RA/DEC figures coloured, `MainWindow._axial_mode()` = "off" in pure ASCOM (combo
 greyed in Preferences), preferences reopen on the last tab (`preferences_tab`), time
 sample held by the poller loop and dropped during slew + settle, no mouse zoom on the
@@ -17,7 +17,7 @@ Benchmarks: scratch scripts loop_run.py / per_graph.py (not kept). Then: FFT in 
 blocking path on exit), NTP stop not joined, packaged Python 3.14.10 everywhere with pinned SHA-256
 (build_package.PY_EMBED_SHA256, build_unix.PY_SHA256), CI on 3.14; OSV clean 24/11. Suite passes on
 3.12 and 3.14, compiles on 3.10. 202 tests. FIRST build on 3.14 = watch the release workflow (Windows
-pip wheels, macOS/Linux standalone). Next release: 4.5.5.
+pip wheels, macOS/Linux standalone). Released 24/11.
 
 **Released as v4.5.4 (23/11 evening):** after the MM3 author's side-by-side screenshots
 (figures agreed, look did not): axial graph draws only the regression speed vs its median;
