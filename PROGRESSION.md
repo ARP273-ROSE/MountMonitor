@@ -1,6 +1,14 @@
 # MountMonitor 4: progress and resume note
 
-## Resume note (2026-11-22, evening)
+## Resume note (2026-11-24)
+
+**On master, not released (24/11):** remarks of the MM3 author on 4.5.4: axial title per
+mode, RA/DEC figures coloured, `MainWindow._axial_mode()` = "off" in pure ASCOM (combo
+greyed in Preferences), preferences reopen on the last tab (`preferences_tab`), time
+sample held by the poller loop and dropped during slew + settle, no mouse zoom on the
+graphs, automatic dumps drawn in colour, installer EN/FR/NL after the Windows language
+(installer.iss now differs from the kit template; UTF-8 BOM added), MM3 credited as v3.40.
+196 tests. Next release: 4.5.5.
 
 **Released as v4.5.4 (23/11 evening):** after the MM3 author's side-by-side screenshots
 (figures agreed, look did not): axial graph draws only the regression speed vs its median;
@@ -72,7 +80,7 @@ ASCOM through the 10Micron driver 1.7.2 shared with NINA; GUI of 4.4.11 and
 5. Pre-existing: `check_subprocesses.py` flags `reporting.py:218` (kit file).
 
 **How to work:**
-- Tests: `QT_QPA_PLATFORM=offscreen python -m pytest -q tests` (193 pass).
+- Tests: `QT_QPA_PLATFORM=offscreen python -m pytest -q tests` (196 pass).
 - Code must compile on Python 3.10 (the MM3 author runs from source).
 - Manuals: `cd docs/manuel && python compiler.py` (pdflatex), commit the
   three PDFs with the .tex.
