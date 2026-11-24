@@ -2,6 +2,13 @@
 
 ## Resume note (2026-11-24)
 
+**Released as v4.5.8 (24/11, evening):** FFT period domain drawn in
+increasing order and thinned on log(period) bins: pyqtgraph's clip-to-view
+and peak downsampling assume increasing, evenly spaced x, and drew vertical
+bars on a 30 min spectrum (reported by the MM3 author). Test in
+tests/test_feedback_4_5_5.py. MM4 was announced on the 10Micron forum the
+same day.
+
 **Released as v4.5.7 (24/11):** remarks of the MM3 author on 4.5.6: FFT window
 *Analysed* duration (`fft_span_min`, 30 min default, same window for RA/DEC/seismometer,
 covered durations shown); graph dumps as MM3 (`dump_mode` full / parking / slewing all
